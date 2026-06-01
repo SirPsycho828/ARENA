@@ -143,9 +143,10 @@ export class SessionManager {
   private topicRotationTimer: ReturnType<typeof setInterval> | null = null;
   private videoTokens: Map<string, string> = new Map();
   private audioTracker: Map<string, { firstChunkTime: number; totalB64Chars: number }> = new Map();
-  // Guards against auto-response premature turn advance:
-  // Only set true when the current speaker's text response completes
+  // Track both conditions for turn advance — advance when BOTH are true.
+  // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
+  private turnAudioDone = false;
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
     this.omniagent = omniagent;
@@ -624,30 +625,19 @@ export class SessionManager {
 
       this.emitDebug('speech_end', agentId, data.agentName, `${data.text.length} chars`);
 
-      // Mark that the turn's TEXT response is complete.
-      // talk_state:ended will only advance the turn if this flag is set,
-      // preventing auto-responses from prematurely advancing.
       this.turnTextComplete = true;
+      this.maybeAdvanceTurn(agentId);
     });
 
     agent.on('response_start', () => {
       this.turnManager?.onResponseStarted(agentId);
     });
 
-    // Advance turn when audio finishes — but only if the turn's text completed first.
-    // This guards against auto-responses (from silence prime) advancing the turn prematurely.
+    // Audio finished being sent by Napster
     agent.on('talk_state', (data: any) => {
-      if (data?.state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId && this.turnTextComplete) {
-        const tracker = this.audioTracker.get(agentId);
-        this.audioTracker.delete(agentId);
-
-        // Short delay for last audio chunks to reach client, then advance.
-        // Cable news pacing: don't wait for full playback — client hard-stops old audio on speaker change.
-        const waitMs = 1000;
-        console.log(`  [${agentName()}] audio done — advancing in ${waitMs}ms`);
-        setTimeout(() => {
-          this.turnManager?.onSpeechEnd(agentId, '');
-        }, waitMs);
+      if (data?.state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
+        this.turnAudioDone = true;
+        this.maybeAdvanceTurn(agentId);
       }
     });
 
@@ -667,12 +657,26 @@ export class SessionManager {
     });
   }
 
+  // Advance the turn once BOTH text and audio are done.
+  // Napster event order varies: sometimes talk:ended before speech_end, sometimes after.
+  private maybeAdvanceTurn(agentId: string) {
+    if (!this.turnTextComplete || !this.turnAudioDone) return;
+    if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+
+    const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
+    console.log(`  [${name}] text+audio done — advancing in 1s`);
+    setTimeout(() => {
+      this.turnManager?.onSpeechEnd(agentId, '');
+    }, 1000);
+  }
+
   private wireTurnManagerEvents() {
     if (!this.turnManager) return;
 
     this.turnManager.on('turn_start', ({ agentId }: { agentId: string }) => {
-      // Reset turn state
+      // Reset turn state for new speaker
       this.turnTextComplete = false;
+      this.turnAudioDone = false;
       this.audioTracker.delete(agentId);
 
       this.io.emit('speaker_change', { agentId });
