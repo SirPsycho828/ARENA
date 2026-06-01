@@ -18,7 +18,6 @@ export class OmniagentConnection extends EventEmitter {
   private config: AgentConfig;
   private connectionId: string | null = null;
   private responseBuffer: Map<string, string> = new Map();
-  private _eventCount = 0;
 
   constructor(config: AgentConfig) {
     super();
@@ -63,6 +62,11 @@ export class OmniagentConnection extends EventEmitter {
 
       this.ws!.on('open', () => {
         console.log(`  [${this.config.name}] WebSocket connected`);
+        // Override stock companion instructions with our debate persona
+        if (this.config.systemPrompt) {
+          this.updateSettings(this.config.systemPrompt);
+          console.log(`  [${this.config.name}] Sent set_settings to override companion instructions`);
+        }
         clearTimeout(timeout);
         resolve();
       });
@@ -70,12 +74,6 @@ export class OmniagentConnection extends EventEmitter {
       this.ws!.on('message', (raw) => {
         try {
           const event = JSON.parse(raw.toString());
-          // Log first 5 raw events to discover actual structure
-          if (!this._eventCount) this._eventCount = 0;
-          if (this._eventCount < 5) {
-            console.log(`  [${this.config.name}] RAW EVENT:`, JSON.stringify(event).slice(0, 300));
-            this._eventCount++;
-          }
           this.handleEvent(event);
         } catch {
           // Binary audio data — ignore for orchestration
@@ -104,16 +102,39 @@ export class OmniagentConnection extends EventEmitter {
         this.handleMessageReceived(event.data);
         break;
       case 'talk_state_changed':
+        console.log(`  [${this.config.name}] talk: ${event.data?.state || JSON.stringify(event.data).slice(0, 100)}`);
         this.emit('talk_state', event.data);
         break;
       case 'avatar_state_changed':
+        console.log(`  [${this.config.name}] avatar: ${event.data?.state}`);
         this.emit('avatar_state', event.data);
+        break;
+      default:
+        // Log unknown event types for debugging
+        if (eventType) console.log(`  [${this.config.name}] unknown event: ${eventType}`);
         break;
     }
   }
 
   private handleMessageReceived(data: any) {
     const msg = data.message || data;
+
+    // Log all assistant messages for debugging
+    if (msg.role === 'assistant') {
+      if (msg.action === 'created') {
+        console.log(`  [${this.config.name}] assistant created: item=${msg.item_id || 'none'} resp=${msg.response_id || 'none'}`);
+      } else if (msg.action === 'delta') {
+        // Log first delta per item to confirm text is flowing
+        const key = msg.item_id || 'unknown';
+        if (!this.responseBuffer.has(key) || this.responseBuffer.get(key) === '') {
+          console.log(`  [${this.config.name}] first delta: "${(msg.content || '').slice(0, 60)}"`);
+        }
+      } else if (msg.action === 'completed') {
+        console.log(`  [${this.config.name}] assistant completed: item=${msg.item_id} content=${(msg.content || '').slice(0, 80)}`);
+      } else {
+        console.log(`  [${this.config.name}] assistant ${msg.action}: ${JSON.stringify(msg).slice(0, 150)}`);
+      }
+    }
 
     if (msg.role === 'assistant') {
       if (msg.action === 'created' && msg.item_id) {
@@ -124,15 +145,18 @@ export class OmniagentConnection extends EventEmitter {
         this.responseBuffer.set(msg.item_id, current + msg.content);
         this.emit('response_delta', { itemId: msg.item_id, content: msg.content });
       } else if (msg.action === 'completed' && msg.item_id) {
-        const fullText = this.responseBuffer.get(msg.item_id) || '';
+        const fullText = this.responseBuffer.get(msg.item_id) || msg.content || '';
         this.responseBuffer.delete(msg.item_id);
         if (fullText) {
+          console.log(`  [${this.config.name}] SPEECH_END: "${fullText.slice(0, 100)}"`);
           this.emit('speech_end', {
             agentId: this.config.id,
             agentName: this.config.name,
             text: fullText,
             timestamp: Date.now(),
           });
+        } else {
+          console.warn(`  [${this.config.name}] completed but buffer empty for ${msg.item_id}`);
         }
       }
     }

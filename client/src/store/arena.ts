@@ -114,7 +114,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
   connect: () => {
     const socket = io(window.location.origin, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
