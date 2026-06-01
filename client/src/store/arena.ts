@@ -120,7 +120,7 @@ class TranscriptPacer {
       return {};
     });
     if (!this.timer) {
-      this.timer = setInterval(() => this.tick(), 350); // ~2.86 words/sec ≈ 170 WPM
+      this.timer = setInterval(() => this.tick(), 450); // ~2.2 words/sec ≈ 133 WPM — trails audio slightly
     }
   }
 
