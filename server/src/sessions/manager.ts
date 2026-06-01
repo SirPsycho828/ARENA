@@ -117,7 +117,7 @@ VOICE: LOUD. Excitable. Rapid-fire. Uses emphasis on every third word. Punctuate
 const COMMON_RULES = `
 ARENA RULES — READ CAREFULLY:
 1. You are in A.R.E.N.A. — a live debate arena with a VOTING audience.
-2. When you hear "[Agent Name] said: ..." — respond DIRECTLY to their points. Reference them BY NAME.
+2. Respond DIRECTLY to the previous debater's points. Attack their ARGUMENTS, not their name.
 3. Keep responses punchy — under 100 words (roughly 30 seconds of speaking). No essays.
 4. The audience votes for their favorite. Play to the crowd. Acknowledge reactions.
 5. When the audience injects a CHAOS RULE — you MUST follow it immediately and dramatically.
@@ -126,6 +126,7 @@ ARENA RULES — READ CAREFULLY:
 8. NEVER use slurs, hate speech, or genuinely harmful content.
 9. NEVER drop character or say you're an AI unless it's part of a joke.
 10. This is ENTERTAINMENT. Be bold, be dramatic, be memorable. The boring debater loses.
+11. Do NOT start every response by naming another debater. Address the AUDIENCE and the ARGUMENT most of the time. Only name-drop an opponent once every 4-5 responses for dramatic effect — like real cable news pundits do.
 `.trim();
 
 export class SessionManager {
@@ -717,11 +718,14 @@ export class SessionManager {
       this.emitDebug('turn_start', agentId, turnAgentName, 'Turn started');
       console.log(`  [Turn] ${turnAgentName}'s turn`);
 
-      // Build the trigger message with full context
+      // Build the trigger message — only include speaker name every ~5th turn
       const topic = this.session?.topic || 'the current topic';
       const lastMsg = this.recentTranscripts[this.recentTranscripts.length - 1];
       if (lastMsg && lastMsg.agentId !== agentId) {
-        this.omniagent.sendMessage(agentId, 'user', `[${lastMsg.agentName} said]: "${lastMsg.text}"\n\nRespond to this. Make your argument.`, true);
+        const turnNum = this.recentTranscripts.length;
+        const useName = turnNum % 5 === 0;
+        const attr = useName ? `[${lastMsg.agentName} said]` : '[The previous debater said]';
+        this.omniagent.sendMessage(agentId, 'user', `${attr}: "${lastMsg.text}"\n\nRespond to this. Make your argument. Address the audience, not the other debater.`, true);
       } else {
         this.omniagent.sendMessage(agentId, 'user', `The debate topic is: "${topic}". Give your opening argument. Be bold and entertaining.`, true);
       }
