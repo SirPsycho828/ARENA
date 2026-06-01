@@ -11,16 +11,21 @@ const SAMPLE_RATE = 16000;
 
 class AgentAudioPlayer {
   private _muted = false;
+  private _volume = 1;
   private ctx: AudioContext | null = null;
+  private gainNode: GainNode | null = null;
   private nextPlayTime = 0;
   private scheduledCount = 0;
-  private generation = 0; // Increments on reset — stale onended callbacks are ignored
+  private generation = 0;
   private noMoreChunks = false;
   private onDoneCallback: (() => void) | null = null;
 
   private getContext(): AudioContext {
     if (!this.ctx || this.ctx.state === 'closed') {
       this.ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      this.gainNode = this.ctx.createGain();
+      this.gainNode.gain.value = this._volume;
+      this.gainNode.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
@@ -49,7 +54,7 @@ class AgentAudioPlayer {
 
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.connect(ctx.destination);
+    source.connect(this.gainNode!);
 
     const now = ctx.currentTime;
     if (this.nextPlayTime < now) {
@@ -99,18 +104,24 @@ class AgentAudioPlayer {
     if (this.ctx && this.ctx.state !== 'closed') {
       this.ctx.close();
       this.ctx = null;
+      this.gainNode = null;
     }
     this.reset();
   }
+
+  set volume(v: number) {
+    this._volume = Math.max(0, Math.min(1, v));
+    if (this.gainNode) this.gainNode.gain.value = this._volume;
+  }
+
+  get volume() { return this._volume; }
 
   set muted(value: boolean) {
     this._muted = value;
     if (value) this.stop();
   }
 
-  get muted() {
-    return this._muted;
-  }
+  get muted() { return this._muted; }
 }
 
 export const agentAudio = new AgentAudioPlayer();

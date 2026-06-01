@@ -29,7 +29,7 @@ export function TranscriptFeed() {
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
+      <div className="flex-1 overflow-y-auto px-4 py-2 pb-16 space-y-1">
         {transcripts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 gap-2">
             <div className="flex items-center gap-1.5">

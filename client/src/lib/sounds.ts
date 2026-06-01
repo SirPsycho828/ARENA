@@ -1,17 +1,29 @@
 class SoundEngine {
   private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private _volume = 1;
   public muted = false;
 
   private getCtx(): AudioContext | null {
     if (this.muted) return null;
     if (!this.ctx) {
       this.ctx = new AudioContext();
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = this._volume;
+      this.masterGain.connect(this.this.masterGain!);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
     return this.ctx;
   }
+
+  set volume(v: number) {
+    this._volume = Math.max(0, Math.min(1, v));
+    if (this.masterGain) this.masterGain.gain.value = this._volume;
+  }
+
+  get volume() { return this._volume; }
 
   /** Ascending two-tone sweep — speaker change */
   turnChange() {
@@ -25,7 +37,7 @@ class SoundEngine {
       osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.15);
       gain.gain.setValueAtTime(0.08, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-      osc.connect(gain).connect(ctx.destination);
+      osc.connect(gain).connect(this.masterGain!);
       osc.start();
       osc.stop(ctx.currentTime + 0.3);
     } catch {}
@@ -48,7 +60,7 @@ class SoundEngine {
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
       osc.connect(gain);
       osc2.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.masterGain!);
       osc.start();
       osc2.start();
       osc.stop(ctx.currentTime + 0.25);
@@ -68,7 +80,7 @@ class SoundEngine {
       osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.08);
       gain.gain.setValueAtTime(0.1, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-      osc.connect(gain).connect(ctx.destination);
+      osc.connect(gain).connect(this.masterGain!);
       osc.start();
       osc.stop(ctx.currentTime + 0.1);
     } catch {}
@@ -86,7 +98,7 @@ class SoundEngine {
       osc.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.06);
       gain.gain.setValueAtTime(0.07, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-      osc.connect(gain).connect(ctx.destination);
+      osc.connect(gain).connect(this.masterGain!);
       osc.start();
       osc.stop(ctx.currentTime + 0.12);
     } catch {}
@@ -106,7 +118,7 @@ class SoundEngine {
       osc1.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.5);
       gain1.gain.setValueAtTime(0.15, ctx.currentTime);
       gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
-      osc1.connect(gain1).connect(ctx.destination);
+      osc1.connect(gain1).connect(this.masterGain!);
       osc1.start();
       osc1.stop(ctx.currentTime + 0.8);
 
@@ -119,7 +131,7 @@ class SoundEngine {
       gain2.gain.setValueAtTime(0, ctx.currentTime);
       gain2.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.2);
       gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
-      osc2.connect(gain2).connect(ctx.destination);
+      osc2.connect(gain2).connect(this.masterGain!);
       osc2.start(ctx.currentTime + 0.1);
       osc2.stop(ctx.currentTime + 1.0);
     } catch {}
@@ -139,7 +151,7 @@ class SoundEngine {
         gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.12);
         gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + i * 0.12 + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.3);
-        osc.connect(gain).connect(ctx.destination);
+        osc.connect(gain).connect(this.masterGain!);
         osc.start(ctx.currentTime + i * 0.12);
         osc.stop(ctx.currentTime + i * 0.12 + 0.3);
       });

@@ -40,13 +40,6 @@ function App() {
     return () => disconnect();
   }, [connect, disconnect]);
 
-  // Sound effects on speaker changes
-  useEffect(() => {
-    if (currentSpeaker && phase === 'arena') {
-      sounds.turnChange();
-    }
-  }, [currentSpeaker, phase]);
-
   const handleEnterArena = useCallback(() => {
     sounds.arenaEnter();
     // If agents are ready, show entrance sequence; otherwise go straight to arena
