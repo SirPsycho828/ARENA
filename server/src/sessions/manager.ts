@@ -689,6 +689,10 @@ export class SessionManager {
     }, 30000);
   }
 
+  isWaitingForPlayback() {
+    return this.waitingForPlayback;
+  }
+
   /** Called when a client signals playback is done (or fallback timer fires) */
   advanceFromPlayback() {
     if (!this.waitingForPlayback) return; // Ignore duplicate playback_done from multiple viewers

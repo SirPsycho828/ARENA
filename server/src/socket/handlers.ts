@@ -88,6 +88,12 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
     socket.on('disconnect', (reason) => {
       console.log(`  Viewer disconnected: ${socket.id} (${reason})`);
       broadcastSpectatorCount();
+      // If we're waiting for playback_done and a viewer just left,
+      // advance immediately — the dead socket can't respond
+      if (sessionManager.isWaitingForPlayback()) {
+        console.log(`  Viewer left while waiting for playback — force advancing`);
+        sessionManager.advanceFromPlayback();
+      }
     });
   });
 }

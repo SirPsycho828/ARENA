@@ -19,7 +19,6 @@ class AgentAudioPlayer {
   private generation = 0;
   private noMoreChunks = false;
   private onDoneCallback: (() => void) | null = null;
-  private receivedChunks = false; // Track whether we got any audio this turn
 
   private getContext(): AudioContext {
     if (!this.ctx || this.ctx.state === 'closed') {
@@ -49,7 +48,6 @@ class AgentAudioPlayer {
 
   playChunk(base64Pcm: string) {
     if (this._muted) return;
-    this.receivedChunks = true;
 
     const ctx = this.getContext();
     const raw = atob(base64Pcm);
@@ -92,11 +90,6 @@ class AgentAudioPlayer {
    * The callback fires when the last scheduled buffer finishes playing.
    */
   markComplete(onDone: () => void) {
-    // If we never received any audio chunks this turn, don't send playback_done.
-    // Another viewer may be actively playing — we'd cut them off.
-    // The server's 30s fallback will advance the turn if nobody responds.
-    if (!this.receivedChunks) return;
-
     this.noMoreChunks = true;
     this.onDoneCallback = onDone;
     // If AudioContext is suspended (autoplay policy after hard refresh),
@@ -122,7 +115,6 @@ class AgentAudioPlayer {
     this.generation++; // Invalidate stale onended callbacks from previous speaker
     this.noMoreChunks = false;
     this.onDoneCallback = null;
-    this.receivedChunks = false;
   }
 
   /** Full stop — closes AudioContext. Only used for mute. */
