@@ -80,6 +80,11 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
       sessionManager.handleChallengerEnd(socket.id);
     });
 
+    // Client signals audio playback finished — advance to next speaker
+    socket.on('playback_done' as any, () => {
+      sessionManager.advanceFromPlayback();
+    });
+
     socket.on('disconnect', (reason) => {
       console.log(`  Viewer disconnected: ${socket.id} (${reason})`);
       broadcastSpectatorCount();

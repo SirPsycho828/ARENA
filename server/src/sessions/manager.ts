@@ -657,17 +657,40 @@ export class SessionManager {
     });
   }
 
-  // Advance the turn once BOTH text and audio are done.
-  // Napster event order varies: sometimes talk:ended before speech_end, sometimes after.
+  private playbackFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Called when BOTH text and audio are done from Napster.
+  // Tells the client "no more audio coming" — client signals back when playback finishes.
   private maybeAdvanceTurn(agentId: string) {
     if (!this.turnTextComplete || !this.turnAudioDone) return;
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
 
     const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
-    console.log(`  [${name}] text+audio done — advancing in 1s`);
-    setTimeout(() => {
-      this.turnManager?.onSpeechEnd(agentId, '');
-    }, 1000);
+    console.log(`  [${name}] text+audio sent — waiting for client playback_done`);
+
+    // Tell client no more audio chunks are coming
+    (this.io as any).emit('turn_audio_complete', { agentId });
+
+    // Fallback: if no client responds within 30s, advance anyway
+    if (this.playbackFallbackTimer) clearTimeout(this.playbackFallbackTimer);
+    this.playbackFallbackTimer = setTimeout(() => {
+      console.log(`  [${name}] playback_done timeout — force advancing`);
+      this.advanceFromPlayback();
+    }, 30000);
+  }
+
+  /** Called when a client signals playback is done (or fallback timer fires) */
+  advanceFromPlayback() {
+    if (this.playbackFallbackTimer) {
+      clearTimeout(this.playbackFallbackTimer);
+      this.playbackFallbackTimer = null;
+    }
+    const currentId = this.turnManager?.getCurrentSpeaker();
+    if (currentId) {
+      const name = this.agentConfigs.get(currentId)?.name || 'Unknown';
+      console.log(`  [${name}] playback done — advancing turn`);
+      this.turnManager?.onSpeechEnd(currentId, '');
+    }
   }
 
   private wireTurnManagerEvents() {

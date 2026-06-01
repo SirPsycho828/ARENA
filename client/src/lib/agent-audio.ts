@@ -1,7 +1,10 @@
 /**
  * Napster native audio player for agent voices.
  * Receives base64-encoded PCM audio chunks (16-bit signed integer, 16kHz, mono)
- * and plays them via Web Audio API with per-agent queuing.
+ * and plays them via Web Audio API with gapless scheduling.
+ *
+ * Supports a completion callback: call markComplete() when no more chunks are
+ * expected. The onDone callback fires when the last scheduled buffer finishes.
  */
 
 const SAMPLE_RATE = 16000;
@@ -11,6 +14,8 @@ class AgentAudioPlayer {
   private ctx: AudioContext | null = null;
   private nextPlayTime = 0;
   private scheduledCount = 0;
+  private noMoreChunks = false;
+  private onDoneCallback: (() => void) | null = null;
 
   private getContext(): AudioContext {
     if (!this.ctx || this.ctx.state === 'closed') {
@@ -22,10 +27,6 @@ class AgentAudioPlayer {
     return this.ctx;
   }
 
-  /**
-   * Queue a base64 PCM chunk for playback.
-   * Chunks are scheduled back-to-back for gapless audio.
-   */
   playChunk(base64Pcm: string) {
     if (this._muted) return;
 
@@ -36,7 +37,6 @@ class AgentAudioPlayer {
       bytes[i] = raw.charCodeAt(i);
     }
 
-    // Convert 16-bit signed PCM to Float32
     const int16 = new Int16Array(bytes.buffer);
     const float32 = new Float32Array(int16.length);
     for (let i = 0; i < int16.length; i++) {
@@ -50,7 +50,6 @@ class AgentAudioPlayer {
     source.buffer = buffer;
     source.connect(ctx.destination);
 
-    // Schedule gapless playback
     const now = ctx.currentTime;
     if (this.nextPlayTime < now) {
       this.nextPlayTime = now;
@@ -61,7 +60,26 @@ class AgentAudioPlayer {
 
     source.onended = () => {
       this.scheduledCount--;
+      this.checkDone();
     };
+  }
+
+  /**
+   * Signal that no more audio chunks will arrive for this turn.
+   * The callback fires when the last scheduled buffer finishes playing.
+   */
+  markComplete(onDone: () => void) {
+    this.noMoreChunks = true;
+    this.onDoneCallback = onDone;
+    this.checkDone();
+  }
+
+  private checkDone() {
+    if (this.noMoreChunks && this.scheduledCount <= 0 && this.onDoneCallback) {
+      const cb = this.onDoneCallback;
+      this.onDoneCallback = null;
+      cb();
+    }
   }
 
   stop() {
@@ -71,12 +89,8 @@ class AgentAudioPlayer {
     }
     this.nextPlayTime = 0;
     this.scheduledCount = 0;
-  }
-
-  /** Reset scheduling for a new speech turn */
-  resetSchedule() {
-    this.nextPlayTime = 0;
-    this.scheduledCount = 0;
+    this.noMoreChunks = false;
+    this.onDoneCallback = null;
   }
 
   set muted(value: boolean) {
