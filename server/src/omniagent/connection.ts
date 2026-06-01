@@ -159,6 +159,7 @@ export class OmniagentConnection extends EventEmitter {
         break;
       case 'audio_received': {
         // Napster sends audio as event.data.data (base64 PCM 16-bit 16kHz mono)
+        this.frameStats.audioJson++;
         const audioB64 = event.data?.data || event.data?.audio;
         if (audioB64) {
           this.audioChunkCount++;

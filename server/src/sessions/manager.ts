@@ -197,7 +197,7 @@ export class SessionManager {
         id: '', // Will be set after API creation
         companionId: this.companionIds[i],
         systemPrompt: preset.systemPrompt + '\n\n' + COMMON_RULES,
-        externalClientId: `arena_${preset.name.replace(/\s/g, '_').toLowerCase()}`,
+        externalClientId: `arena_${preset.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}`.slice(0, 32),
       };
 
       try {
@@ -614,15 +614,25 @@ export class SessionManager {
       // Debug event for Judge Mode
       this.emitDebug('speech_end', agentId, data.agentName, `${data.text.length} chars`);
 
-      // Relay to other agents
-      this.relay?.broadcast(agentId, data.agentName, data.text);
+      // NOTE: Don't relay to other agents here — the turn_start handler already
+      // includes the last message as context. Relaying separately causes double responses
+      // because agents respond to the relay even with trigger_response=false.
 
-      // Advance turn
-      this.turnManager?.onSpeechEnd(agentId, data.text);
+      // NOTE: Don't advance turn here — wait for talk_state:ended (audio finished)
+      // so the next agent doesn't start while current audio is still playing.
     });
 
     agent.on('response_start', () => {
       this.turnManager?.onResponseStarted(agentId);
+    });
+
+    // Advance turn when agent's audio finishes (not when text completes)
+    agent.on('talk_state', (data: any) => {
+      if (data?.state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
+        const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
+        console.log(`  [${name}] audio finished — advancing turn`);
+        this.turnManager?.onSpeechEnd(agentId, '');
+      }
     });
 
     agent.on('audio', (data: { agentId: string; audio: string }) => {
