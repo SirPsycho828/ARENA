@@ -10,7 +10,7 @@ class SoundEngine {
       this.ctx = new AudioContext();
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = this._volume;
-      this.masterGain.connect(this.this.masterGain!);
+      this.masterGain.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();

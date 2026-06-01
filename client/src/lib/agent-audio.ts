@@ -26,6 +26,19 @@ class AgentAudioPlayer {
       this.gainNode = this.ctx.createGain();
       this.gainNode.gain.value = this._volume;
       this.gainNode.connect(this.ctx.destination);
+      // Autoplay policy: resume on first user interaction if suspended
+      if (this.ctx.state === 'suspended') {
+        const ctx = this.ctx;
+        const unlock = () => {
+          ctx.resume();
+          document.removeEventListener('click', unlock);
+          document.removeEventListener('keydown', unlock);
+          document.removeEventListener('touchstart', unlock);
+        };
+        document.addEventListener('click', unlock, { once: true });
+        document.addEventListener('keydown', unlock, { once: true });
+        document.addEventListener('touchstart', unlock, { once: true });
+      }
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
@@ -79,6 +92,11 @@ class AgentAudioPlayer {
   markComplete(onDone: () => void) {
     this.noMoreChunks = true;
     this.onDoneCallback = onDone;
+    // If AudioContext is suspended (autoplay policy after hard refresh),
+    // onended will never fire — advance the turn immediately
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.scheduledCount = 0;
+    }
     this.checkDone();
   }
 
