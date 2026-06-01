@@ -44,6 +44,12 @@ interface VictoryData {
   agents: AgentInfo[];
 }
 
+interface StreamingTranscript {
+  agentId: string;
+  agentName: string;
+  text: string;
+}
+
 interface ArenaState {
   // Connection
   connected: boolean;
@@ -56,6 +62,7 @@ interface ArenaState {
 
   // Live data
   transcripts: TranscriptMessage[];
+  streamingTranscript: StreamingTranscript | null;
   voteTallies: VoteTallies;
   activeRules: string[];
   spectatorCount: number;
@@ -100,6 +107,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   agents: [],
   currentSpeaker: null,
   transcripts: [],
+  streamingTranscript: null,
   voteTallies: {},
   activeRules: [],
   spectatorCount: 1,
@@ -162,9 +170,22 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       }
     });
 
-    socket.on('transcript', (msg) => {
+    // Word-by-word streaming transcript — deltas arrive as agent speaks
+    (socket as any).on('transcript_delta', (data: { agentId: string; agentName: string; content: string }) => {
+      set((s) => {
+        const current = s.streamingTranscript;
+        if (current && current.agentId === data.agentId) {
+          return { streamingTranscript: { ...current, text: current.text + data.content } };
+        }
+        return { streamingTranscript: { agentId: data.agentId, agentName: data.agentName, text: data.content } };
+      });
+    });
+
+    // Transcript complete — finalize streaming text into transcript list
+    (socket as any).on('transcript_done', (msg: TranscriptMessage) => {
       set((s) => ({
         transcripts: [...s.transcripts.slice(-99), msg],
+        streamingTranscript: null,
       }));
     });
 
@@ -176,8 +197,21 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     });
 
     socket.on('speaker_change', ({ agentId }) => {
+      // Finalize any pending streaming transcript before switching
+      const s = get();
+      if (s.streamingTranscript) {
+        set((prev) => ({
+          transcripts: [...prev.transcripts.slice(-99), {
+            agentId: prev.streamingTranscript!.agentId,
+            agentName: prev.streamingTranscript!.agentName,
+            text: prev.streamingTranscript!.text,
+            timestamp: Date.now(),
+          }],
+          streamingTranscript: null,
+        }));
+      }
       set({ currentSpeaker: agentId });
-      // Hard-stop any remaining audio from previous speaker before new one begins
+      // Hard-stop any remaining audio from previous speaker
       agentAudio.stop();
     });
 

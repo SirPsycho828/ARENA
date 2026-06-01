@@ -5,7 +5,7 @@ const DEFAULT_CONFIG: TurnManagerConfig = {
   mode: 'round_robin',
   turnTimeout: 20000,
   speechEndDebounce: 800,
-  minTurnGap: 1500,
+  minTurnGap: 500,
 };
 
 export class TurnManager extends EventEmitter {

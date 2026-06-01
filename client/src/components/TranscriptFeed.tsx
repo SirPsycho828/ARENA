@@ -4,6 +4,7 @@ import { useArenaStore } from '../store/arena';
 
 export function TranscriptFeed() {
   const transcripts = useArenaStore((s) => s.transcripts);
+  const streamingTranscript = useArenaStore((s) => s.streamingTranscript);
   const agents = useArenaStore((s) => s.agents);
   const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -15,7 +16,7 @@ export function TranscriptFeed() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [transcripts.length]);
+  }, [transcripts.length, streamingTranscript?.text]);
 
   return (
     <div className="flex flex-col h-full">
@@ -76,6 +77,29 @@ export function TranscriptFeed() {
             );
           })}
         </AnimatePresence>
+
+        {/* Currently streaming transcript — word-by-word as agent speaks */}
+        {streamingTranscript && (
+          <motion.div
+            key="streaming"
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex gap-2 py-1.5 rounded-md px-2 bg-arena-elevated/50 border-l-2"
+            style={{ borderColor: getAgentColor(streamingTranscript.agentId) }}
+          >
+            <span
+              className="font-mono text-xs font-semibold shrink-0 mt-0.5"
+              style={{ color: getAgentColor(streamingTranscript.agentId) }}
+            >
+              {streamingTranscript.agentName}
+            </span>
+            <span className="font-mono text-xs text-arena-text-secondary leading-relaxed break-words overflow-hidden">
+              {streamingTranscript.text}
+              <span className="inline-block w-1.5 h-3.5 bg-arena-cyan/70 ml-0.5 animate-pulse" />
+            </span>
+          </motion.div>
+        )}
+
         <div ref={bottomRef} />
       </div>
     </div>

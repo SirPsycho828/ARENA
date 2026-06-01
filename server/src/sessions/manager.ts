@@ -143,6 +143,9 @@ export class SessionManager {
   private topicRotationTimer: ReturnType<typeof setInterval> | null = null;
   private videoTokens: Map<string, string> = new Map();
   private audioTracker: Map<string, { firstChunkTime: number; totalB64Chars: number }> = new Map();
+  // Guards against auto-response premature turn advance:
+  // Only set true when the current speaker's text response completes
+  private turnTextComplete = false;
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
     this.omniagent = omniagent;
@@ -290,17 +293,9 @@ export class SessionManager {
     this.session.status = 'active';
     db.prepare('UPDATE sessions SET status = ? WHERE id = ?').run('active', this.session.id);
 
-    // Send opening prompt to all agents
-    const otherNames = (agentId: string) =>
-      this.session!.agentIds
-        .filter((id) => id !== agentId)
-        .map((id) => this.agentConfigs.get(id)?.name || 'Unknown')
-        .join(', ');
-
-    for (const agentId of this.session.agentIds) {
-      const prompt = `You're in a live debate arena. The topic is: "${this.session.topic}". Your opponents are: ${otherNames(agentId)}. The audience is watching and voting. Make your arguments compelling, challenge your opponents, and be entertaining. BEGIN.`;
-      this.omniagent.sendMessage(agentId, 'system', prompt, false);
-    }
+    // Don't send opening system messages to all agents — it triggers auto-responses
+    // from the silence-primed audio channel. The set_settings already configured their
+    // debate persona, and each turn trigger includes full context.
 
     // Start the turn cycle
     this.turnManager.start(this.session.agentIds);
@@ -591,7 +586,24 @@ export class SessionManager {
   // ─── Private: Event Wiring ──────────────────────────────────────────────
 
   private wireAgentEvents(agent: AgentInstance, agentId: string) {
+    const agentName = () => this.agentConfigs.get(agentId)?.name || 'Unknown';
+
+    // Stream text deltas to client for word-by-word transcript display
+    agent.on('response_delta', (data: { itemId: string; content: string }) => {
+      if (this.turnManager?.getCurrentSpeaker() === agentId) {
+        (this.io as any).emit('transcript_delta', {
+          agentId,
+          agentName: agentName(),
+          content: data.content,
+        });
+      }
+    });
+
+    // Text response completed — save transcript, mark turn text as done
     agent.on('speech_end', (data: { agentId: string; agentName: string; text: string; timestamp: number }) => {
+      // Only process transcripts from the current speaker (ignore auto-responses)
+      if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+
       const msg: TranscriptMessage = {
         agentId: data.agentId,
         agentName: data.agentName,
@@ -599,71 +611,52 @@ export class SessionManager {
         timestamp: data.timestamp,
       };
 
-      // Log transcript
       this.recentTranscripts.push(msg);
       if (this.recentTranscripts.length > 50) this.recentTranscripts.shift();
 
-      // Save to DB
       if (this.session) {
         db.prepare('INSERT INTO transcripts (session_id, agent_id, text, timestamp) VALUES (?, ?, ?, ?)')
           .run(this.session.id, agentId, data.text, data.timestamp);
       }
 
-      // Broadcast to viewers
-      this.io.emit('transcript', msg);
+      // Signal client that streaming transcript is complete
+      (this.io as any).emit('transcript_done', msg);
 
-      // Debug event for Judge Mode
       this.emitDebug('speech_end', agentId, data.agentName, `${data.text.length} chars`);
 
-      // NOTE: Don't relay to other agents here — the turn_start handler already
-      // includes the last message as context. Relaying separately causes double responses
-      // because agents respond to the relay even with trigger_response=false.
-
-      // NOTE: Don't advance turn here — wait for talk_state:ended (audio finished)
-      // so the next agent doesn't start while current audio is still playing.
+      // Mark that the turn's TEXT response is complete.
+      // talk_state:ended will only advance the turn if this flag is set,
+      // preventing auto-responses from prematurely advancing.
+      this.turnTextComplete = true;
     });
 
     agent.on('response_start', () => {
       this.turnManager?.onResponseStarted(agentId);
     });
 
-    // Advance turn when agent's audio finishes playing on the client.
-    // talk_state:ended means Napster finished SENDING audio, but the client
-    // may have 10+ seconds of buffered audio still playing. We estimate
-    // remaining playback time from the total audio data sent.
+    // Advance turn when audio finishes — but only if the turn's text completed first.
+    // This guards against auto-responses (from silence prime) advancing the turn prematurely.
     agent.on('talk_state', (data: any) => {
-      if (data?.state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
-        const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
+      if (data?.state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId && this.turnTextComplete) {
         const tracker = this.audioTracker.get(agentId);
         this.audioTracker.delete(agentId);
 
-        if (tracker && tracker.totalB64Chars > 0) {
-          // base64 → raw bytes: ×3/4, raw → seconds: ÷32000 (16-bit 16kHz mono)
-          const totalDurationMs = (tracker.totalB64Chars * 3 / 4 / 32000) * 1000;
-          const elapsedMs = Date.now() - tracker.firstChunkTime;
-          const remainingMs = Math.max(0, totalDurationMs - elapsedMs + 2000); // +2s for network latency
-
-          console.log(`  [${name}] audio: ${(totalDurationMs / 1000).toFixed(1)}s total, ${(elapsedMs / 1000).toFixed(1)}s streamed, waiting ${(remainingMs / 1000).toFixed(1)}s for playback`);
-
-          setTimeout(() => {
-            this.turnManager?.onSpeechEnd(agentId, '');
-          }, remainingMs);
-        } else {
-          console.log(`  [${name}] audio finished (no chunks tracked) — advancing turn`);
+        // Short delay for last audio chunks to reach client, then advance.
+        // Cable news pacing: don't wait for full playback — client hard-stops old audio on speaker change.
+        const waitMs = 1000;
+        console.log(`  [${agentName()}] audio done — advancing in ${waitMs}ms`);
+        setTimeout(() => {
           this.turnManager?.onSpeechEnd(agentId, '');
-        }
+        }, waitMs);
       }
     });
 
     agent.on('audio', (data: { agentId: string; audio: string }) => {
-      // Only forward audio from the current speaker to prevent overlap
       if (this.turnManager?.getCurrentSpeaker() === agentId) {
-        // Track audio data for playback time estimation
         if (!this.audioTracker.has(agentId)) {
           this.audioTracker.set(agentId, { firstChunkTime: Date.now(), totalB64Chars: 0 });
         }
         this.audioTracker.get(agentId)!.totalB64Chars += data.audio.length;
-
         (this.io as any).emit('agent_audio', data);
       }
     });
@@ -678,19 +671,21 @@ export class SessionManager {
     if (!this.turnManager) return;
 
     this.turnManager.on('turn_start', ({ agentId }: { agentId: string }) => {
+      // Reset turn state
+      this.turnTextComplete = false;
+      this.audioTracker.delete(agentId);
+
       this.io.emit('speaker_change', { agentId });
       const turnAgentName = this.agentConfigs.get(agentId)?.name || 'Unknown';
       this.emitDebug('turn_start', agentId, turnAgentName, 'Turn started');
       console.log(`  [Turn] ${turnAgentName}'s turn`);
 
-      // Trigger the agent to speak
+      // Build the trigger message with full context
+      const topic = this.session?.topic || 'the current topic';
       const lastMsg = this.recentTranscripts[this.recentTranscripts.length - 1];
       if (lastMsg && lastMsg.agentId !== agentId) {
-        // Relay the last message to prompt a response
         this.omniagent.sendMessage(agentId, 'user', `[${lastMsg.agentName} said]: "${lastMsg.text}"\n\nRespond to this. Make your argument.`, true);
       } else {
-        // First turn or no prior transcript — kick off with topic prompt
-        const topic = this.session?.topic || 'the current topic';
         this.omniagent.sendMessage(agentId, 'user', `The debate topic is: "${topic}". Give your opening argument. Be bold and entertaining.`, true);
       }
     });
