@@ -30,9 +30,20 @@ export function TranscriptFeed() {
 
       <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
         {transcripts.length === 0 && (
-          <p className="text-arena-text-muted text-sm italic py-4 text-center">
-            Waiting for debate to begin...
-          </p>
+          <div className="flex flex-col items-center justify-center py-8 gap-2">
+            <div className="flex items-center gap-1.5">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="w-2 h-2 bg-arena-cyan/50 rounded-full animate-pulse"
+                  style={{ animationDelay: `${i * 0.3}s` }}
+                />
+              ))}
+            </div>
+            <p className="text-arena-text-muted text-sm italic">
+              Warming up... agents are preparing their arguments
+            </p>
+          </div>
         )}
 
         <AnimatePresence initial={false}>
@@ -58,7 +69,7 @@ export function TranscriptFeed() {
                 >
                   {isChallenger ? 'CHALLENGER' : msg.agentName}
                 </span>
-                <span className="font-mono text-xs text-arena-text-secondary leading-relaxed">
+                <span className="font-mono text-xs text-arena-text-secondary leading-relaxed break-words overflow-hidden">
                   {msg.text}
                 </span>
               </motion.div>

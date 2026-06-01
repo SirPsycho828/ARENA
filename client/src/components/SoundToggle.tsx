@@ -1,6 +1,7 @@
 import { Volume2, VolumeX } from 'lucide-react';
 import { useArenaStore } from '../store/arena';
 import { sounds } from '../lib/sounds';
+import { ambient } from '../lib/ambient';
 
 export function SoundToggle() {
   const soundMuted = useArenaStore((s) => s.soundMuted);
@@ -8,7 +9,13 @@ export function SoundToggle() {
 
   const handleToggle = () => {
     toggleSound();
-    sounds.muted = !soundMuted; // Will be the NEW state after toggle
+    const newMuted = !soundMuted;
+    sounds.muted = newMuted;
+    if (newMuted) {
+      ambient.stop();
+    } else {
+      ambient.start();
+    }
   };
 
   return (
