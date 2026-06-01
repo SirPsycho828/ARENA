@@ -18,6 +18,7 @@ export class OmniagentConnection extends EventEmitter {
   private config: AgentConfig;
   private connectionId: string | null = null;
   private responseBuffer: Map<string, string> = new Map();
+  private _eventCount = 0;
 
   constructor(config: AgentConfig) {
     super();
@@ -69,6 +70,12 @@ export class OmniagentConnection extends EventEmitter {
       this.ws!.on('message', (raw) => {
         try {
           const event = JSON.parse(raw.toString());
+          // Log first 5 raw events to discover actual structure
+          if (!this._eventCount) this._eventCount = 0;
+          if (this._eventCount < 5) {
+            console.log(`  [${this.config.name}] RAW EVENT:`, JSON.stringify(event).slice(0, 300));
+            this._eventCount++;
+          }
           this.handleEvent(event);
         } catch {
           // Binary audio data — ignore for orchestration
