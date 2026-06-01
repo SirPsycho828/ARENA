@@ -166,6 +166,10 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set((s) => ({
         transcripts: [...s.transcripts.slice(-99), msg],
       }));
+      // Speak the agent's message via TTS
+      if (msg.agentName && msg.text) {
+        agentAudio.speak(msg.text, msg.agentName);
+      }
     });
 
     socket.on('speaker_change', ({ agentId }) => {
@@ -237,11 +241,6 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
           incomingReactions: s.incomingReactions.filter((r) => r.id !== reaction.id),
         }));
       }, 2000);
-    });
-
-    // Agent voice audio from Napster WebSocket
-    (socket as any).on('agent_audio', ({ audio }: { agentId: string; audio: string }) => {
-      agentAudio.play(audio);
     });
 
     (socket as any).on('challenger_active', ({ agentId }: { agentId: string }) => {
