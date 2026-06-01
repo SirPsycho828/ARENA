@@ -1,110 +1,82 @@
 /**
- * Text-to-Speech engine for agent voices using browser SpeechSynthesis.
- * Each agent gets a distinct voice configuration.
+ * Napster native audio player for agent voices.
+ * Receives base64-encoded PCM audio chunks (16-bit signed integer, 16kHz, mono)
+ * and plays them via Web Audio API with per-agent queuing.
  */
 
-interface VoiceConfig {
-  pitch: number;   // 0-2, default 1
-  rate: number;    // 0.1-10, default 1
-  gender: 'male' | 'female';
-  lang: string;
-}
+const SAMPLE_RATE = 16000;
 
-// Voice profiles mapped to agent names
-const VOICE_PROFILES: Record<string, VoiceConfig> = {
-  'Rico Martinez':       { pitch: 1.0, rate: 1.15, gender: 'male', lang: 'en-US' },
-  'Dr. Helena Ashworth': { pitch: 1.2, rate: 0.95, gender: 'female', lang: 'en-GB' },
-  'Darius Kane':         { pitch: 0.8, rate: 1.1, gender: 'male', lang: 'en-US' },
-  'Ambassador Chen Wei': { pitch: 1.0, rate: 0.9, gender: 'male', lang: 'en-US' },
-  'Zap Thunder':         { pitch: 1.3, rate: 1.3, gender: 'male', lang: 'en-US' },
-};
-
-class AgentTTS {
+class AgentAudioPlayer {
   private _muted = false;
-  private voiceCache: Map<string, SpeechSynthesisVoice | null> = new Map();
-  private speaking = false;
-  private queue: Array<{ text: string; agentName: string }> = [];
+  private ctx: AudioContext | null = null;
+  private nextPlayTime = 0;
+  private scheduledCount = 0;
 
-  private getVoice(agentName: string): SpeechSynthesisVoice | null {
-    if (this.voiceCache.has(agentName)) return this.voiceCache.get(agentName)!;
-
-    const voices = speechSynthesis.getVoices();
-    if (voices.length === 0) return null;
-
-    const profile = VOICE_PROFILES[agentName] || { pitch: 1, rate: 1, gender: 'male', lang: 'en-US' };
-
-    // Try to find a voice matching gender and lang
-    const englishVoices = voices.filter((v) => v.lang.startsWith('en'));
-    const genderHints = profile.gender === 'female'
-      ? ['female', 'zira', 'hazel', 'susan', 'samantha', 'karen', 'moira', 'fiona', 'victoria', 'allison']
-      : ['male', 'david', 'james', 'daniel', 'george', 'mark', 'alex', 'tom', 'fred'];
-
-    // Prefer lang match
-    const langMatch = englishVoices.filter((v) => v.lang === profile.lang);
-    const pool = langMatch.length > 0 ? langMatch : englishVoices;
-
-    // Try gender hint match
-    let voice = pool.find((v) => genderHints.some((h) => v.name.toLowerCase().includes(h)));
-    if (!voice) voice = pool[0] || voices[0];
-
-    this.voiceCache.set(agentName, voice);
-    return voice;
+  private getContext(): AudioContext {
+    if (!this.ctx || this.ctx.state === 'closed') {
+      this.ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+    }
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+    return this.ctx;
   }
 
-  speak(text: string, agentName: string) {
-    if (this._muted || !('speechSynthesis' in window)) return;
+  /**
+   * Queue a base64 PCM chunk for playback.
+   * Chunks are scheduled back-to-back for gapless audio.
+   */
+  playChunk(base64Pcm: string) {
+    if (this._muted) return;
 
-    // Queue if already speaking
-    if (this.speaking) {
-      this.queue.push({ text, agentName });
-      return;
+    const ctx = this.getContext();
+    const raw = atob(base64Pcm);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) {
+      bytes[i] = raw.charCodeAt(i);
     }
 
-    this.speakNow(text, agentName);
-  }
+    // Convert 16-bit signed PCM to Float32
+    const int16 = new Int16Array(bytes.buffer);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) {
+      float32[i] = int16[i] / 32768;
+    }
 
-  private speakNow(text: string, agentName: string) {
-    // Cancel any existing speech first
-    speechSynthesis.cancel();
+    const buffer = ctx.createBuffer(1, float32.length, SAMPLE_RATE);
+    buffer.getChannelData(0).set(float32);
 
-    const profile = VOICE_PROFILES[agentName] || { pitch: 1, rate: 1, gender: 'male', lang: 'en-US' };
-    const utterance = new SpeechSynthesisUtterance(text);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
 
-    const voice = this.getVoice(agentName);
-    if (voice) utterance.voice = voice;
+    // Schedule gapless playback
+    const now = ctx.currentTime;
+    if (this.nextPlayTime < now) {
+      this.nextPlayTime = now;
+    }
+    source.start(this.nextPlayTime);
+    this.nextPlayTime += buffer.duration;
+    this.scheduledCount++;
 
-    utterance.pitch = profile.pitch;
-    utterance.rate = profile.rate;
-    utterance.volume = 1;
-
-    this.speaking = true;
-
-    utterance.onend = () => {
-      this.speaking = false;
-      // Play next in queue
-      const next = this.queue.shift();
-      if (next) {
-        this.speakNow(next.text, next.agentName);
-      }
+    source.onended = () => {
+      this.scheduledCount--;
     };
-
-    utterance.onerror = () => {
-      this.speaking = false;
-      const next = this.queue.shift();
-      if (next) {
-        this.speakNow(next.text, next.agentName);
-      }
-    };
-
-    speechSynthesis.speak(utterance);
   }
 
   stop() {
-    this.queue = [];
-    this.speaking = false;
-    if ('speechSynthesis' in window) {
-      speechSynthesis.cancel();
+    if (this.ctx && this.ctx.state !== 'closed') {
+      this.ctx.close();
+      this.ctx = null;
     }
+    this.nextPlayTime = 0;
+    this.scheduledCount = 0;
+  }
+
+  /** Reset scheduling for a new speech turn */
+  resetSchedule() {
+    this.nextPlayTime = 0;
+    this.scheduledCount = 0;
   }
 
   set muted(value: boolean) {
@@ -117,4 +89,4 @@ class AgentTTS {
   }
 }
 
-export const agentAudio = new AgentTTS();
+export const agentAudio = new AgentAudioPlayer();

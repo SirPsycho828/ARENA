@@ -19,6 +19,7 @@ export class OmniagentConnection extends EventEmitter {
   private connectionId: string | null = null;
   private responseBuffer: Map<string, string> = new Map();
   private audioChunkCount = 0;
+  private frameStats = { json: 0, binary: 0, audioJson: 0, total: 0 };
 
   constructor(config: AgentConfig) {
     super();
@@ -73,26 +74,41 @@ export class OmniagentConnection extends EventEmitter {
       });
 
       this.ws!.on('message', (raw, isBinary) => {
-        // Binary frames = raw PCM audio from the agent's voice
-        if (isBinary || Buffer.isBuffer(raw) && !this.isJsonBuffer(raw)) {
-          const b64 = Buffer.isBuffer(raw) ? raw.toString('base64') : Buffer.from(raw as any).toString('base64');
-          this.audioChunkCount++;
-          if (this.audioChunkCount <= 3) {
-            console.log(`  [${this.config.name}] audio chunk #${this.audioChunkCount}: ${Buffer.isBuffer(raw) ? raw.length : 0} bytes`);
-          }
+        this.frameStats.total++;
+        const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as any);
+
+        // Log first 10 frames fully to understand the protocol
+        if (this.frameStats.total <= 10) {
+          const preview = isBinary
+            ? `BINARY ${buf.length}b first4=[${buf.slice(0, 4).toString('hex')}]`
+            : `TEXT ${buf.length}b: ${buf.toString('utf-8').slice(0, 200)}`;
+          console.log(`  [${this.config.name}] FRAME #${this.frameStats.total} (isBinary=${isBinary}): ${preview}`);
+        }
+
+        // Log stats every 50 frames
+        if (this.frameStats.total % 50 === 0) {
+          console.log(`  [${this.config.name}] FRAME STATS: ${JSON.stringify(this.frameStats)}`);
+        }
+
+        // Binary frames = raw PCM audio
+        if (isBinary) {
+          this.frameStats.binary++;
           this.emit('audio', {
             agentId: this.config.id,
-            audio: b64,
+            audio: buf.toString('base64'),
           });
           return;
         }
 
         // Text frames = JSON events
         try {
-          const event = JSON.parse(raw.toString());
+          const event = JSON.parse(buf.toString('utf-8'));
+          this.frameStats.json++;
           this.handleEvent(event);
         } catch {
-          // Unknown non-JSON text frame
+          // Non-JSON text frame — might be audio in unexpected format
+          this.frameStats.binary++;
+          console.log(`  [${this.config.name}] non-JSON text frame: ${buf.length}b`);
         }
       });
 
@@ -132,16 +148,21 @@ export class OmniagentConnection extends EventEmitter {
         console.log(`  [${this.config.name}] avatar: ${event.data?.state}`);
         this.emit('avatar_state', event.data);
         break;
-      case 'audio_received':
-        // Forward agent audio (base64 PCM) for client playback
-        console.log(`  [${this.config.name}] JSON audio_received: ${event.data?.audio?.length || 0} chars`);
-        if (event.data?.audio) {
+      case 'audio_received': {
+        // Napster sends audio as event.data.data (base64 PCM 16-bit 16kHz mono)
+        const audioB64 = event.data?.data || event.data?.audio;
+        if (audioB64) {
+          this.audioChunkCount++;
+          if (this.audioChunkCount <= 3) {
+            console.log(`  [${this.config.name}] audio chunk #${this.audioChunkCount}: ${audioB64.length} chars`);
+          }
           this.emit('audio', {
             agentId: this.config.id,
-            audio: event.data.audio,
+            audio: audioB64,
           });
         }
         break;
+      }
       default:
         // Log unknown event types for debugging
         if (eventType) console.log(`  [${this.config.name}] unknown event: ${eventType}`);

@@ -166,14 +166,18 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set((s) => ({
         transcripts: [...s.transcripts.slice(-99), msg],
       }));
-      // Speak the agent's message via TTS
-      if (msg.agentName && msg.text) {
-        agentAudio.speak(msg.text, msg.agentName);
+    });
+
+    // Play Napster native audio chunks (base64 PCM 16-bit 16kHz mono)
+    socket.on('agent_audio', (data: { agentId: string; audio: string }) => {
+      if (data.audio) {
+        agentAudio.playChunk(data.audio);
       }
     });
 
     socket.on('speaker_change', ({ agentId }) => {
       set({ currentSpeaker: agentId });
+      agentAudio.resetSchedule();
     });
 
     socket.on('vote_update', (tallies) => {
