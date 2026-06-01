@@ -77,6 +77,9 @@ interface ArenaState {
   // Victory
   victoryData: VictoryData | null;
 
+  // Video
+  videoTokens: Record<string, string>;
+
   // Actions
   connect: () => void;
   disconnect: () => void;
@@ -107,6 +110,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   soundMuted: false,
   toggleSound: () => set((s) => ({ soundMuted: !s.soundMuted })),
   victoryData: null,
+  videoTokens: {},
 
   connect: () => {
     const socket = io(window.location.origin, {
@@ -147,6 +151,14 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         transcripts: state.recentTranscripts || [],
         victoryData: null, // Clear victory screen when new session arrives
       });
+
+      // Fetch video tokens if session is active
+      if (state.session?.status === 'active' || state.session?.status === 'starting') {
+        fetch('/api/sessions/tokens')
+          .then((r) => r.json())
+          .then((data) => { if (data.tokens) set({ videoTokens: data.tokens }); })
+          .catch(() => {});
+      }
     });
 
     socket.on('transcript', (msg) => {

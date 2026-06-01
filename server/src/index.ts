@@ -109,6 +109,12 @@ app.get('/api/topics', (_req, res) => {
   res.json({ topics: getTopicPool() });
 });
 
+app.get('/api/sessions/tokens', (_req, res) => {
+  const tokens: Record<string, string> = {};
+  sessionManager.getVideoTokens().forEach((token, agentId) => { tokens[agentId] = token; });
+  res.json({ tokens });
+});
+
 // ─── SPA Catch-All (after API routes, before socket) ────────────────────────
 
 app.get('*', (_req, res) => {

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ThumbsUp, Mic } from 'lucide-react';
 import { useArenaStore } from '../store/arena';
 import { AgentStats } from './AgentStats';
+import { AgentVideo } from './AgentVideo';
 
 interface Props {
   id: string;
@@ -18,6 +19,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
   const vote = useArenaStore((s) => s.vote);
   const challengerActive = useArenaStore((s) => s.challengerActive);
   const challengerAgentId = useArenaStore((s) => s.challengerAgentId);
+  const videoTokens = useArenaStore((s) => s.videoTokens);
   const isSpeaking = currentSpeaker === id;
   const isChallenged = challengerActive && challengerAgentId === id;
   const votes = voteTallies[id] || 0;
@@ -49,7 +51,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.4 }}
     >
-      {/* Video placeholder — will be replaced with WebRTC widget */}
+      {/* Video / Avatar */}
       <div className="aspect-video bg-arena-elevated flex items-center justify-center relative overflow-hidden">
         {/* Animated background gradient */}
         <div
@@ -58,11 +60,8 @@ export function AgentPanel({ id, name, personality, color }: Props) {
             background: `radial-gradient(circle at 50% 50%, ${color}40, transparent 70%)`,
           }}
         />
-        <div
-          className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold relative z-10"
-          style={{ backgroundColor: color + '20', color, border: `2px solid ${color}40` }}
-        >
-          {name.split(' ').pop()?.[0] || name[0]}
+        <div className="relative z-10 w-full h-full">
+          <AgentVideo token={videoTokens[id] || null} agentName={name} color={color} />
         </div>
 
         {/* Speaking audio wave indicator */}

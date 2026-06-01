@@ -141,6 +141,7 @@ export class SessionManager {
   private agentConfigs: Map<string, AgentConfig> = new Map();
   private companionIds: string[] = [];
   private topicRotationTimer: ReturnType<typeof setInterval> | null = null;
+  private videoTokens: Map<string, string> = new Map();
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
     this.omniagent = omniagent;
@@ -206,6 +207,28 @@ export class SessionManager {
         this.agentConfigs.set(agentId, config);
         agentIds.push(agentId);
         console.log(`  Created: ${config.name} (${agentId})`);
+
+        // Create WebRTC connection for video avatar
+        if (process.env.USE_MOCK !== 'true') {
+          try {
+            const API_KEY = process.env.OMNIAGENT_API_KEY!;
+            const tokenRes = await fetch(
+              `https://companion-api.napster.com/public/agents/${agentId}/connections`,
+              {
+                method: 'POST',
+                headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channelType: 'webrtc' }),
+              }
+            );
+            if (tokenRes.ok) {
+              const tokenData = await tokenRes.json() as { token: string };
+              this.videoTokens.set(agentId, tokenData.token);
+              console.log(`  WebRTC token: ${config.name}`);
+            }
+          } catch (err) {
+            console.warn(`  WebRTC token failed for ${config.name}:`, (err as Error).message);
+          }
+        }
       } catch (err) {
         console.error(`  Failed to create ${config.name}:`, (err as Error).message);
       }
@@ -457,6 +480,10 @@ export class SessionManager {
 
   getActiveSession(): DebateSession | null {
     return this.session;
+  }
+
+  getVideoTokens(): Map<string, string> {
+    return this.videoTokens;
   }
 
   getSessionState(): SessionState {
