@@ -1,8 +1,10 @@
 FROM node:22-alpine AS client-build
 WORKDIR /app/client
 COPY client/package*.json ./
-RUN npm ci
+ENV NODE_OPTIONS="--max-old-space-size=384"
+RUN npm ci --maxsockets 2
 COPY client/ ./
+COPY shared/ ../shared/
 RUN npm run build
 
 FROM node:22-alpine AS server-deps
@@ -16,7 +18,6 @@ WORKDIR /app
 COPY --from=server-deps /app/server/node_modules ./server/node_modules
 COPY server/ ./server/
 COPY shared/ ./shared/
-COPY .env* ./
 COPY --from=client-build /app/client/dist ./client/dist
 
 EXPOSE 3001
