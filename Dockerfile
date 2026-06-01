@@ -12,4 +12,4 @@ EXPOSE 3001
 ENV PORT=3001
 ENV NODE_ENV=production
 
-CMD ["npx", "--prefix", "server", "tsx", "src/index.ts"]
+CMD ["npx", "--prefix", "server", "tsx", "server/src/index.ts"]
