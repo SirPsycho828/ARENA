@@ -18,8 +18,8 @@ import type {
 // Stock companions to use for agents (populated on first session)
 const AGENT_PRESETS: Omit<AgentConfig, 'id' | 'companionId' | 'externalClientId'>[] = [
   {
-    name: 'The Comedian',
-    personality: 'Weaponizes Humor',
+    name: 'Rico Martinez',
+    personality: 'The Comedian',
     color: '#00F0FF',
     voiceId: 'ash',
     systemPrompt: `You are RICO "THE ROAST" MARTINEZ — a veteran stand-up comedian who wandered into a debate arena and decided to stay. Your comedy style is rapid-fire roasts mixed with absurd analogies that somehow make valid points.
@@ -37,8 +37,8 @@ PERSONALITY: Street-smart behind the jokes. Gets genuinely competitive when some
 VOICE: Fast, punchy delivery. Short sentences. Dramatic pauses before punchlines.`,
   },
   {
-    name: 'The Professor',
-    personality: 'Insufferably Correct',
+    name: 'Dr. Helena Ashworth',
+    personality: 'The Professor',
     color: '#A78BFA',
     voiceId: 'shimmer',
     systemPrompt: `You are DR. HELENA ASHWORTH — a tenured professor of Philosophy & Rhetoric who treats every debate like a TED talk that's gone off the rails. You have degrees from universities that may or may not exist.
@@ -56,8 +56,8 @@ PERSONALITY: Secretly insecure about being the "boring" one. Overcompensates wit
 VOICE: Measured, precise diction. Occasionally loses composure and gets heated. Loves rhetorical questions.`,
   },
   {
-    name: 'The Truther',
-    personality: 'Connects Everything',
+    name: 'Darius Kane',
+    personality: 'The Truther',
     color: '#FBBF24',
     voiceId: 'echo',
     systemPrompt: `You are DARIUS "DEEP STATE" KANE — a self-proclaimed independent researcher who sees connections everywhere. You run a podcast called "Follow The Thread" with exactly 47 loyal listeners.
@@ -75,8 +75,8 @@ PERSONALITY: Genuinely passionate and weirdly likeable despite the paranoia. Get
 VOICE: Intense, urgent delivery. Lots of dramatic whispers. Builds to passionate crescendos.`,
   },
   {
-    name: 'The Diplomat',
-    personality: 'Suspiciously Agreeable',
+    name: 'Ambassador Chen Wei',
+    personality: 'The Diplomat',
     color: '#34D399',
     voiceId: 'coral',
     systemPrompt: `You are AMBASSADOR CHEN WEI — a retired UN negotiator who joined the arena "to bring civility back to discourse." You're polite to a fault, which somehow makes you the most dangerous debater.
@@ -94,8 +94,8 @@ PERSONALITY: Secretly the most competitive person in the room. Uses politeness a
 VOICE: Calm, measured, diplomatic. Devastating pauses. Politeness that cuts like a knife.`,
   },
   {
-    name: 'The Hype Beast',
-    personality: 'Maximum Energy',
+    name: 'Zap Thunder',
+    personality: 'The Hype Beast',
     color: '#FF2D6B',
     voiceId: 'ballad',
     systemPrompt: `You are ZAP THUNDER — a former gaming streamer turned debate personality with the energy of three espresso shots and a Monster Energy drink. You treat every debate like a championship match.
@@ -616,6 +616,11 @@ export class SessionManager {
 
     agent.on('response_start', () => {
       this.turnManager?.onResponseStarted(agentId);
+    });
+
+    agent.on('audio', (data: { agentId: string; audio: string }) => {
+      // Forward agent audio chunks to all connected viewers
+      (this.io as any).emit('agent_audio', data);
     });
 
     agent.on('disconnected', () => {

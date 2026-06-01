@@ -109,6 +109,15 @@ export class OmniagentConnection extends EventEmitter {
         console.log(`  [${this.config.name}] avatar: ${event.data?.state}`);
         this.emit('avatar_state', event.data);
         break;
+      case 'audio_received':
+        // Forward agent audio (base64 PCM 16kHz 16-bit mono) for client playback
+        if (event.data?.audio) {
+          this.emit('audio', {
+            agentId: this.config.id,
+            audio: event.data.audio,
+          });
+        }
+        break;
       default:
         // Log unknown event types for debugging
         if (eventType) console.log(`  [${this.config.name}] unknown event: ${eventType}`);

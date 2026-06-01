@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { io, Socket } from 'socket.io-client';
+import { agentAudio } from '../lib/agent-audio';
 
 interface AgentInfo {
   id: string;
@@ -236,6 +237,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
           incomingReactions: s.incomingReactions.filter((r) => r.id !== reaction.id),
         }));
       }, 2000);
+    });
+
+    // Agent voice audio from Napster WebSocket
+    (socket as any).on('agent_audio', ({ audio }: { agentId: string; audio: string }) => {
+      agentAudio.play(audio);
     });
 
     (socket as any).on('challenger_active', ({ agentId }: { agentId: string }) => {

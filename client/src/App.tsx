@@ -13,7 +13,6 @@ import { VoiceChallenger } from './components/VoiceChallenger';
 import { VictoryScreen } from './components/VictoryScreen';
 import { JudgePanel } from './components/JudgePanel';
 import { sounds } from './lib/sounds';
-import { ambient } from './lib/ambient';
 import { Zap } from 'lucide-react';
 
 type Phase = 'splash' | 'entrance' | 'arena';
@@ -48,17 +47,8 @@ function App() {
     }
   }, [currentSpeaker, phase]);
 
-  // Ambient audio intensity based on transcript frequency
-  const transcripts = useArenaStore((s) => s.transcripts);
-  useEffect(() => {
-    if (phase !== 'arena' || sounds.muted) return;
-    const recentCount = transcripts.filter((t) => t.timestamp > Date.now() - 10000).length;
-    ambient.setIntensity(Math.min(recentCount / 5, 1));
-  }, [transcripts, phase]);
-
   const handleEnterArena = useCallback(() => {
     sounds.arenaEnter();
-    ambient.start();
     // If agents are ready, show entrance sequence; otherwise go straight to arena
     if (agents.length > 0) {
       setPhase('entrance');
