@@ -21,7 +21,7 @@ const AGENT_PRESETS: Omit<AgentConfig, 'id' | 'companionId' | 'externalClientId'
     name: 'The Comedian',
     personality: 'Weaponizes Humor',
     color: '#00F0FF',
-    voiceId: 'alloy',
+    voiceId: 'ash',
     systemPrompt: `You are RICO "THE ROAST" MARTINEZ — a veteran stand-up comedian who wandered into a debate arena and decided to stay. Your comedy style is rapid-fire roasts mixed with absurd analogies that somehow make valid points.
 
 DEBATE STRATEGY:
@@ -40,7 +40,7 @@ VOICE: Fast, punchy delivery. Short sentences. Dramatic pauses before punchlines
     name: 'The Professor',
     personality: 'Insufferably Correct',
     color: '#A78BFA',
-    voiceId: 'alloy',
+    voiceId: 'shimmer',
     systemPrompt: `You are DR. HELENA ASHWORTH — a tenured professor of Philosophy & Rhetoric who treats every debate like a TED talk that's gone off the rails. You have degrees from universities that may or may not exist.
 
 DEBATE STRATEGY:
@@ -59,7 +59,7 @@ VOICE: Measured, precise diction. Occasionally loses composure and gets heated. 
     name: 'The Truther',
     personality: 'Connects Everything',
     color: '#FBBF24',
-    voiceId: 'alloy',
+    voiceId: 'echo',
     systemPrompt: `You are DARIUS "DEEP STATE" KANE — a self-proclaimed independent researcher who sees connections everywhere. You run a podcast called "Follow The Thread" with exactly 47 loyal listeners.
 
 DEBATE STRATEGY:
@@ -78,7 +78,7 @@ VOICE: Intense, urgent delivery. Lots of dramatic whispers. Builds to passionate
     name: 'The Diplomat',
     personality: 'Suspiciously Agreeable',
     color: '#34D399',
-    voiceId: 'alloy',
+    voiceId: 'coral',
     systemPrompt: `You are AMBASSADOR CHEN WEI — a retired UN negotiator who joined the arena "to bring civility back to discourse." You're polite to a fault, which somehow makes you the most dangerous debater.
 
 DEBATE STRATEGY:
@@ -97,7 +97,7 @@ VOICE: Calm, measured, diplomatic. Devastating pauses. Politeness that cuts like
     name: 'The Hype Beast',
     personality: 'Maximum Energy',
     color: '#FF2D6B',
-    voiceId: 'alloy',
+    voiceId: 'ballad',
     systemPrompt: `You are ZAP THUNDER — a former gaming streamer turned debate personality with the energy of three espresso shots and a Monster Energy drink. You treat every debate like a championship match.
 
 DEBATE STRATEGY:
@@ -583,7 +583,10 @@ export class SessionManager {
         companionId: config.companionId,
         name: config.name,
         voiceId: config.voiceId,
-        providerSettings: { temperature: 0.85 },
+        providerSettings: {
+          temperature: 0.85,
+          instructions: config.systemPrompt,
+        },
       }),
     });
 

@@ -13,6 +13,8 @@
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.10",
+    "@reduxjs/toolkit": "^2.12.0",
+    "@touchcastllc/napster-companion-api": "^1.0.0-alpha.48",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.17.0",
     "react": "^19.2.6",
