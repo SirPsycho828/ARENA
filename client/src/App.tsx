@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useArenaStore } from './store/arena';
 import { SplashScreen } from './components/SplashScreen';
+import { AgentEntrance } from './components/AgentEntrance';
 import { TopicBanner } from './components/TopicBanner';
 import { SpectatorBar } from './components/SpectatorBar';
 import { AgentPanel } from './components/AgentPanel';
@@ -9,10 +10,13 @@ import { TranscriptFeed } from './components/TranscriptFeed';
 import { ChaosPanel } from './components/ChaosPanel';
 import { ReactionOverlay } from './components/ReactionOverlay';
 import { VoiceChallenger } from './components/VoiceChallenger';
+import { VictoryScreen } from './components/VictoryScreen';
 import { sounds } from './lib/sounds';
 
+type Phase = 'splash' | 'entrance' | 'arena';
+
 function App() {
-  const [showSplash, setShowSplash] = useState(true);
+  const [phase, setPhase] = useState<Phase>('splash');
   const connect = useArenaStore((s) => s.connect);
   const disconnect = useArenaStore((s) => s.disconnect);
   const session = useArenaStore((s) => s.session);
@@ -23,23 +27,32 @@ function App() {
   const challengerActive = useArenaStore((s) => s.challengerActive);
   const startChallenge = useArenaStore((s) => s.startChallenge);
   const endChallenge = useArenaStore((s) => s.endChallenge);
+  const victoryData = useArenaStore((s) => s.victoryData);
 
   useEffect(() => {
     connect();
     return () => disconnect();
   }, [connect, disconnect]);
 
-  // Sound effects on state changes
-  const prevSpeaker = useArenaStore((s) => s.currentSpeaker);
+  // Sound effects on speaker changes
   useEffect(() => {
-    if (prevSpeaker && !showSplash) {
+    if (currentSpeaker && phase === 'arena') {
       sounds.turnChange();
     }
-  }, [currentSpeaker]);
+  }, [currentSpeaker, phase]);
 
   const handleEnterArena = useCallback(() => {
-    setShowSplash(false);
     sounds.arenaEnter();
+    // If agents are ready, show entrance sequence; otherwise go straight to arena
+    if (agents.length > 0) {
+      setPhase('entrance');
+    } else {
+      setPhase('arena');
+    }
+  }, [agents.length]);
+
+  const handleEntranceComplete = useCallback(() => {
+    setPhase('arena');
   }, []);
 
   const handleReaction = useCallback((emoji: string) => {
@@ -59,7 +72,7 @@ function App() {
     <>
       {/* Splash screen overlay */}
       <AnimatePresence>
-        {showSplash && (
+        {phase === 'splash' && (
           <motion.div
             key="splash"
             exit={{ opacity: 0, y: -50 }}
@@ -70,8 +83,21 @@ function App() {
         )}
       </AnimatePresence>
 
+      {/* Agent entrance sequence */}
+      <AnimatePresence>
+        {phase === 'entrance' && agents.length > 0 && (
+          <motion.div
+            key="entrance"
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <AgentEntrance agents={agents} onComplete={handleEntranceComplete} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Main arena */}
-      <div className={`flex flex-col h-screen bg-arena-base ${showSplash ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}>
+      <div className={`flex flex-col h-screen bg-arena-base ${phase !== 'arena' ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}>
         <TopicBanner />
         <SpectatorBar />
 
@@ -86,12 +112,11 @@ function App() {
                   </h2>
                   <p className="text-arena-text-secondary max-w-md mx-auto">
                     A live multi-agent debate arena where AI personalities argue in real-time.
-                    Start a session via the API to begin.
+                    A debate will start automatically — hang tight.
                   </p>
-                  <div className="inline-block px-4 py-2 rounded-lg bg-arena-surface border border-arena-border-subtle">
-                    <p className="text-arena-text-muted text-sm font-mono">
-                      POST /api/sessions {`{ "topic": "...", "agentCount": 3 }`}
-                    </p>
+                  <div className="flex items-center justify-center gap-2 text-arena-text-muted text-sm">
+                    <div className="w-2 h-2 bg-arena-cyan rounded-full animate-pulse" />
+                    Waiting for debate to begin...
                   </div>
                 </div>
               </div>
@@ -102,12 +127,12 @@ function App() {
                 {/* Agent video grid */}
                 <div className={`grid gap-3 ${
                   agents.length <= 2
-                    ? 'grid-cols-2'
+                    ? 'grid-cols-1 sm:grid-cols-2'
                     : agents.length === 3
-                    ? 'grid-cols-3'
+                    ? 'grid-cols-1 sm:grid-cols-3'
                     : agents.length === 4
                     ? 'grid-cols-2 lg:grid-cols-4'
-                    : 'grid-cols-3 lg:grid-cols-5'
+                    : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
                 }`}>
                   {agents.map((agent) => (
                     <AgentPanel
@@ -146,12 +171,19 @@ function App() {
       </div>
 
       {/* Reaction overlay (always on top) */}
-      {!showSplash && (
+      {phase === 'arena' && (
         <ReactionOverlay
           onReaction={handleReaction}
           incomingReactions={incomingReactions}
         />
       )}
+
+      {/* Victory screen */}
+      <AnimatePresence>
+        {victoryData && phase === 'arena' && (
+          <VictoryScreen data={victoryData} />
+        )}
+      </AnimatePresence>
     </>
   );
 }

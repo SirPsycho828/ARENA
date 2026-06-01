@@ -167,3 +167,50 @@ body {
 .animate-challenger-badge {
   animation: challenger-badge-pulse 1s ease-in-out infinite;
 }
+
+/* ─── Crowd Momentum ────────────────────────────────────────────── */
+
+@keyframes golden-aura {
+  0%, 100% { box-shadow: 0 0 20px rgba(255, 170, 0, 0.3); }
+  50% { box-shadow: 0 0 50px rgba(255, 170, 0, 0.6), 0 0 80px rgba(255, 170, 0, 0.2); }
+}
+
+@keyframes dominate-aura {
+  0%, 100% {
+    box-shadow: 0 0 30px rgba(255, 170, 0, 0.4), 0 0 60px rgba(255, 100, 0, 0.2);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 60px rgba(255, 170, 0, 0.7), 0 0 100px rgba(255, 100, 0, 0.3);
+    filter: brightness(1.05);
+  }
+}
+
+.animate-momentum-rising {
+  animation: golden-aura 3s ease-in-out infinite;
+}
+
+.animate-momentum-favorite {
+  animation: golden-aura 2s ease-in-out infinite;
+}
+
+.animate-momentum-dominating {
+  animation: dominate-aura 1.5s ease-in-out infinite;
+}
+
+/* ─── Confetti ──────────────────────────────────────────────────── */
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-100vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+.animate-confetti {
+  animation: confetti-fall 3s ease-in forwards;
+}

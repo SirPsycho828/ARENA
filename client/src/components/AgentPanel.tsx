@@ -19,19 +19,27 @@ export function AgentPanel({ id, name, personality, color }: Props) {
   const isChallenged = challengerActive && challengerAgentId === id;
   const votes = voteTallies[id] || 0;
 
-  // Determine highest vote count for "leading" indicator
-  const maxVotes = Math.max(...Object.values(voteTallies), 0);
-  const isLeading = votes > 0 && votes === maxVotes;
+  // Determine momentum tier based on vote percentage
+  const totalVotes = Object.values(voteTallies).reduce((a, b) => a + b, 0);
+  const votePercent = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
+  const momentum = votePercent > 70 ? 'dominating' : votePercent > 50 ? 'favorite' : votePercent > 30 ? 'rising' : 'normal';
+  const isLeading = momentum !== 'normal' && votes > 0;
+
+  const momentumClass = isChallenged
+    ? 'border-arena-magenta animate-challenger-glow'
+    : isSpeaking
+    ? 'border-arena-cyan animate-speaker-glow'
+    : momentum === 'dominating'
+    ? 'border-arena-warning animate-momentum-dominating'
+    : momentum === 'favorite'
+    ? 'border-arena-warning/70 animate-momentum-favorite'
+    : momentum === 'rising'
+    ? 'border-arena-warning/40 animate-momentum-rising'
+    : 'border-arena-border-subtle hover:border-arena-border';
 
   return (
     <motion.div
-      className={`relative rounded-xl border-2 overflow-hidden transition-all duration-300 ${
-        isChallenged
-          ? 'border-arena-magenta animate-challenger-glow'
-          : isSpeaking
-          ? 'border-arena-cyan animate-speaker-glow'
-          : 'border-arena-border-subtle hover:border-arena-border'
-      }`}
+      className={`relative rounded-xl border-2 overflow-hidden transition-all duration-300 ${momentumClass}`}
       style={{ '--agent-color': color } as React.CSSProperties}
       layout
       initial={{ opacity: 0, scale: 0.9 }}
@@ -111,9 +119,24 @@ export function AgentPanel({ id, name, personality, color }: Props) {
             LIVE CHALLENGER
           </motion.span>
         )}
-        {isLeading && votes > 0 && (
+        {momentum === 'dominating' && (
+          <motion.span
+            initial={{ scale: 0 }}
+            animate={{ scale: [1, 1.1, 1] }}
+            transition={{ repeat: Infinity, duration: 1.5 }}
+            className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-arena-warning/30 text-arena-warning border border-arena-warning/40"
+          >
+            DOMINATING
+          </motion.span>
+        )}
+        {momentum === 'favorite' && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-arena-warning/20 text-arena-warning">
-            Leading
+            CROWD FAVORITE
+          </span>
+        )}
+        {momentum === 'rising' && (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-arena-warning/10 text-arena-warning/80">
+            Rising
           </span>
         )}
       </div>

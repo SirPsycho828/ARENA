@@ -35,6 +35,14 @@ interface IncomingReaction {
   x?: number;
 }
 
+interface VictoryData {
+  winner: { id: string; name: string; color: string; votes: number } | null;
+  voteTallies: VoteTallies;
+  totalMessages: number;
+  duration: number;
+  agents: AgentInfo[];
+}
+
 interface ArenaState {
   // Connection
   connected: boolean;
@@ -66,6 +74,9 @@ interface ArenaState {
   soundMuted: boolean;
   toggleSound: () => void;
 
+  // Victory
+  victoryData: VictoryData | null;
+
   // Actions
   connect: () => void;
   disconnect: () => void;
@@ -95,6 +106,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   challengerAgentId: null,
   soundMuted: false,
   toggleSound: () => set((s) => ({ soundMuted: !s.soundMuted })),
+  victoryData: null,
 
   connect: () => {
     const socket = io(window.location.origin, {
@@ -133,6 +145,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         voteTallies: state.voteTallies,
         activeRules: state.activeRules,
         transcripts: state.recentTranscripts || [],
+        victoryData: null, // Clear victory screen when new session arrives
       });
     });
 
@@ -168,10 +181,31 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       }
     });
 
-    socket.on('session_ended', () => {
-      set((s) => ({
+    socket.on('session_ended', (data: any) => {
+      const s = get();
+      const results = data?.results;
+      let victoryData: VictoryData | null = null;
+
+      if (results && s.agents.length > 0) {
+        victoryData = {
+          winner: results.winner || null,
+          voteTallies: results.voteTallies || s.voteTallies,
+          totalMessages: results.totalMessages || s.transcripts.length,
+          duration: results.duration || (Date.now() - (s.session?.startedAt || Date.now())),
+          agents: s.agents,
+        };
+      }
+
+      set({
         session: s.session ? { ...s.session, status: 'ended' } : null,
         currentSpeaker: null,
+        victoryData,
+      });
+    });
+
+    (socket as any).on('topic_changed', ({ topic }: { topic: string }) => {
+      set((s) => ({
+        session: s.session ? { ...s.session, topic } : null,
       }));
     });
 

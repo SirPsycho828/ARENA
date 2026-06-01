@@ -140,6 +140,7 @@ export class SessionManager {
   private recentTranscripts: TranscriptMessage[] = [];
   private agentConfigs: Map<string, AgentConfig> = new Map();
   private companionIds: string[] = [];
+  private topicRotationTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
     this.omniagent = omniagent;
@@ -292,6 +293,11 @@ export class SessionManager {
     // Start the turn cycle
     this.turnManager.start(this.session.agentIds);
 
+    // Start topic rotation (every 5 minutes)
+    this.topicRotationTimer = setInterval(() => {
+      this.rotateTopic();
+    }, 5 * 60 * 1000);
+
     // Notify viewers
     this.io.emit('session_state', this.getSessionState());
     console.log('  Debate is LIVE!\n');
@@ -311,7 +317,23 @@ export class SessionManager {
     db.prepare('UPDATE sessions SET status = ?, ended_at = ? WHERE id = ?')
       .run('ended', this.session.endedAt, this.session.id);
 
-    this.io.emit('session_ended', { reason });
+    // Build victory results
+    const winner = this.getWinner();
+    this.io.emit('session_ended', {
+      reason,
+      results: {
+        winner,
+        voteTallies: { ...this.voteTallies },
+        totalMessages: this.recentTranscripts.length,
+        duration: Date.now() - (this.session.startedAt || 0),
+      },
+    });
+
+    // Clear topic rotation timer
+    if (this.topicRotationTimer) {
+      clearInterval(this.topicRotationTimer);
+      this.topicRotationTimer = null;
+    }
 
     this.turnManager = null;
     this.relay = null;
@@ -453,6 +475,62 @@ export class SessionManager {
       activeRules: this.activeRules,
       recentTranscripts: this.recentTranscripts.slice(-20),
     };
+  }
+
+  // ─── Private: Victory & Rotation ──────────────────────────────────────
+
+  private getWinner(): { id: string; name: string; color: string; votes: number } | null {
+    if (!this.session) return null;
+    let maxVotes = 0;
+    let winnerId: string | null = null;
+
+    for (const [agentId, votes] of Object.entries(this.voteTallies)) {
+      if (votes > maxVotes) {
+        maxVotes = votes;
+        winnerId = agentId;
+      }
+    }
+
+    if (!winnerId || maxVotes === 0) return null;
+
+    // Check for tie
+    const tiedCount = Object.values(this.voteTallies).filter((v) => v === maxVotes).length;
+    if (tiedCount > 1) return null; // It's a tie
+
+    const config = this.agentConfigs.get(winnerId);
+    return {
+      id: winnerId,
+      name: config?.name || 'Unknown',
+      color: config?.color || '#888',
+      votes: maxVotes,
+    };
+  }
+
+  private async rotateTopic() {
+    if (!this.session || this.session.status !== 'active') return;
+
+    try {
+      const { getNextTopic } = await import('./auto-start.js');
+      const newTopic = getNextTopic();
+      this.session.topic = newTopic;
+
+      // Notify all agents
+      for (const agentId of this.session.agentIds) {
+        this.omniagent.sendMessage(
+          agentId, 'system',
+          `TOPIC CHANGE! The new debate topic is: "${newTopic}". Pivot your arguments immediately. Make a bold opening statement on the new topic.`,
+          false
+        );
+      }
+
+      // Notify viewers
+      (this.io as any).emit('topic_changed', { topic: newTopic, timestamp: Date.now() });
+      this.io.emit('session_state', this.getSessionState());
+
+      console.log(`  [Topic Rotation] New topic: ${newTopic}`);
+    } catch (err) {
+      console.error('  Topic rotation failed:', (err as Error).message);
+    }
   }
 
   // ─── Private: Agent Creation ────────────────────────────────────────────
