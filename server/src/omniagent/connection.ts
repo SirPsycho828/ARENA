@@ -69,6 +69,15 @@ export class OmniagentConnection extends EventEmitter {
           this.updateSettings(this.config.systemPrompt);
           console.log(`  [${this.config.name}] Sent set_settings to override companion instructions`);
         }
+        // Prime the audio channel by sending a short silent audio chunk.
+        // Without this, text-only send_message won't trigger audio_received events.
+        // 16-bit PCM, 16kHz, mono — 1600 samples = 100ms of silence
+        const silence = Buffer.alloc(3200); // 1600 samples * 2 bytes each
+        this.ws!.send(JSON.stringify({
+          type: 'send_audio',
+          data: { data: silence.toString('base64') },
+        }));
+        console.log(`  [${this.config.name}] Sent silent audio to prime audio channel`);
         clearTimeout(timeout);
         resolve();
       });
@@ -235,7 +244,14 @@ export class OmniagentConnection extends EventEmitter {
 
     this.ws.send(JSON.stringify({
       type: 'set_settings',
-      data: { instructions },
+      data: {
+        instructions,
+        // High silence threshold so agent doesn't self-trigger from silence priming
+        turn_detection: {
+          threshold: 0.9,
+          silence_duration_ms: 2000,
+        },
+      },
     }));
   }
 

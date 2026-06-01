@@ -3,9 +3,9 @@ import type { TurnState, TurnMode, TurnManagerConfig } from '../../../shared/typ
 
 const DEFAULT_CONFIG: TurnManagerConfig = {
   mode: 'round_robin',
-  turnTimeout: 10000,
+  turnTimeout: 20000,
   speechEndDebounce: 800,
-  minTurnGap: 500,
+  minTurnGap: 1500,
 };
 
 export class TurnManager extends EventEmitter {

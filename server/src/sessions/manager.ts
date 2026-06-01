@@ -254,17 +254,24 @@ export class SessionManager {
     console.log(`\n  Starting debate: "${this.session.topic}"`);
 
     // Connect all agents via WebSocket
+    const connectedAgentIds: string[] = [];
     for (const agentId of this.session.agentIds) {
       const config = this.agentConfigs.get(agentId)!;
       try {
         const agent = await this.omniagent.createAndConnect(config);
         this.wireAgentEvents(agent, agentId);
+        connectedAgentIds.push(agentId);
         console.log(`  Connected: ${config.name}`);
       } catch (err) {
         console.error(`  Failed to connect ${config.name}:`, (err as Error).message);
         this.io.emit('agent_disconnected', { agentId, reason: (err as Error).message });
       }
     }
+
+    // Update session to only include connected agents
+    const totalCreated = this.session.agentIds.length;
+    this.session.agentIds = connectedAgentIds;
+    console.log(`  ${connectedAgentIds.length}/${totalCreated} agents connected`);
 
     // Initialize orchestration
     this.turnManager = new TurnManager({ mode: 'round_robin' });
@@ -619,8 +626,10 @@ export class SessionManager {
     });
 
     agent.on('audio', (data: { agentId: string; audio: string }) => {
-      // Forward agent audio chunks to all connected viewers
-      (this.io as any).emit('agent_audio', data);
+      // Only forward audio from the current speaker to prevent overlap
+      if (this.turnManager?.getCurrentSpeaker() === agentId) {
+        (this.io as any).emit('agent_audio', data);
+      }
     });
 
     agent.on('disconnected', () => {
