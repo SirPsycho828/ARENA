@@ -93,21 +93,11 @@ class AgentAudioPlayer {
     this.noMoreChunks = true;
     this.onDoneCallback = onDone;
     // If AudioContext is suspended (autoplay policy after hard refresh),
-    // onended will never fire — advance the turn immediately
+    // onended will never fire — fire callback immediately
     if (this.ctx && this.ctx.state === 'suspended') {
       this.scheduledCount = 0;
     }
     this.checkDone();
-
-    // Watchdog: if callback hasn't fired in 10s, force-fire it.
-    // Catches backgrounded tabs where onended callbacks stop firing.
-    const gen = this.generation;
-    setTimeout(() => {
-      if (gen === this.generation && this.onDoneCallback) {
-        this.scheduledCount = 0;
-        this.checkDone();
-      }
-    }, 10000);
   }
 
   private checkDone() {

@@ -151,7 +151,7 @@ export class SessionManager {
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
   private turnAudioDone = false;
-  private waitingForPlayback = false;
+
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
     this.omniagent = omniagent;
@@ -669,8 +669,8 @@ export class SessionManager {
   private playbackFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Called when BOTH text and audio are done from Napster.
-  // Tells the client "no more audio coming" — client CAN send playback_done to advance
-  // early, but the server will advance on its own after estimated remaining playback time.
+  // Server-driven: calculates remaining playback time from audio data sent and
+  // advances after that delay. No dependency on client playback_done.
   private maybeAdvanceTurn(agentId: string) {
     if (!this.turnTextComplete || !this.turnAudioDone) return;
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
@@ -681,41 +681,32 @@ export class SessionManager {
     // Audio is 16-bit PCM at 16kHz = 32000 bytes/sec raw ≈ 42667 base64 chars/sec.
     // Audio streams in real-time, so most of it has already played by now.
     const tracker = this.audioTracker.get(agentId);
-    let fallbackMs = 5000; // Default 5s if no tracking data
+    let waitMs = 5000; // Default 5s if no tracking data
     if (tracker && tracker.totalB64Chars > 0) {
       const audioDurationSec = tracker.totalB64Chars / 42667;
       const elapsedSec = (Date.now() - tracker.firstChunkTime) / 1000;
       const remainingSec = Math.max(0, audioDurationSec - elapsedSec);
-      fallbackMs = Math.max(2000, (remainingSec + 1.5) * 1000); // remaining + 1.5s buffer, min 2s
+      waitMs = Math.max(2000, (remainingSec + 1.5) * 1000); // remaining + 1.5s buffer, min 2s
     }
-    console.log(`  [${name}] text+audio sent — advancing in ${Math.round(fallbackMs / 1000)}s (or on playback_done)`);
+    console.log(`  [${name}] text+audio done — advancing in ${(waitMs / 1000).toFixed(1)}s`);
 
-    // Tell client no more audio chunks are coming
-    this.waitingForPlayback = true;
+    // Tell client no more audio chunks are coming (for transcript pacing)
     (this.io as any).emit('turn_audio_complete', { agentId });
 
-    // Server-side fallback based on estimated remaining audio playback
+    // Server-driven timer: advance turn after estimated remaining playback
     if (this.playbackFallbackTimer) clearTimeout(this.playbackFallbackTimer);
     this.playbackFallbackTimer = setTimeout(() => {
-      this.advanceFromPlayback();
-    }, fallbackMs);
+      const currentId = this.turnManager?.getCurrentSpeaker();
+      if (currentId === agentId) {
+        console.log(`  [${name}] advancing turn`);
+        this.turnManager?.onSpeechEnd(agentId, '');
+      }
+    }, waitMs);
   }
 
-  /** Called when a client signals playback is done (or fallback timer fires) */
+  /** @deprecated — kept for interface compat, now a no-op. Turn advancement is server-driven. */
   advanceFromPlayback() {
-    if (!this.waitingForPlayback) return; // Ignore duplicate playback_done from multiple viewers
-    this.waitingForPlayback = false;
-
-    if (this.playbackFallbackTimer) {
-      clearTimeout(this.playbackFallbackTimer);
-      this.playbackFallbackTimer = null;
-    }
-    const currentId = this.turnManager?.getCurrentSpeaker();
-    if (currentId) {
-      const name = this.agentConfigs.get(currentId)?.name || 'Unknown';
-      console.log(`  [${name}] playback done — advancing turn`);
-      this.turnManager?.onSpeechEnd(currentId, '');
-    }
+    // No-op. Client playback_done is no longer used for turn advancement.
   }
 
   private wireTurnManagerEvents() {
@@ -725,7 +716,10 @@ export class SessionManager {
       // Reset turn state for new speaker
       this.turnTextComplete = false;
       this.turnAudioDone = false;
-      this.waitingForPlayback = false;
+      if (this.playbackFallbackTimer) {
+        clearTimeout(this.playbackFallbackTimer);
+        this.playbackFallbackTimer = null;
+      }
       this.audioTracker.delete(agentId);
 
       this.io.emit('speaker_change', { agentId });

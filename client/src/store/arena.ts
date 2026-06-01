@@ -288,11 +288,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       }
     });
 
-    // Server says no more audio chunks for this turn — wait for playback to finish
+    // Server says no more audio chunks for this turn
     (socket as any).on('turn_audio_complete', () => {
       agentAudio.markComplete(() => {
-        // All audio buffers have finished playing — tell server to advance
-        socket.emit('playback_done' as any);
+        // Audio playback finished — server advances on its own timer,
+        // no client signal needed.
       });
     });
 
