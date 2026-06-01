@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+@theme {
+  --color-arena-base: #0A0A0F;
+  --color-arena-surface: #12121A;
+  --color-arena-elevated: #1A1A2E;
+  --color-arena-hover: #252540;
+  --color-arena-border-subtle: #2A2A3E;
+  --color-arena-border: #3D3D5C;
+  --color-arena-text-muted: #6B6B8A;
+  --color-arena-text-secondary: #9B9BB0;
+  --color-arena-text: #E8E8F0;
+  --color-arena-text-bright: #FFFFFF;
+  --color-arena-cyan: #00F0FF;
+  --color-arena-magenta: #FF2D6B;
+  --color-arena-purple: #8B5CF6;
+  --color-arena-live: #FF3B3B;
+  --color-arena-success: #00D68F;
+  --color-arena-warning: #FFAA00;
+  --color-arena-error: #FF4757;
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  margin: 0;
+  background: var(--color-arena-base);
+  color: var(--color-arena-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-arena-base);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-arena-border-subtle);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-arena-border);
+}
+
+/* ─── Glow Animations ─────────────────────────────────────────────── */
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes speaker-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(0, 240, 255, 0.4); }
+}
+
+@keyframes challenger-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(255, 45, 107, 0.3); }
+  50% { box-shadow: 0 0 50px rgba(255, 45, 107, 0.6); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-speaker-glow {
+  animation: speaker-glow 2s ease-in-out infinite;
+}
+
+.animate-challenger-glow {
+  animation: challenger-glow 1.5s ease-in-out infinite;
+}
+
+/* ─── Splash Screen ──────────────────────────────────────────────── */
+
+@keyframes grid-pulse {
+  0%, 100% { opacity: 0.03; }
+  50% { opacity: 0.08; }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes text-glow {
+  0%, 100% { text-shadow: 0 0 20px rgba(0, 240, 255, 0.5); }
+  50% { text-shadow: 0 0 40px rgba(0, 240, 255, 0.8), 0 0 80px rgba(0, 240, 255, 0.3); }
+}
+
+@keyframes button-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(0, 240, 255, 0.5), 0 0 60px rgba(0, 240, 255, 0.2); }
+}
+
+.animate-grid-pulse {
+  animation: grid-pulse 4s ease-in-out infinite;
+}
+
+.animate-scanline {
+  animation: scanline 8s linear infinite;
+}
+
+.animate-text-glow {
+  animation: text-glow 3s ease-in-out infinite;
+}
+
+.animate-button-pulse {
+  animation: button-pulse 2s ease-in-out infinite;
+}
+
+/* ─── Reaction Float ─────────────────────────────────────────────── */
+
+@keyframes float-up {
+  0% {
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-40vh) scale(1.3) rotate(15deg);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-80vh) scale(0.8) rotate(-10deg);
+    opacity: 0;
+  }
+}
+
+.animate-float-up {
+  animation: float-up 2s ease-out forwards;
+}
+
+/* ─── Waveform Bars ──────────────────────────────────────────────── */
+
+@keyframes waveform-bar {
+  0%, 100% { height: 4px; }
+  50% { height: 24px; }
+}
+
+.animate-waveform {
+  animation: waveform-bar 0.8s ease-in-out infinite;
+}
+
+/* ─── Challenger Badge ───────────────────────────────────────────── */
+
+@keyframes challenger-badge-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 10px rgba(255, 45, 107, 0.5);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(255, 45, 107, 0.8);
+  }
+}
+
+.animate-challenger-badge {
+  animation: challenger-badge-pulse 1s ease-in-out infinite;
+}

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARENA PoC - SDK Widget Tests</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #0a0a0f; color: #e8e8f0; padding: 24px; }
+    h1 { color: #00f0ff; margin-bottom: 8px; }
+    h2 { color: #a78bfa; margin: 24px 0 12px; font-size: 18px; }
+    .subtitle { color: #6b6b8a; margin-bottom: 24px; }
+    button { background: #00f0ff; color: #0a0a0f; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; margin: 4px; }
+    button:hover { background: #33f3ff; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.danger { background: #ff2d6b; color: white; }
+    .log { background: #12121a; border: 1px solid #2a2a3e; border-radius: 8px; padding: 16px; margin: 12px 0; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 13px; line-height: 1.6; }
+    .log-entry { border-bottom: 1px solid #1a1a2e; padding: 4px 0; }
+    .log-entry.success { color: #00d68f; }
+    .log-entry.error { color: #ff4757; }
+    .log-entry.info { color: #3b82f6; }
+    .log-entry.warn { color: #ffaa00; }
+    .widget-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+    .widget-slot { background: #12121a; border: 2px solid #2a2a3e; border-radius: 12px; min-height: 300px; position: relative; overflow: hidden; }
+    .widget-slot.active { border-color: #00f0ff; }
+    .widget-slot .label { position: absolute; top: 8px; left: 8px; background: rgba(10,10,15,0.8); padding: 4px 8px; border-radius: 4px; font-size: 12px; z-index: 10; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+    .status { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .status.connected { background: rgba(0,214,143,0.2); color: #00d68f; }
+    .status.disconnected { background: rgba(255,71,87,0.2); color: #ff4757; }
+    .status.pending { background: rgba(255,170,0,0.2); color: #ffaa00; }
+    #findings { background: #1a1a2e; border: 1px solid #3d3d5c; border-radius: 8px; padding: 16px; margin-top: 24px; }
+    #findings h3 { color: #fbbf24; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h1>A.R.E.N.A. Proof of Concept</h1>
+  <p class="subtitle">Testing SDK widget multi-mount, MediaStream access, and concurrent connections</p>
+
+  <h2>Step 1: Setup Agents</h2>
+  <div class="controls">
+    <button onclick="listCompanions()">List Companions</button>
+    <button onclick="createTestAgents()">Create 2 Test Agents</button>
+    <button onclick="listAgents()">List My Agents</button>
+    <button class="danger" onclick="cleanupAgents()">Delete Test Agents</button>
+  </div>
+  <div id="log-setup" class="log"></div>
+
+  <h2>Step 2: Connect SDK Widgets (Multi-Mount Test)</h2>
+  <p class="subtitle">Tests: Can we mount multiple SDK widgets on one page? Can we access their video elements?</p>
+  <div class="controls">
+    <button onclick="connectAgent(0)">Connect Agent 1</button>
+    <button onclick="connectAgent(1)">Connect Agent 2</button>
+    <button onclick="connectBoth()">Connect Both Simultaneously</button>
+    <button onclick="inspectDOM()">Inspect DOM (MediaStream)</button>
+  </div>
+  <div class="widget-grid">
+    <div class="widget-slot" id="widget-0">
+      <span class="label">Agent 1 <span class="status disconnected" id="status-0">disconnected</span></span>
+    </div>
+    <div class="widget-slot" id="widget-1">
+      <span class="label">Agent 2 <span class="status disconnected" id="status-1">disconnected</span></span>
+    </div>
+  </div>
+  <div id="log-sdk" class="log"></div>
+
+  <h2>Step 3: Send Message Test</h2>
+  <p class="subtitle">Tests: Can we send text to an active agent via sendCommand? Do we get events back?</p>
+  <div class="controls">
+    <button onclick="sendTestMessage(0)">Send Message to Agent 1</button>
+    <button onclick="sendTestMessage(1)">Send Message to Agent 2</button>
+    <button onclick="injectSystemPrompt(0)">Inject System Prompt to Agent 1</button>
+  </div>
+  <div id="log-messages" class="log"></div>
+
+  <div id="findings">
+    <h3>PoC Findings (auto-populated)</h3>
+    <div id="findings-content">Run the tests above to populate findings...</div>
+  </div>
+
+  <!-- SDK via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@touchcastllc/napster-companion-api@latest/lib/index.standalone.js"></script>
+
+  <script>
+    // ─── State ──────────────────────────────────────────────────────────────
+    let companions = [];
+    let testAgents = []; // [{id, name}]
+    let sdkInstances = [null, null];
+    let tokens = [null, null];
+    const findings = {};
+
+    // ─── Logging ────────────────────────────────────────────────────────────
+    function log(target, msg, type = '') {
+      const el = document.getElementById(`log-${target}`);
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      el.appendChild(entry);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // ─── Step 1: Agent Setup ────────────────────────────────────────────────
+    async function listCompanions() {
+      log('setup', 'Fetching stock companions...');
+      const res = await fetch('/api/companions');
+      const data = await res.json();
+      companions = Array.isArray(data) ? data : data.companions || data.data || [];
+      log('setup', `Found ${companions.length} companions`, 'success');
+      companions.slice(0, 5).forEach(c => {
+        log('setup', `  - ${c.id || c._id}: ${c.firstName || ''} ${c.lastName || ''}`, 'info');
+      });
+    }
+
+    async function createTestAgents() {
+      if (companions.length === 0) {
+        await listCompanions();
+      }
+      if (companions.length === 0) {
+        log('setup', 'No companions available!', 'error');
+        return;
+      }
+
+      const companionId = companions[0].id || companions[0]._id;
+      log('setup', `Creating agents with companion: ${companionId}...`);
+
+      for (let i = 0; i < 2; i++) {
+        const res = await fetch('/api/agents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companionId,
+            name: `ARENA PoC Agent ${i + 1}`,
+            voiceId: 'alloy',
+            providerSettings: { temperature: 0.8 },
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const agentId = data.id || data._id || data.agentId;
+          testAgents.push({ id: agentId, name: `Agent ${i + 1}` });
+          log('setup', `✓ Created Agent ${i + 1}: ${agentId}`, 'success');
+        } else {
+          log('setup', `✗ Failed to create Agent ${i + 1}: ${JSON.stringify(data)}`, 'error');
+        }
+      }
+
+      findings.agentCreation = testAgents.length === 2 ? 'PASS' : 'FAIL';
+      updateFindings();
+    }
+
+    async function listAgents() {
+      const res = await fetch('/api/agents');
+      const data = await res.json();
+      const agents = Array.isArray(data) ? data : data.agents || data.data || [];
+      log('setup', `Found ${agents.length} agent(s):`, 'info');
+      agents.forEach(a => {
+        log('setup', `  - ${a.id || a._id}: ${a.name || 'unnamed'}`, 'info');
+      });
+    }
+
+    async function cleanupAgents() {
+      for (const agent of testAgents) {
+        const res = await fetch(`/api/agents/${agent.id}`, { method: 'DELETE' });
+        log('setup', `Deleted ${agent.name}: ${res.status}`, res.ok || res.status === 204 ? 'success' : 'error');
+      }
+      testAgents = [];
+      sdkInstances = [null, null];
+    }
+
+    // ─── Step 2: SDK Widget Connection ──────────────────────────────────────
+    async function connectAgent(index) {
+      if (!testAgents[index]) {
+        log('sdk', `Agent ${index + 1} not created yet. Create agents first.`, 'error');
+        return;
+      }
+
+      const agentId = testAgents[index].id;
+      log('sdk', `Getting connection token for Agent ${index + 1}...`);
+
+      const res = await fetch(`/api/connect/${agentId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ externalClientId: `arena_poc_${index}` }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        log('sdk', `✗ Connection failed: ${JSON.stringify(err)}`, 'error');
+        return;
+      }
+
+      const data = await res.json();
+      tokens[index] = data.token;
+      log('sdk', `✓ Token received (${data.token?.length} chars)`, 'success');
+
+      // Initialize SDK widget
+      log('sdk', `Initializing SDK widget in slot ${index + 1}...`);
+      const container = document.getElementById(`widget-${index}`);
+      const statusEl = document.getElementById(`status-${index}`);
+
+      try {
+        const sdk = window.napsterCompanionApiSDK || window.NapsterCompanionApiSdk;
+        if (!sdk) {
+          log('sdk', '✗ SDK not loaded! Check CDN script.', 'error');
+          return;
+        }
+
+        statusEl.textContent = 'connecting';
+        statusEl.className = 'status pending';
+
+        const instance = await sdk.init(data.token, {
+          mountContainer: container,
+        });
+
+        sdkInstances[index] = instance;
+        statusEl.textContent = 'connected';
+        statusEl.className = 'status connected';
+        container.classList.add('active');
+
+        log('sdk', `✓ SDK Widget ${index + 1} mounted successfully!`, 'success');
+        log('sdk', `  Instance methods: ${Object.keys(instance || {}).join(', ')}`, 'info');
+
+        // Check for event subscription methods
+        if (instance.on) log('sdk', '  ✓ instance.on() exists (event subscription)', 'success');
+        if (instance.addEventListener) log('sdk', '  ✓ instance.addEventListener() exists', 'success');
+        if (instance.subscribe) log('sdk', '  ✓ instance.subscribe() exists', 'success');
+        if (instance.sendCommand) log('sdk', '  ✓ instance.sendCommand() exists', 'success');
+
+        findings[`widget${index}`] = 'MOUNTED';
+        updateFindings();
+      } catch (err) {
+        log('sdk', `✗ SDK init failed: ${err.message}`, 'error');
+        statusEl.textContent = 'error';
+        statusEl.className = 'status disconnected';
+        findings[`widget${index}`] = `FAILED: ${err.message}`;
+        updateFindings();
+      }
+    }
+
+    async function connectBoth() {
+      log('sdk', '═══ Connecting BOTH agents simultaneously ═══', 'warn');
+      await Promise.all([connectAgent(0), connectAgent(1)]);
+
+      const bothMounted = sdkInstances[0] && sdkInstances[1];
+      findings.multiMount = bothMounted ? 'PASS - Both widgets mounted' : 'FAIL';
+      log('sdk', bothMounted
+        ? '✓ MULTI-MOUNT SUCCESS: Two SDK widgets active on one page!'
+        : '✗ MULTI-MOUNT FAILED: Could not mount both widgets',
+        bothMounted ? 'success' : 'error');
+      updateFindings();
+    }
+
+    function inspectDOM() {
+      log('sdk', '═══ DOM Inspection - Looking for video elements ═══', 'warn');
+
+      for (let i = 0; i < 2; i++) {
+        const container = document.getElementById(`widget-${i}`);
+        const videos = container.querySelectorAll('video');
+        const iframes = container.querySelectorAll('iframe');
+        const shadowRoots = [];
+
+        // Check for shadow DOM
+        container.querySelectorAll('*').forEach(el => {
+          if (el.shadowRoot) shadowRoots.push(el);
+        });
+
+        log('sdk', `Widget ${i + 1}:`, 'info');
+        log('sdk', `  <video> elements found: ${videos.length}`);
+        log('sdk', `  <iframe> elements found: ${iframes.length}`);
+        log('sdk', `  Shadow DOM roots found: ${shadowRoots.length}`);
+        log('sdk', `  Total child elements: ${container.querySelectorAll('*').length}`);
+
+        if (videos.length > 0) {
+          videos.forEach((v, vi) => {
+            const stream = v.srcObject;
+            log('sdk', `  Video ${vi}: srcObject=${stream ? 'MediaStream!' : 'null'}, src=${v.src || 'none'}`, stream ? 'success' : 'warn');
+            if (stream && stream.getTracks) {
+              const tracks = stream.getTracks();
+              log('sdk', `    ✓ MediaStream tracks: ${tracks.map(t => `${t.kind}:${t.readyState}`).join(', ')}`, 'success');
+              findings.mediaStream = 'ACCESSIBLE';
+            }
+          });
+        }
+
+        if (iframes.length > 0) {
+          log('sdk', '  ⚠ Widget uses iframe — MediaStream may not be accessible cross-origin', 'warn');
+          findings.mediaStream = 'IFRAME_BLOCKED';
+        }
+
+        if (shadowRoots.length > 0) {
+          log('sdk', '  ⚠ Widget uses Shadow DOM — inspecting shadow roots...', 'warn');
+          shadowRoots.forEach(el => {
+            const shadowVideos = el.shadowRoot.querySelectorAll('video');
+            log('sdk', `    Shadow root <video> elements: ${shadowVideos.length}`);
+            if (shadowVideos.length > 0) {
+              shadowVideos.forEach(v => {
+                const stream = v.srcObject;
+                log('sdk', `    Shadow video srcObject: ${stream ? 'MediaStream!' : 'null'}`, stream ? 'success' : 'warn');
+                if (stream) findings.mediaStream = 'ACCESSIBLE_VIA_SHADOW_DOM';
+              });
+            }
+          });
+        }
+      }
+      updateFindings();
+    }
+
+    // ─── Step 3: Message Sending ────────────────────────────────────────────
+    function sendTestMessage(index) {
+      const instance = sdkInstances[index];
+      if (!instance) {
+        log('messages', `Agent ${index + 1} not connected`, 'error');
+        return;
+      }
+
+      log('messages', `Sending message to Agent ${index + 1}...`);
+
+      const command = {
+        type: 'send_message',
+        data: {
+          role: 'user',
+          text: 'Say hello and tell me your name in one sentence.',
+          trigger_response: true,
+        },
+      };
+
+      try {
+        if (instance.sendCommand) {
+          instance.sendCommand(command);
+          log('messages', '✓ sendCommand() called successfully', 'success');
+          findings.sendCommand = 'WORKS';
+        } else if (instance.send) {
+          instance.send(command);
+          log('messages', '✓ send() called successfully', 'success');
+          findings.sendCommand = 'WORKS (via .send())';
+        } else {
+          log('messages', '✗ No send method found on instance!', 'error');
+          log('messages', `  Available: ${Object.keys(instance).join(', ')}`, 'info');
+          findings.sendCommand = 'NO_METHOD';
+        }
+      } catch (err) {
+        log('messages', `✗ Error: ${err.message}`, 'error');
+        findings.sendCommand = `ERROR: ${err.message}`;
+      }
+      updateFindings();
+    }
+
+    function injectSystemPrompt(index) {
+      const instance = sdkInstances[index];
+      if (!instance) {
+        log('messages', `Agent ${index + 1} not connected`, 'error');
+        return;
+      }
+
+      log('messages', `Injecting system prompt into Agent ${index + 1}...`);
+
+      const command = {
+        type: 'set_settings',
+        data: {
+          instructions: 'You are now a pirate. Speak only in pirate language. Arrr!',
+        },
+      };
+
+      try {
+        if (instance.sendCommand) {
+          instance.sendCommand(command);
+          log('messages', '✓ set_settings sent (pirate mode)', 'success');
+          findings.setSettings = 'WORKS';
+        } else {
+          log('messages', '✗ sendCommand not available', 'error');
+          findings.setSettings = 'NO_METHOD';
+        }
+      } catch (err) {
+        log('messages', `✗ Error: ${err.message}`, 'error');
+        findings.setSettings = `ERROR: ${err.message}`;
+      }
+      updateFindings();
+    }
+
+    // ─── Findings Display ───────────────────────────────────────────────────
+    function updateFindings() {
+      const el = document.getElementById('findings-content');
+      const lines = Object.entries(findings).map(([key, val]) => {
+        const color = val.includes?.('PASS') || val.includes?.('WORKS') || val.includes?.('ACCESSIBLE') || val === 'MOUNTED'
+          ? '#00d68f'
+          : val.includes?.('FAIL') || val.includes?.('ERROR')
+            ? '#ff4757'
+            : '#ffaa00';
+        return `<div style="color:${color}; padding: 2px 0;">• <strong>${key}:</strong> ${val}</div>`;
+      });
+      el.innerHTML = lines.join('') || 'No findings yet...';
+    }
+  </script>
+</body>
+</html>

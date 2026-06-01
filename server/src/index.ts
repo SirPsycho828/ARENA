@@ -1,0 +1,142 @@
+import 'dotenv/config';
+import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import { setupSocketHandlers } from './socket/handlers.js';
+import { db } from './db/index.js';
+import { OmniagentManager } from './omniagent/manager.js';
+import { SessionManager } from './sessions/manager.js';
+import type { ServerEvents, ClientEvents } from '../../shared/types.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const httpServer = createServer(app);
+
+const io = new Server<ClientEvents, ServerEvents>(httpServer, {
+  cors: {
+    origin: process.env.CLIENT_URL || '*',
+    methods: ['GET', 'POST'],
+  },
+});
+
+// ─── Core Services ──────────────────────────────────────────────────────────
+
+const omniagent = new OmniagentManager();
+const sessionManager = new SessionManager(omniagent, io);
+
+// ─── Middleware ──────────────────────────────────────────────────────────────
+
+app.use(express.json());
+
+// ─── Serve Static Client (production) ───────────────────────────────────────
+
+const clientDist = path.resolve(__dirname, '../../client/dist');
+app.use(express.static(clientDist));
+
+// ─── Health Endpoint ────────────────────────────────────────────────────────
+
+app.get('/health', (_req, res) => {
+  const session = sessionManager.getActiveSession();
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    viewerCount: io.engine.clientsCount,
+    activeSession: session ? { id: session.id, topic: session.topic, status: session.status } : null,
+    timestamp: Date.now(),
+  });
+});
+
+// ─── API Routes ─────────────────────────────────────────────────────────────
+
+app.get('/api/status', (_req, res) => {
+  const state = sessionManager.getSessionState();
+  res.json({
+    session: state.session,
+    agents: state.agents,
+    currentSpeaker: state.currentSpeaker,
+    viewerCount: io.engine.clientsCount,
+  });
+});
+
+app.post('/api/sessions', async (req, res) => {
+  try {
+    const { topic, agentCount } = req.body;
+    if (!topic) return res.status(400).json({ error: 'topic is required' });
+    const session = await sessionManager.createSession(topic, agentCount || 3);
+    res.json(session);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/sessions/start', async (_req, res) => {
+  try {
+    await sessionManager.startDebate();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// Combined create + start (for easy demo launch)
+app.post('/api/sessions/launch', async (req, res) => {
+  try {
+    const { topic, agentCount } = req.body;
+    if (!topic) return res.status(400).json({ error: 'topic is required' });
+    const session = await sessionManager.createSession(topic, agentCount || 3);
+    await sessionManager.startDebate();
+    res.json({ session, started: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/sessions/end', async (_req, res) => {
+  try {
+    await sessionManager.endDebate('manual');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ─── SPA Catch-All (after API routes, before socket) ────────────────────────
+
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(clientDist, 'index.html'));
+});
+
+// ─── Socket.io ──────────────────────────────────────────────────────────────
+
+setupSocketHandlers(io, sessionManager);
+
+// ─── Start Server ───────────────────────────────────────────────────────────
+
+const PORT = parseInt(process.env.PORT || '3001', 10);
+
+httpServer.listen(PORT, () => {
+  console.log(`\n  ARENA Server running on port ${PORT}`);
+  console.log(`  Health: http://localhost:${PORT}/health`);
+  console.log(`  Socket.io: ws://localhost:${PORT}`);
+  console.log(`  Mock mode: ${process.env.USE_MOCK === 'true' ? 'ON' : 'OFF'}`);
+  console.log(`  API: POST /api/sessions, POST /api/sessions/start, POST /api/sessions/end\n`);
+});
+
+// ─── Graceful Shutdown ──────────────────────────────────────────────────────
+
+async function shutdown(signal: string) {
+  console.log(`${signal} received. Shutting down gracefully...`);
+  await sessionManager.endDebate('shutdown').catch(() => {});
+  io.close();
+  db.close();
+  httpServer.close(() => process.exit(0));
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+export { app, io, httpServer, sessionManager };
