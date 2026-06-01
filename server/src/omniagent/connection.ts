@@ -18,6 +18,7 @@ export class OmniagentConnection extends EventEmitter {
   private config: AgentConfig;
   private connectionId: string | null = null;
   private responseBuffer: Map<string, string> = new Map();
+  private audioChunkCount = 0;
 
   constructor(config: AgentConfig) {
     super();
@@ -71,12 +72,27 @@ export class OmniagentConnection extends EventEmitter {
         resolve();
       });
 
-      this.ws!.on('message', (raw) => {
+      this.ws!.on('message', (raw, isBinary) => {
+        // Binary frames = raw PCM audio from the agent's voice
+        if (isBinary || Buffer.isBuffer(raw) && !this.isJsonBuffer(raw)) {
+          const b64 = Buffer.isBuffer(raw) ? raw.toString('base64') : Buffer.from(raw as any).toString('base64');
+          this.audioChunkCount++;
+          if (this.audioChunkCount <= 3) {
+            console.log(`  [${this.config.name}] audio chunk #${this.audioChunkCount}: ${Buffer.isBuffer(raw) ? raw.length : 0} bytes`);
+          }
+          this.emit('audio', {
+            agentId: this.config.id,
+            audio: b64,
+          });
+          return;
+        }
+
+        // Text frames = JSON events
         try {
           const event = JSON.parse(raw.toString());
           this.handleEvent(event);
         } catch {
-          // Binary audio data — ignore for orchestration
+          // Unknown non-JSON text frame
         }
       });
 
@@ -92,6 +108,13 @@ export class OmniagentConnection extends EventEmitter {
         this.emit('disconnected', code);
       });
     });
+  }
+
+  private isJsonBuffer(buf: Buffer): boolean {
+    if (buf.length === 0) return false;
+    const first = buf[0];
+    // JSON starts with { (0x7B) or [ (0x5B)
+    return first === 0x7B || first === 0x5B;
   }
 
   private handleEvent(event: any) {
@@ -110,7 +133,8 @@ export class OmniagentConnection extends EventEmitter {
         this.emit('avatar_state', event.data);
         break;
       case 'audio_received':
-        // Forward agent audio (base64 PCM 16kHz 16-bit mono) for client playback
+        // Forward agent audio (base64 PCM) for client playback
+        console.log(`  [${this.config.name}] JSON audio_received: ${event.data?.audio?.length || 0} chars`);
         if (event.data?.audio) {
           this.emit('audio', {
             agentId: this.config.id,
