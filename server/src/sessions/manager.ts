@@ -142,6 +142,7 @@ export class SessionManager {
   private companionIds: string[] = [];
   private topicRotationTimer: ReturnType<typeof setInterval> | null = null;
   private videoTokens: Map<string, string> = new Map();
+  private audioTracker: Map<string, { firstChunkTime: number; totalB64Chars: number }> = new Map();
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
     this.omniagent = omniagent;
@@ -626,18 +627,43 @@ export class SessionManager {
       this.turnManager?.onResponseStarted(agentId);
     });
 
-    // Advance turn when agent's audio finishes (not when text completes)
+    // Advance turn when agent's audio finishes playing on the client.
+    // talk_state:ended means Napster finished SENDING audio, but the client
+    // may have 10+ seconds of buffered audio still playing. We estimate
+    // remaining playback time from the total audio data sent.
     agent.on('talk_state', (data: any) => {
       if (data?.state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
         const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
-        console.log(`  [${name}] audio finished — advancing turn`);
-        this.turnManager?.onSpeechEnd(agentId, '');
+        const tracker = this.audioTracker.get(agentId);
+        this.audioTracker.delete(agentId);
+
+        if (tracker && tracker.totalB64Chars > 0) {
+          // base64 → raw bytes: ×3/4, raw → seconds: ÷32000 (16-bit 16kHz mono)
+          const totalDurationMs = (tracker.totalB64Chars * 3 / 4 / 32000) * 1000;
+          const elapsedMs = Date.now() - tracker.firstChunkTime;
+          const remainingMs = Math.max(0, totalDurationMs - elapsedMs + 2000); // +2s for network latency
+
+          console.log(`  [${name}] audio: ${(totalDurationMs / 1000).toFixed(1)}s total, ${(elapsedMs / 1000).toFixed(1)}s streamed, waiting ${(remainingMs / 1000).toFixed(1)}s for playback`);
+
+          setTimeout(() => {
+            this.turnManager?.onSpeechEnd(agentId, '');
+          }, remainingMs);
+        } else {
+          console.log(`  [${name}] audio finished (no chunks tracked) — advancing turn`);
+          this.turnManager?.onSpeechEnd(agentId, '');
+        }
       }
     });
 
     agent.on('audio', (data: { agentId: string; audio: string }) => {
       // Only forward audio from the current speaker to prevent overlap
       if (this.turnManager?.getCurrentSpeaker() === agentId) {
+        // Track audio data for playback time estimation
+        if (!this.audioTracker.has(agentId)) {
+          this.audioTracker.set(agentId, { firstChunkTime: Date.now(), totalB64Chars: 0 });
+        }
+        this.audioTracker.get(agentId)!.totalB64Chars += data.audio.length;
+
         (this.io as any).emit('agent_audio', data);
       }
     });
