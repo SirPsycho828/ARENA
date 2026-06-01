@@ -1,9 +1,14 @@
 import { LiveBadge } from './LiveBadge';
 import { SoundToggle } from './SoundToggle';
 import { useArenaStore } from '../store/arena';
-import { Wifi, WifiOff } from 'lucide-react';
+import { Wifi, WifiOff, Terminal } from 'lucide-react';
 
-export function TopicBanner() {
+interface TopicBannerProps {
+  judgeMode?: boolean;
+  onToggleJudge?: () => void;
+}
+
+export function TopicBanner({ judgeMode, onToggleJudge }: TopicBannerProps) {
   const session = useArenaStore((s) => s.session);
   const connected = useArenaStore((s) => s.connected);
 
@@ -38,6 +43,17 @@ export function TopicBanner() {
       </div>
 
       <div className="flex items-center gap-2">
+        {onToggleJudge && (
+          <button
+            onClick={onToggleJudge}
+            className={`p-1.5 rounded transition-colors cursor-pointer ${
+              judgeMode ? 'text-arena-purple bg-arena-purple/10' : 'text-arena-text-muted hover:text-arena-text-secondary'
+            }`}
+            title="Judge Mode"
+          >
+            <Terminal size={14} />
+          </button>
+        )}
         <SoundToggle />
         {connected ? (
           <div className="flex items-center gap-1.5 text-arena-success text-xs">

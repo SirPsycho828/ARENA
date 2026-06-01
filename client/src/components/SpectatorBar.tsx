@@ -25,17 +25,17 @@ export function SpectatorBar() {
   if (!session) return null;
 
   return (
-    <div className="flex items-center justify-center gap-6 px-4 py-1.5 bg-arena-surface/80 backdrop-blur-sm border-b border-arena-border-subtle text-xs">
+    <div className="flex items-center justify-center gap-4 sm:gap-6 px-4 py-1.5 bg-arena-surface/80 backdrop-blur-sm border-b border-arena-border-subtle text-xs">
       <div className="flex items-center gap-1.5 text-arena-text-muted">
         <Users size={12} className="text-arena-cyan" />
         <span className="text-arena-text-secondary font-medium">{spectatorCount}</span>
-        <span>watching</span>
+        <span className="hidden sm:inline">watching</span>
       </div>
       <div className="flex items-center gap-1.5 text-arena-text-muted">
         <Clock size={12} className="text-arena-purple" />
         <span className="font-mono text-arena-text-secondary">{elapsed}</span>
       </div>
-      <div className="flex items-center gap-1.5 text-arena-text-muted">
+      <div className="hidden sm:flex items-center gap-1.5 text-arena-text-muted">
         <MessageSquare size={12} className="text-arena-success" />
         <span className="text-arena-text-secondary font-medium">{transcripts.length}</span>
         <span>messages</span>
@@ -43,7 +43,7 @@ export function SpectatorBar() {
       <div className="flex items-center gap-1.5 text-arena-text-muted">
         <Trophy size={12} className="text-arena-warning" />
         <span className="text-arena-text-secondary font-medium">{totalVotes}</span>
-        <span>votes</span>
+        <span className="hidden sm:inline">votes</span>
       </div>
     </div>
   );

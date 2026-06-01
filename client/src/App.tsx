@@ -11,12 +11,18 @@ import { ChaosPanel } from './components/ChaosPanel';
 import { ReactionOverlay } from './components/ReactionOverlay';
 import { VoiceChallenger } from './components/VoiceChallenger';
 import { VictoryScreen } from './components/VictoryScreen';
+import { JudgePanel } from './components/JudgePanel';
 import { sounds } from './lib/sounds';
+import { Zap } from 'lucide-react';
 
 type Phase = 'splash' | 'entrance' | 'arena';
 
 function App() {
   const [phase, setPhase] = useState<Phase>('splash');
+  const [judgeMode, setJudgeMode] = useState(() =>
+    new URLSearchParams(window.location.search).has('judge')
+  );
+  const [mobileDrawer, setMobileDrawer] = useState(false);
   const connect = useArenaStore((s) => s.connect);
   const disconnect = useArenaStore((s) => s.disconnect);
   const session = useArenaStore((s) => s.session);
@@ -98,7 +104,7 @@ function App() {
 
       {/* Main arena */}
       <div className={`flex flex-col h-screen bg-arena-base ${phase !== 'arena' ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}>
-        <TopicBanner />
+        <TopicBanner judgeMode={judgeMode} onToggleJudge={() => setJudgeMode((j) => !j)} />
         <SpectatorBar />
 
         <div className="flex-1 flex overflow-hidden">
@@ -153,7 +159,7 @@ function App() {
             )}
           </main>
 
-          {/* Sidebar */}
+          {/* Sidebar (desktop) */}
           <aside className="w-80 border-l border-arena-border-subtle bg-arena-surface/50 p-4 overflow-y-auto hidden lg:flex flex-col gap-4">
             <ChaosPanel />
 
@@ -170,6 +176,51 @@ function App() {
         </div>
       </div>
 
+      {/* Mobile chaos button */}
+      {phase === 'arena' && session && (
+        <button
+          onClick={() => setMobileDrawer(true)}
+          className="fixed bottom-20 right-4 z-20 lg:hidden w-12 h-12 rounded-full bg-arena-magenta text-white flex items-center justify-center shadow-lg shadow-arena-magenta/30 cursor-pointer"
+        >
+          <Zap size={20} />
+        </button>
+      )}
+
+      {/* Mobile bottom drawer */}
+      <AnimatePresence>
+        {mobileDrawer && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-30 lg:hidden bg-arena-base/60 backdrop-blur-sm"
+            onClick={() => setMobileDrawer(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="absolute bottom-0 inset-x-0 bg-arena-surface rounded-t-2xl border-t border-arena-border-subtle p-4 max-h-[70vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-10 h-1 bg-arena-border rounded-full mx-auto mb-4" />
+              <ChaosPanel />
+              {session?.status === 'active' && (
+                <div className="mt-4">
+                  <VoiceChallenger
+                    agents={agents}
+                    isActive={challengerActive}
+                    onStart={handleChallengeStart}
+                    onEnd={handleChallengeEnd}
+                  />
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Reaction overlay (always on top) */}
       {phase === 'arena' && (
         <ReactionOverlay
@@ -183,6 +234,11 @@ function App() {
         {victoryData && phase === 'arena' && (
           <VictoryScreen data={victoryData} />
         )}
+      </AnimatePresence>
+
+      {/* Judge Mode debug panel */}
+      <AnimatePresence>
+        {judgeMode && phase === 'arena' && <JudgePanel />}
       </AnimatePresence>
     </>
   );

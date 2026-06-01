@@ -362,6 +362,7 @@ export class SessionManager {
     const result = this.injectionQueue.enqueue(viewerId, text, type);
     if (result.ok) {
       this.io.emit('injection_queued', { text, position: result.position! });
+      this.emitDebug('injection', undefined, undefined, `${type}: ${text}`);
 
       db.prepare('INSERT INTO injections (session_id, text, type, viewer_id) VALUES (?, ?, ?, ?)')
         .run(this.session.id, text, type, viewerId);
@@ -407,6 +408,7 @@ export class SessionManager {
       }
     }
 
+    this.emitDebug('challenger', agentId, agentName, 'Challenger entered');
     console.log(`  CHALLENGER ACTIVE: ${viewerId} → ${agentName}`);
   }
 
@@ -475,6 +477,12 @@ export class SessionManager {
       activeRules: this.activeRules,
       recentTranscripts: this.recentTranscripts.slice(-20),
     };
+  }
+
+  // ─── Private: Debug ──────────────────────────────────────────────────
+
+  private emitDebug(type: string, agentId?: string, agentName?: string, detail?: string) {
+    (this.io as any).emit('debug_event', { type, agentId, agentName, detail, timestamp: Date.now() });
   }
 
   // ─── Private: Victory & Rotation ──────────────────────────────────────
@@ -585,6 +593,9 @@ export class SessionManager {
       // Broadcast to viewers
       this.io.emit('transcript', msg);
 
+      // Debug event for Judge Mode
+      this.emitDebug('speech_end', agentId, data.agentName, `${data.text.length} chars`);
+
       // Relay to other agents
       this.relay?.broadcast(agentId, data.agentName, data.text);
 
@@ -607,7 +618,9 @@ export class SessionManager {
 
     this.turnManager.on('turn_start', ({ agentId }: { agentId: string }) => {
       this.io.emit('speaker_change', { agentId });
-      console.log(`  [Turn] ${this.agentConfigs.get(agentId)?.name}'s turn`);
+      const turnAgentName = this.agentConfigs.get(agentId)?.name || 'Unknown';
+      this.emitDebug('turn_start', agentId, turnAgentName, 'Turn started');
+      console.log(`  [Turn] ${turnAgentName}'s turn`);
 
       // Trigger the agent to speak
       const lastMsg = this.recentTranscripts[this.recentTranscripts.length - 1];

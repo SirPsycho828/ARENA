@@ -1,6 +1,8 @@
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ThumbsUp, Mic } from 'lucide-react';
 import { useArenaStore } from '../store/arena';
+import { AgentStats } from './AgentStats';
 
 interface Props {
   id: string;
@@ -10,6 +12,7 @@ interface Props {
 }
 
 export function AgentPanel({ id, name, personality, color }: Props) {
+  const [showStats, setShowStats] = useState(false);
   const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
   const voteTallies = useArenaStore((s) => s.voteTallies);
   const vote = useArenaStore((s) => s.vote);
@@ -81,8 +84,9 @@ export function AgentPanel({ id, name, personality, color }: Props) {
         <div className="flex items-end justify-between">
           <div>
             <h3
-              className="font-display font-semibold text-base leading-tight"
+              className="font-display font-semibold text-base leading-tight cursor-pointer hover:underline"
               style={{ color }}
+              onClick={() => setShowStats(true)}
             >
               {name}
             </h3>
@@ -140,6 +144,11 @@ export function AgentPanel({ id, name, personality, color }: Props) {
           </span>
         )}
       </div>
+
+      {/* Stats modal */}
+      <AnimatePresence>
+        {showStats && <AgentStats agentId={id} onClose={() => setShowStats(false)} />}
+      </AnimatePresence>
     </motion.div>
   );
 }
