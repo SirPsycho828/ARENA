@@ -8,6 +8,7 @@ import { setupSocketHandlers } from './socket/handlers.js';
 import { db } from './db/index.js';
 import { OmniagentManager } from './omniagent/manager.js';
 import { SessionManager } from './sessions/manager.js';
+import { getNextTopic, getTopicPool } from './sessions/auto-start.js';
 import type { ServerEvents, ClientEvents } from '../../shared/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -104,6 +105,10 @@ app.post('/api/sessions/end', async (_req, res) => {
   }
 });
 
+app.get('/api/topics', (_req, res) => {
+  res.json({ topics: getTopicPool() });
+});
+
 // ─── SPA Catch-All (after API routes, before socket) ────────────────────────
 
 app.get('*', (_req, res) => {
@@ -124,6 +129,17 @@ httpServer.listen(PORT, () => {
   console.log(`  Socket.io: ws://localhost:${PORT}`);
   console.log(`  Mock mode: ${process.env.USE_MOCK === 'true' ? 'ON' : 'OFF'}`);
   console.log(`  API: POST /api/sessions, POST /api/sessions/start, POST /api/sessions/end\n`);
+
+  setTimeout(async () => {
+    try {
+      const topic = getNextTopic();
+      await sessionManager.createSession(topic, 3);
+      await sessionManager.startDebate();
+      console.log('  Auto-started debate:', topic);
+    } catch (err) {
+      console.error('  Auto-start failed:', (err as Error).message);
+    }
+  }, 2000);
 });
 
 // ─── Graceful Shutdown ──────────────────────────────────────────────────────

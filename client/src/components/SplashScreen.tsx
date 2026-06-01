@@ -17,6 +17,13 @@ export function SplashScreen({ onEnter }: SplashScreenProps) {
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
+  useEffect(() => {
+    if (phase === 'ready') {
+      const timer = setTimeout(onEnter, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [phase, onEnter]);
+
   return (
     <div className="fixed inset-0 z-50 bg-arena-base flex flex-col items-center justify-center overflow-hidden">
       {/* Animated grid background */}

@@ -316,6 +316,20 @@ export class SessionManager {
     this.turnManager = null;
     this.relay = null;
     this.injectionQueue = null;
+
+    if (reason !== 'shutdown') {
+      setTimeout(async () => {
+        try {
+          const { getNextTopic } = await import('./auto-start.js');
+          const topic = getNextTopic();
+          await this.createSession(topic, 3);
+          await this.startDebate();
+          console.log('  Auto-restarted with:', topic);
+        } catch (err) {
+          console.error('  Auto-restart failed:', (err as Error).message);
+        }
+      }, 5000); // 5s gap between debates
+    }
   }
 
   // ─── Audience Actions ───────────────────────────────────────────────────
