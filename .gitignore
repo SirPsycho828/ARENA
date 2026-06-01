@@ -8,3 +8,4 @@ poc/node_modules/
 poc/.env
 *.log
 .playwright-mcp/
+.claude/
