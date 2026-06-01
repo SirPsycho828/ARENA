@@ -1,4 +1,5 @@
 import { LiveBadge } from './LiveBadge';
+import { SoundToggle } from './SoundToggle';
 import { useArenaStore } from '../store/arena';
 import { Wifi, WifiOff } from 'lucide-react';
 
@@ -37,6 +38,7 @@ export function TopicBanner() {
       </div>
 
       <div className="flex items-center gap-2">
+        <SoundToggle />
         {connected ? (
           <div className="flex items-center gap-1.5 text-arena-success text-xs">
             <Wifi size={14} />

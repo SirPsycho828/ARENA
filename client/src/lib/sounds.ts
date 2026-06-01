@@ -1,7 +1,9 @@
 class SoundEngine {
   private ctx: AudioContext | null = null;
+  public muted = false;
 
-  private getCtx(): AudioContext {
+  private getCtx(): AudioContext | null {
+    if (this.muted) return null;
     if (!this.ctx) {
       this.ctx = new AudioContext();
     }
@@ -15,6 +17,7 @@ class SoundEngine {
   turnChange() {
     try {
       const ctx = this.getCtx();
+      if (!ctx) return;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
@@ -32,6 +35,7 @@ class SoundEngine {
   chaosInject() {
     try {
       const ctx = this.getCtx();
+      if (!ctx) return;
       const osc = ctx.createOscillator();
       const osc2 = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -56,6 +60,7 @@ class SoundEngine {
   vote() {
     try {
       const ctx = this.getCtx();
+      if (!ctx) return;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
@@ -73,6 +78,7 @@ class SoundEngine {
   reaction() {
     try {
       const ctx = this.getCtx();
+      if (!ctx) return;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
@@ -90,6 +96,7 @@ class SoundEngine {
   arenaEnter() {
     try {
       const ctx = this.getCtx();
+      if (!ctx) return;
 
       // Low hit
       const osc1 = ctx.createOscillator();
@@ -122,6 +129,7 @@ class SoundEngine {
   notify() {
     try {
       const ctx = this.getCtx();
+      if (!ctx) return;
       const freqs = [523, 659, 784]; // C5, E5, G5
       freqs.forEach((freq, i) => {
         const osc = ctx.createOscillator();

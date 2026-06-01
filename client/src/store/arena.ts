@@ -62,6 +62,10 @@ interface ArenaState {
   challengerActive: boolean;
   challengerAgentId: string | null;
 
+  // Sound
+  soundMuted: boolean;
+  toggleSound: () => void;
+
   // Actions
   connect: () => void;
   disconnect: () => void;
@@ -89,6 +93,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   incomingReactions: [],
   challengerActive: false,
   challengerAgentId: null,
+  soundMuted: false,
+  toggleSound: () => set((s) => ({ soundMuted: !s.soundMuted })),
 
   connect: () => {
     const socket = io(window.location.origin, {
