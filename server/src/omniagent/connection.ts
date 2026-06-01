@@ -134,14 +134,16 @@ export class OmniagentConnection extends EventEmitter {
 
   sendMessage(role: 'user' | 'system', text: string, triggerResponse = true) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn(`  [${this.config.name}] Cannot send — not connected`);
+      console.warn(`  [${this.config.name}] Cannot send — WS state: ${this.ws?.readyState ?? 'null'}`);
       return;
     }
 
-    this.ws.send(JSON.stringify({
+    const payload = {
       type: 'send_message',
       data: { role, text, trigger_response: triggerResponse },
-    }));
+    };
+    console.log(`  [${this.config.name}] Sending: role=${role} trigger=${triggerResponse} text="${text.slice(0, 80)}..."`);
+    this.ws.send(JSON.stringify(payload));
   }
 
   updateSettings(instructions: string) {
