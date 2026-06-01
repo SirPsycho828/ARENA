@@ -634,11 +634,15 @@ export class SessionManager {
       this.turnManager?.onResponseStarted(agentId);
     });
 
-    // Audio finished being sent by Napster
+    // Audio finished being sent by Napster — delay to let trailing chunks arrive
     agent.on('talk_state', (data: any) => {
       if (data?.state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
-        this.turnAudioDone = true;
-        this.maybeAdvanceTurn(agentId);
+        setTimeout(() => {
+          if (this.turnManager?.getCurrentSpeaker() === agentId) {
+            this.turnAudioDone = true;
+            this.maybeAdvanceTurn(agentId);
+          }
+        }, 1500);
       }
     });
 

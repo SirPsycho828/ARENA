@@ -100,6 +100,107 @@ interface ArenaState {
   sendChallengerText: (agentId: string, text: string) => void;
 }
 
+// ─── Transcript Pacer ──────────────────────────────────────────────────────
+// Buffers incoming deltas and releases words at speech rate (~170 WPM)
+// so text appears like TV subtitles, roughly matching the spoken audio.
+
+class TranscriptPacer {
+  private buffer = '';
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private pendingDone: TranscriptMessage | null = null;
+  private setFn: ((fn: (s: any) => any) => void) | null = null;
+
+  push(content: string, agentId: string, agentName: string, set: (fn: (s: any) => any) => void) {
+    this.setFn = set;
+    this.buffer += content;
+    set((s: any) => {
+      if (!s.streamingTranscript || s.streamingTranscript.agentId !== agentId) {
+        return { streamingTranscript: { agentId, agentName, text: '' } };
+      }
+      return {};
+    });
+    if (!this.timer) {
+      this.timer = setInterval(() => this.tick(), 350); // ~2.86 words/sec ≈ 170 WPM
+    }
+  }
+
+  markDone(msg: TranscriptMessage) {
+    this.pendingDone = msg;
+    if (this.buffer.length === 0) this.finalize();
+  }
+
+  flush(set: (fn: (s: any) => any) => void) {
+    this.setFn = set;
+    this.stopTimer();
+    if (this.pendingDone) {
+      const msg = this.pendingDone;
+      this.pendingDone = null;
+      this.buffer = '';
+      set((s: any) => ({
+        transcripts: [...s.transcripts.slice(-99), msg],
+        streamingTranscript: null,
+      }));
+    } else {
+      const remaining = this.buffer;
+      this.buffer = '';
+      set((s: any) => {
+        const cur = s.streamingTranscript;
+        if (!cur) return {};
+        return {
+          transcripts: [...s.transcripts.slice(-99), {
+            agentId: cur.agentId, agentName: cur.agentName,
+            text: cur.text + remaining, timestamp: Date.now(),
+          }],
+          streamingTranscript: null,
+        };
+      });
+    }
+  }
+
+  private tick() {
+    if (!this.setFn) return;
+    if (this.buffer.length === 0) {
+      if (this.pendingDone) this.finalize();
+      else this.stopTimer();
+      return;
+    }
+    const spaceIdx = this.buffer.indexOf(' ');
+    let chunk: string;
+    if (spaceIdx !== -1) {
+      chunk = this.buffer.slice(0, spaceIdx + 1);
+      this.buffer = this.buffer.slice(spaceIdx + 1);
+    } else if (this.pendingDone) {
+      chunk = this.buffer;
+      this.buffer = '';
+    } else {
+      return;
+    }
+    this.setFn((s: any) => {
+      const cur = s.streamingTranscript;
+      return cur ? { streamingTranscript: { ...cur, text: cur.text + chunk } } : {};
+    });
+    if (this.buffer.length === 0 && this.pendingDone) this.finalize();
+  }
+
+  private finalize() {
+    this.stopTimer();
+    if (this.pendingDone && this.setFn) {
+      const msg = this.pendingDone;
+      this.pendingDone = null;
+      this.setFn((s: any) => ({
+        transcripts: [...s.transcripts.slice(-99), msg],
+        streamingTranscript: null,
+      }));
+    }
+  }
+
+  private stopTimer() {
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+  }
+}
+
+const transcriptPacer = new TranscriptPacer();
+
 export const useArenaStore = create<ArenaState>((set, get) => ({
   connected: false,
   socket: null,
@@ -170,23 +271,14 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       }
     });
 
-    // Word-by-word streaming transcript — deltas arrive as agent speaks
+    // Word-by-word streaming transcript — buffer deltas and release at speech rate
     (socket as any).on('transcript_delta', (data: { agentId: string; agentName: string; content: string }) => {
-      set((s) => {
-        const current = s.streamingTranscript;
-        if (current && current.agentId === data.agentId) {
-          return { streamingTranscript: { ...current, text: current.text + data.content } };
-        }
-        return { streamingTranscript: { agentId: data.agentId, agentName: data.agentName, text: data.content } };
-      });
+      transcriptPacer.push(data.content, data.agentId, data.agentName, set);
     });
 
-    // Transcript complete — finalize streaming text into transcript list
+    // Transcript complete — pacer will finalize once its buffer drains
     (socket as any).on('transcript_done', (msg: TranscriptMessage) => {
-      set((s) => ({
-        transcripts: [...s.transcripts.slice(-99), msg],
-        streamingTranscript: null,
-      }));
+      transcriptPacer.markDone(msg);
     });
 
     // Play Napster native audio chunks (base64 PCM 16-bit 16kHz mono)
@@ -205,21 +297,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     });
 
     socket.on('speaker_change', ({ agentId }) => {
-      // Finalize any pending streaming transcript before switching
-      const s = get();
-      if (s.streamingTranscript) {
-        set((prev) => ({
-          transcripts: [...prev.transcripts.slice(-99), {
-            agentId: prev.streamingTranscript!.agentId,
-            agentName: prev.streamingTranscript!.agentName,
-            text: prev.streamingTranscript!.text,
-            timestamp: Date.now(),
-          }],
-          streamingTranscript: null,
-        }));
-      }
+      transcriptPacer.flush(set);
       set({ currentSpeaker: agentId });
-      // Reset scheduling for new speaker — do NOT close AudioContext (avoids autoplay blocks)
       agentAudio.reset();
     });
 

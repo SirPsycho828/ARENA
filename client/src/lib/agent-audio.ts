@@ -14,6 +14,7 @@ class AgentAudioPlayer {
   private ctx: AudioContext | null = null;
   private nextPlayTime = 0;
   private scheduledCount = 0;
+  private generation = 0; // Increments on reset — stale onended callbacks are ignored
   private noMoreChunks = false;
   private onDoneCallback: (() => void) | null = null;
 
@@ -58,7 +59,9 @@ class AgentAudioPlayer {
     this.nextPlayTime += buffer.duration;
     this.scheduledCount++;
 
+    const gen = this.generation;
     source.onended = () => {
+      if (gen !== this.generation) return; // Stale callback from previous speaker
       this.scheduledCount--;
       this.checkDone();
     };
@@ -86,6 +89,7 @@ class AgentAudioPlayer {
   reset() {
     this.nextPlayTime = 0;
     this.scheduledCount = 0;
+    this.generation++; // Invalidate stale onended callbacks from previous speaker
     this.noMoreChunks = false;
     this.onDoneCallback = null;
   }
