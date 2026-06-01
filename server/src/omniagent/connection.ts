@@ -20,6 +20,9 @@ export class OmniagentConnection extends EventEmitter {
   private responseBuffer: Map<string, string> = new Map();
   private audioChunkCount = 0;
   private frameStats = { json: 0, binary: 0, audioJson: 0, total: 0 };
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 10;
+  private shouldReconnect = true;
 
   constructor(config: AgentConfig) {
     super();
@@ -30,6 +33,11 @@ export class OmniagentConnection extends EventEmitter {
   get name() { return this.config.name; }
 
   async connect(): Promise<void> {
+    // Reset state for fresh/reconnected connection
+    this.audioChunkCount = 0;
+    this.frameStats = { json: 0, binary: 0, audioJson: 0, total: 0 };
+    this.responseBuffer.clear();
+
     // Create WebSocket connection via API
     const res = await fetch(`${API_BASE}/public/agents/${this.config.id}/connections`, {
       method: 'POST',
@@ -131,8 +139,34 @@ export class OmniagentConnection extends EventEmitter {
       this.ws!.on('close', (code) => {
         console.log(`  [${this.config.name}] WS closed: ${code}`);
         this.emit('disconnected', code);
+        this.attemptReconnect();
       });
     });
+  }
+
+  private attemptReconnect() {
+    if (!this.shouldReconnect || this.reconnectAttempts >= this.maxReconnectAttempts) {
+      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        console.error(`  [${this.config.name}] Max reconnect attempts (${this.maxReconnectAttempts}) reached — agent is dead`);
+      }
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = Math.min(2000 * this.reconnectAttempts, 10000);
+    console.log(`  [${this.config.name}] Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
+    setTimeout(async () => {
+      try {
+        await this.connect();
+        console.log(`  [${this.config.name}] Reconnected successfully`);
+        this.reconnectAttempts = 0;
+        this.emit('reconnected');
+      } catch (err) {
+        console.error(`  [${this.config.name}] Reconnect failed:`, (err as Error).message);
+        this.attemptReconnect();
+      }
+    }, delay);
   }
 
   private isJsonBuffer(buf: Buffer): boolean {
@@ -257,6 +291,7 @@ export class OmniagentConnection extends EventEmitter {
   }
 
   disconnect() {
+    this.shouldReconnect = false; // Don't reconnect on intentional disconnect
     if (this.ws) {
       this.ws.close();
       this.ws = null;

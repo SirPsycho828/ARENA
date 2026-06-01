@@ -594,13 +594,16 @@ export class SessionManager {
   private wireAgentEvents(agent: AgentInstance, agentId: string) {
     const agentName = () => this.agentConfigs.get(agentId)?.name || 'Unknown';
 
+    // Strip em dashes server-side — LLMs ignore the "no em dashes" instruction
+    const stripEmDashes = (s: string) => s.replace(/\u2014/g, ', ').replace(/ ,/g, ',');
+
     // Stream text deltas to client for word-by-word transcript display
     agent.on('response_delta', (data: { itemId: string; content: string }) => {
       if (this.turnManager?.getCurrentSpeaker() === agentId) {
         (this.io as any).emit('transcript_delta', {
           agentId,
           agentName: agentName(),
-          content: data.content,
+          content: stripEmDashes(data.content),
         });
       }
     });
@@ -610,10 +613,11 @@ export class SessionManager {
       // Only process transcripts from the current speaker (ignore auto-responses)
       if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
 
+      const cleanText = stripEmDashes(data.text);
       const msg: TranscriptMessage = {
         agentId: data.agentId,
         agentName: data.agentName,
-        text: data.text,
+        text: cleanText,
         timestamp: data.timestamp,
       };
 
@@ -622,7 +626,7 @@ export class SessionManager {
 
       if (this.session) {
         db.prepare('INSERT INTO transcripts (session_id, agent_id, text, timestamp) VALUES (?, ?, ?, ?)')
-          .run(this.session.id, agentId, data.text, data.timestamp);
+          .run(this.session.id, agentId, cleanText, data.timestamp);
       }
 
       // Signal client that streaming transcript is complete
@@ -666,48 +670,39 @@ export class SessionManager {
     });
   }
 
-  private playbackFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  private turnAdvanceTimer: ReturnType<typeof setTimeout> | null = null;
+  private turnTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Called when BOTH text and audio are done from Napster.
-  // Server-driven: calculates remaining playback time from audio data sent and
-  // advances after that delay. No dependency on client playback_done.
+  // Audio streams in real-time, so by the time this fires, the client has already
+  // played most of the audio. Just wait a short fixed delay for trailing buffers.
   private maybeAdvanceTurn(agentId: string) {
     if (!this.turnTextComplete || !this.turnAudioDone) return;
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
 
     const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
-
-    // Calculate remaining playback time from audio data sent.
-    // Audio is 16-bit PCM at 16kHz = 32000 bytes/sec raw ≈ 42667 base64 chars/sec.
-    // Audio streams in real-time, so most of it has already played by now.
-    const tracker = this.audioTracker.get(agentId);
-    let waitMs = 5000; // Default 5s if no tracking data
-    if (tracker && tracker.totalB64Chars > 0) {
-      const audioDurationSec = tracker.totalB64Chars / 42667;
-      const elapsedSec = (Date.now() - tracker.firstChunkTime) / 1000;
-      const remainingSec = Math.max(0, audioDurationSec - elapsedSec);
-      waitMs = Math.max(2000, (remainingSec + 1.5) * 1000); // remaining + 1.5s buffer, min 2s
-    }
-    console.log(`  [${name}] text+audio done — advancing in ${(waitMs / 1000).toFixed(1)}s`);
+    console.log(`  [${name}] text+audio done — advancing in 3s`);
 
     // Tell client no more audio chunks are coming (for transcript pacing)
     (this.io as any).emit('turn_audio_complete', { agentId });
 
-    // Server-driven timer: advance turn after estimated remaining playback
-    if (this.playbackFallbackTimer) clearTimeout(this.playbackFallbackTimer);
-    this.playbackFallbackTimer = setTimeout(() => {
+    // Cancel the no-response timeout — agent DID respond
+    if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
+
+    // Fixed 3s delay: audio streams in real-time, so only a few seconds of
+    // trailing buffered audio remains by the time the API says it's done.
+    if (this.turnAdvanceTimer) clearTimeout(this.turnAdvanceTimer);
+    this.turnAdvanceTimer = setTimeout(() => {
       const currentId = this.turnManager?.getCurrentSpeaker();
       if (currentId === agentId) {
         console.log(`  [${name}] advancing turn`);
         this.turnManager?.onSpeechEnd(agentId, '');
       }
-    }, waitMs);
+    }, 3000);
   }
 
-  /** @deprecated — kept for interface compat, now a no-op. Turn advancement is server-driven. */
-  advanceFromPlayback() {
-    // No-op. Client playback_done is no longer used for turn advancement.
-  }
+  /** @deprecated — kept for interface compat, now a no-op. */
+  advanceFromPlayback() {}
 
   private wireTurnManagerEvents() {
     if (!this.turnManager) return;
@@ -716,16 +711,23 @@ export class SessionManager {
       // Reset turn state for new speaker
       this.turnTextComplete = false;
       this.turnAudioDone = false;
-      if (this.playbackFallbackTimer) {
-        clearTimeout(this.playbackFallbackTimer);
-        this.playbackFallbackTimer = null;
-      }
+      if (this.turnAdvanceTimer) { clearTimeout(this.turnAdvanceTimer); this.turnAdvanceTimer = null; }
+      if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
       this.audioTracker.delete(agentId);
 
       this.io.emit('speaker_change', { agentId });
       const turnAgentName = this.agentConfigs.get(agentId)?.name || 'Unknown';
       this.emitDebug('turn_start', agentId, turnAgentName, 'Turn started');
       console.log(`  [Turn] ${turnAgentName}'s turn`);
+
+      // Safety net: if agent doesn't produce any text within 15s, skip them.
+      // This handles agent disconnections, API errors, or unresponsive agents.
+      this.turnTimeoutTimer = setTimeout(() => {
+        if (this.turnManager?.getCurrentSpeaker() === agentId && !this.turnTextComplete) {
+          console.log(`  [${turnAgentName}] no response after 15s — skipping`);
+          this.turnManager?.onSpeechEnd(agentId, '');
+        }
+      }, 15000);
 
       // Build the trigger message — only include speaker name every ~5th turn
       const topic = this.session?.topic || 'the current topic';
