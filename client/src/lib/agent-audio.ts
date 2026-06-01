@@ -82,15 +82,21 @@ class AgentAudioPlayer {
     }
   }
 
+  /** Reset for a new speaker. Does NOT close the AudioContext — avoids browser autoplay blocks. */
+  reset() {
+    this.nextPlayTime = 0;
+    this.scheduledCount = 0;
+    this.noMoreChunks = false;
+    this.onDoneCallback = null;
+  }
+
+  /** Full stop — closes AudioContext. Only used for mute. */
   stop() {
     if (this.ctx && this.ctx.state !== 'closed') {
       this.ctx.close();
       this.ctx = null;
     }
-    this.nextPlayTime = 0;
-    this.scheduledCount = 0;
-    this.noMoreChunks = false;
-    this.onDoneCallback = null;
+    this.reset();
   }
 
   set muted(value: boolean) {

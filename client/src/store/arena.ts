@@ -219,8 +219,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         }));
       }
       set({ currentSpeaker: agentId });
-      // Hard-stop any remaining audio from previous speaker
-      agentAudio.stop();
+      // Reset scheduling for new speaker — do NOT close AudioContext (avoids autoplay blocks)
+      agentAudio.reset();
     });
 
     socket.on('vote_update', (tallies) => {

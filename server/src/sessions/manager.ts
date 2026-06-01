@@ -147,6 +147,7 @@ export class SessionManager {
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
   private turnAudioDone = false;
+  private waitingForPlayback = false;
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
     this.omniagent = omniagent;
@@ -669,6 +670,7 @@ export class SessionManager {
     console.log(`  [${name}] text+audio sent — waiting for client playback_done`);
 
     // Tell client no more audio chunks are coming
+    this.waitingForPlayback = true;
     (this.io as any).emit('turn_audio_complete', { agentId });
 
     // Fallback: if no client responds within 30s, advance anyway
@@ -681,6 +683,9 @@ export class SessionManager {
 
   /** Called when a client signals playback is done (or fallback timer fires) */
   advanceFromPlayback() {
+    if (!this.waitingForPlayback) return; // Ignore duplicate playback_done from multiple viewers
+    this.waitingForPlayback = false;
+
     if (this.playbackFallbackTimer) {
       clearTimeout(this.playbackFallbackTimer);
       this.playbackFallbackTimer = null;
@@ -700,6 +705,7 @@ export class SessionManager {
       // Reset turn state for new speaker
       this.turnTextComplete = false;
       this.turnAudioDone = false;
+      this.waitingForPlayback = false;
       this.audioTracker.delete(agentId);
 
       this.io.emit('speaker_change', { agentId });
