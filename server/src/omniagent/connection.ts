@@ -96,10 +96,10 @@ export class OmniagentConnection extends EventEmitter {
     });
   }
 
-  private handleEvent(event: { type: string; data: any }) {
-    console.log(`  [${this.config.name}] Event: ${event.type}`, event.data?.action || event.data?.state || '');
+  private handleEvent(event: any) {
+    const eventType = event.event || event.type;
 
-    switch (event.type) {
+    switch (eventType) {
       case 'message_received':
         this.handleMessageReceived(event.data);
         break;
@@ -113,7 +113,6 @@ export class OmniagentConnection extends EventEmitter {
   }
 
   private handleMessageReceived(data: any) {
-    // Napster API puts role/action/item_id/content directly on data (not nested under .message)
     const msg = data.message || data;
 
     if (msg.role === 'assistant') {
