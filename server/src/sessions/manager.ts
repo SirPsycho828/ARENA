@@ -669,28 +669,36 @@ export class SessionManager {
   private playbackFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Called when BOTH text and audio are done from Napster.
-  // Tells the client "no more audio coming" — client signals back when playback finishes.
+  // Tells the client "no more audio coming" — client CAN send playback_done to advance
+  // early, but the server will advance on its own after estimated remaining playback time.
   private maybeAdvanceTurn(agentId: string) {
     if (!this.turnTextComplete || !this.turnAudioDone) return;
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
 
     const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
-    console.log(`  [${name}] text+audio sent — waiting for client playback_done`);
+
+    // Calculate remaining playback time from audio data sent.
+    // Audio is 16-bit PCM at 16kHz = 32000 bytes/sec raw ≈ 42667 base64 chars/sec.
+    // Audio streams in real-time, so most of it has already played by now.
+    const tracker = this.audioTracker.get(agentId);
+    let fallbackMs = 5000; // Default 5s if no tracking data
+    if (tracker && tracker.totalB64Chars > 0) {
+      const audioDurationSec = tracker.totalB64Chars / 42667;
+      const elapsedSec = (Date.now() - tracker.firstChunkTime) / 1000;
+      const remainingSec = Math.max(0, audioDurationSec - elapsedSec);
+      fallbackMs = Math.max(2000, (remainingSec + 1.5) * 1000); // remaining + 1.5s buffer, min 2s
+    }
+    console.log(`  [${name}] text+audio sent — advancing in ${Math.round(fallbackMs / 1000)}s (or on playback_done)`);
 
     // Tell client no more audio chunks are coming
     this.waitingForPlayback = true;
     (this.io as any).emit('turn_audio_complete', { agentId });
 
-    // Fallback: if no client responds within 30s, advance anyway
+    // Server-side fallback based on estimated remaining audio playback
     if (this.playbackFallbackTimer) clearTimeout(this.playbackFallbackTimer);
     this.playbackFallbackTimer = setTimeout(() => {
-      console.log(`  [${name}] playback_done timeout — force advancing`);
       this.advanceFromPlayback();
-    }, 30000);
-  }
-
-  isWaitingForPlayback() {
-    return this.waitingForPlayback;
+    }, fallbackMs);
   }
 
   /** Called when a client signals playback is done (or fallback timer fires) */

@@ -98,6 +98,16 @@ class AgentAudioPlayer {
       this.scheduledCount = 0;
     }
     this.checkDone();
+
+    // Watchdog: if callback hasn't fired in 10s, force-fire it.
+    // Catches backgrounded tabs where onended callbacks stop firing.
+    const gen = this.generation;
+    setTimeout(() => {
+      if (gen === this.generation && this.onDoneCallback) {
+        this.scheduledCount = 0;
+        this.checkDone();
+      }
+    }, 10000);
   }
 
   private checkDone() {
