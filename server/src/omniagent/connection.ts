@@ -58,18 +58,14 @@ export class OmniagentConnection extends EventEmitter {
 
       this.ws!.on('open', () => {
         console.log(`  [${this.config.name}] WebSocket connected`);
+        clearTimeout(timeout);
+        resolve();
       });
 
       this.ws!.on('message', (raw) => {
         try {
           const event = JSON.parse(raw.toString());
           this.handleEvent(event);
-
-          // Resolve once avatar is ready
-          if (event.type === 'avatar_state_changed' && event.data?.state === 'ready') {
-            clearTimeout(timeout);
-            resolve();
-          }
         } catch {
           // Binary audio data — ignore for orchestration
         }

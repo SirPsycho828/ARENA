@@ -8,8 +8,6 @@ COPY server/ ./server/
 COPY shared/ ./shared/
 COPY client/dist/ ./client/dist/
 
-EXPOSE 3001
-ENV PORT=3001
 ENV NODE_ENV=production
 
 CMD ["npx", "--prefix", "server", "tsx", "server/src/index.ts"]
