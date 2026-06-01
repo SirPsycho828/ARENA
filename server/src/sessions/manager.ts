@@ -208,27 +208,8 @@ export class SessionManager {
         agentIds.push(agentId);
         console.log(`  Created: ${config.name} (${agentId})`);
 
-        // Create WebRTC connection for video avatar
-        if (process.env.USE_MOCK !== 'true') {
-          try {
-            const API_KEY = process.env.OMNIAGENT_API_KEY!;
-            const tokenRes = await fetch(
-              `https://companion-api.napster.com/public/agents/${agentId}/connections`,
-              {
-                method: 'POST',
-                headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ channelType: 'webrtc' }),
-              }
-            );
-            if (tokenRes.ok) {
-              const tokenData = await tokenRes.json() as { token: string };
-              this.videoTokens.set(agentId, tokenData.token);
-              console.log(`  WebRTC token: ${config.name}`);
-            }
-          } catch (err) {
-            console.warn(`  WebRTC token failed for ${config.name}:`, (err as Error).message);
-          }
-        }
+        // WebRTC video disabled — creates independent sessions that conflict with debate orchestration
+        // TODO: Re-enable when Napster SDK supports syncing WebRTC avatar with WebSocket text
       } catch (err) {
         console.error(`  Failed to create ${config.name}:`, (err as Error).message);
       }

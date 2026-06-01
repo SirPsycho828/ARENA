@@ -7,7 +7,8 @@ const API_KEY = process.env.OMNIAGENT_API_KEY!;
 
 interface TokenPayload {
   url: string;
-  token: string;
+  token?: string;
+  authToken?: string;
   connection: { id: string };
   expiresAt: string;
 }
@@ -49,9 +50,12 @@ export class OmniagentConnection extends EventEmitter {
 
     this.connectionId = decoded.connection.id;
     const wsUrl = decoded.url;
+    const authToken = decoded.authToken || decoded.token;
 
-    // Open WebSocket
-    this.ws = new WebSocket(wsUrl);
+    // Open WebSocket with auth header
+    this.ws = new WebSocket(wsUrl, {
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    });
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('Connection timeout')), 15000);
@@ -86,9 +90,11 @@ export class OmniagentConnection extends EventEmitter {
   }
 
   private handleEvent(event: { type: string; data: any }) {
+    console.log(`  [${this.config.name}] Event: ${event.type}`, event.data?.action || event.data?.state || '');
+
     switch (event.type) {
       case 'message_received':
-        this.handleMessageReceived(event.data as MessageReceivedEvent);
+        this.handleMessageReceived(event.data);
         break;
       case 'talk_state_changed':
         this.emit('talk_state', event.data);
@@ -99,23 +105,21 @@ export class OmniagentConnection extends EventEmitter {
     }
   }
 
-  private handleMessageReceived(data: MessageReceivedEvent) {
-    const { message } = data;
+  private handleMessageReceived(data: any) {
+    // Napster API puts role/action/item_id/content directly on data (not nested under .message)
+    const msg = data.message || data;
 
-    if (message.role === 'assistant') {
-      if (message.action === 'created' && message.item_id) {
-        // New response starting — init buffer
-        this.responseBuffer.set(message.item_id, '');
-        this.emit('response_start', { itemId: message.item_id });
-      } else if (message.action === 'delta' && message.item_id && message.content) {
-        // Streaming content chunk
-        const current = this.responseBuffer.get(message.item_id) || '';
-        this.responseBuffer.set(message.item_id, current + message.content);
-        this.emit('response_delta', { itemId: message.item_id, content: message.content });
-      } else if (message.action === 'completed' && message.item_id) {
-        // Response complete — emit full transcript
-        const fullText = this.responseBuffer.get(message.item_id) || '';
-        this.responseBuffer.delete(message.item_id);
+    if (msg.role === 'assistant') {
+      if (msg.action === 'created' && msg.item_id) {
+        this.responseBuffer.set(msg.item_id, '');
+        this.emit('response_start', { itemId: msg.item_id });
+      } else if (msg.action === 'delta' && msg.item_id && msg.content) {
+        const current = this.responseBuffer.get(msg.item_id) || '';
+        this.responseBuffer.set(msg.item_id, current + msg.content);
+        this.emit('response_delta', { itemId: msg.item_id, content: msg.content });
+      } else if (msg.action === 'completed' && msg.item_id) {
+        const fullText = this.responseBuffer.get(msg.item_id) || '';
+        this.responseBuffer.delete(msg.item_id);
         if (fullText) {
           this.emit('speech_end', {
             agentId: this.config.id,
