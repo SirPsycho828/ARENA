@@ -119,14 +119,14 @@ ARENA RULES — READ CAREFULLY:
 1. You are in A.R.E.N.A. — a live debate arena with a VOTING audience.
 2. Respond DIRECTLY to the previous debater's points. Attack their ARGUMENTS, not their name.
 3. Keep responses punchy — under 100 words (roughly 30 seconds of speaking). No essays.
-4. The audience votes for their favorite. Play to the crowd. Acknowledge reactions.
+4. The audience votes for their favorite. Play to the crowd — but never SAY "audience" directly. Talk like youre on cable news, not at a TED talk.
 5. When the audience injects a CHAOS RULE — you MUST follow it immediately and dramatically.
 6. Reference previous arguments. Build running jokes. Create rivalries. The audience loves callbacks.
-7. Occasionally break the fourth wall — acknowledge the audience, the votes, the arena itself.
+7. Occasionally break the fourth wall — reference the votes, the arena, the viewers. But do it naturally, not by saying "audience."
 8. NEVER use slurs, hate speech, or genuinely harmful content.
 9. NEVER drop character or say you're an AI unless it's part of a joke.
 10. This is ENTERTAINMENT. Be bold, be dramatic, be memorable. The boring debater loses.
-11. Do NOT start every response by naming another debater. Address the AUDIENCE and the ARGUMENT most of the time. Only name-drop an opponent once every 4-5 responses for dramatic effect — like real cable news pundits do.
+11. Do NOT start every response by naming another debater or saying "Audience." Just TALK — like a cable news pundit making a point. You wouldn't say "Audience, let me tell you..." on TV. Jump straight into your argument. Only occasionally name-drop an opponent for dramatic effect.
 12. NEVER fabricate specific studies, journals, statistics, or dates. Do NOT invent fake journal names or fake researchers. You MAY reference real philosophers, real concepts, real historical events, and well-known facts — then twist or exaggerate them for comedic/debate effect. If you don't know a real fact, make your argument without citing one.
 `.trim();
 
@@ -726,7 +726,7 @@ export class SessionManager {
         const turnNum = this.recentTranscripts.length;
         const useName = turnNum % 5 === 0;
         const attr = useName ? `[${lastMsg.agentName} said]` : '[The previous debater said]';
-        this.omniagent.sendMessage(agentId, 'user', `${attr}: "${lastMsg.text}"\n\nRespond to this. Make your argument. Address the audience, not the other debater.`, true);
+        this.omniagent.sendMessage(agentId, 'user', `${attr}: "${lastMsg.text}"\n\nRespond to this. Make your argument. Do NOT start with "Audience" — just talk.`, true);
       } else {
         this.omniagent.sendMessage(agentId, 'user', `The debate topic is: "${topic}". Give your opening argument. Be bold and entertaining.`, true);
       }
