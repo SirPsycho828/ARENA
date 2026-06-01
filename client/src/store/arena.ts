@@ -99,6 +99,10 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   connect: () => {
     const socket = io(window.location.origin, {
       transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
     });
 
     socket.on('connect', () => {
@@ -107,6 +111,18 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     socket.on('disconnect', () => {
       set({ connected: false });
+    });
+
+    socket.on('reconnect', () => {
+      set({ connected: true });
+    });
+
+    socket.on('reconnect_attempt', (attempt) => {
+      console.log(`Reconnecting... attempt ${attempt}`);
+    });
+
+    socket.on('reconnect_failed', () => {
+      console.log('Reconnection failed');
     });
 
     socket.on('session_state', (state) => {

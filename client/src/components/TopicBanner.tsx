@@ -45,9 +45,9 @@ export function TopicBanner() {
             <span className="hidden sm:inline">Connected</span>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 text-arena-error text-xs">
-            <WifiOff size={14} />
-            <span className="hidden sm:inline">Disconnected</span>
+          <div className="flex items-center gap-1.5 text-yellow-400 text-xs">
+            <WifiOff size={14} className="animate-pulse" />
+            <span className="hidden sm:inline">Reconnecting...</span>
           </div>
         )}
       </div>
