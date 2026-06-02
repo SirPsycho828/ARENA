@@ -19,7 +19,6 @@ export function AgentPanel({ id, name, personality, color }: Props) {
   const vote = useArenaStore((s) => s.vote);
   const challengerActive = useArenaStore((s) => s.challengerActive);
   const challengerAgentId = useArenaStore((s) => s.challengerAgentId);
-  const videoTokens = useArenaStore((s) => s.videoTokens);
   const isSpeaking = currentSpeaker === id;
   const isChallenged = challengerActive && challengerAgentId === id;
   const votes = voteTallies[id] || 0;
@@ -61,7 +60,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
           }}
         />
         <div className="relative z-10 w-full h-full">
-          <AgentVideo token={videoTokens[id] || null} agentName={name} color={color} />
+          <AgentVideo agentId={id} agentName={name} color={color} />
         </div>
 
         {/* Speaking audio wave indicator */}

@@ -1,45 +1,33 @@
 import { useEffect, useRef } from 'react';
+import { useArenaStore } from '../store/arena';
 
 interface AgentVideoProps {
-  token: string | null;
+  agentId: string;
   agentName: string;
   color: string;
 }
 
-export function AgentVideo({ token, agentName, color }: AgentVideoProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const instanceRef = useRef<any>(null);
+export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frame = useArenaStore((s) => s.videoFrames[agentId]);
 
   useEffect(() => {
-    if (!token || !containerRef.current) return;
+    if (!frame || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    let mounted = true;
-
-    const initSDK = async () => {
-      try {
-        const { NapsterCompanionApiSdk } = await import(
-          '@touchcastllc/napster-companion-api'
-        );
-        if (!mounted || !containerRef.current) return;
-        instanceRef.current = await NapsterCompanionApiSdk.init(token, {
-          mountContainer: containerRef.current,
-        });
-      } catch (err) {
-        console.warn(`Video init failed for ${agentName}:`, err);
-      }
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      ctx.drawImage(img, 0, 0);
     };
+    img.src = 'data:image/jpeg;base64,' + frame;
+  }, [frame]);
 
-    initSDK();
-
-    return () => {
-      mounted = false;
-      instanceRef.current?.destroy();
-      instanceRef.current = null;
-    };
-  }, [token, agentName]);
-
-  // No token (mock mode) — show avatar placeholder
-  if (!token) {
+  // No frames yet — show avatar placeholder
+  if (!frame) {
     return (
       <div className="w-full h-full flex items-center justify-center">
         <div
@@ -52,5 +40,10 @@ export function AgentVideo({ token, agentName, color }: AgentVideoProps) {
     );
   }
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-full h-full object-cover"
+    />
+  );
 }

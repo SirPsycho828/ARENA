@@ -86,7 +86,7 @@ interface ArenaState {
   victoryData: VictoryData | null;
 
   // Video
-  videoTokens: Record<string, string>;
+  videoFrames: Record<string, string>; // agentId -> latest base64 JPEG frame
 
   // Actions
   connect: () => void;
@@ -220,7 +220,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   soundMuted: false,
   toggleSound: () => set((s) => ({ soundMuted: !s.soundMuted })),
   victoryData: null,
-  videoTokens: {},
+  videoFrames: {},
 
   connect: () => {
     const socket = io(window.location.origin, {
@@ -262,13 +262,6 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         victoryData: null, // Clear victory screen when new session arrives
       });
 
-      // Fetch video tokens if session is active
-      if (state.session?.status === 'active' || state.session?.status === 'starting') {
-        fetch('/api/sessions/tokens')
-          .then((r) => r.json())
-          .then((data) => { if (data.tokens) set({ videoTokens: data.tokens }); })
-          .catch(() => {});
-      }
     });
 
     // Word-by-word streaming transcript — buffer deltas and release at speech rate
@@ -288,6 +281,13 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       }
     });
 
+    // Receive video frames from server (JPEG base64, only current speaker)
+    (socket as any).on('agent_video_frame', (data: { agentId: string; frame: string }) => {
+      set((s) => ({
+        videoFrames: { ...s.videoFrames, [data.agentId]: data.frame },
+      }));
+    });
+
     // Server says no more audio chunks for this turn — play remaining buffered audio,
     // then signal server to advance. Generation counter prevents stale signals.
     (socket as any).on('turn_audio_complete', ({ gen }: { gen: number }) => {
@@ -298,7 +298,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     socket.on('speaker_change', ({ agentId }) => {
       transcriptPacer.flush(set);
-      set({ currentSpeaker: agentId });
+      set({ currentSpeaker: agentId, videoFrames: {} });
       agentAudio.reset();
     });
 
