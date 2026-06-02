@@ -122,7 +122,7 @@ function App() {
       </AnimatePresence>
 
       {/* Main arena */}
-      <div className={`flex flex-col h-screen bg-arena-base ${phase !== 'arena' ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}>
+      <div className={`flex flex-col h-screen bg-arena-base relative z-0 ${phase !== 'arena' ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}>
         <TopicBanner judgeMode={judgeMode} onToggleJudge={() => setJudgeMode((j) => !j)} />
         <SpectatorBar />
 
