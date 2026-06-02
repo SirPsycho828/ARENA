@@ -11,11 +11,9 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const token = useArenaStore((s) => s.videoTokens[agentId]);
   const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
-  const transcripts = useArenaStore((s) => s.transcripts);
   const [avatarReady, setAvatarReady] = useState(false);
   const tokenSentRef = useRef(false);
   const iframeReadyRef = useRef(false);
-  const lastSentTextRef = useRef('');
 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
@@ -67,27 +65,17 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
 
   const isSpeaking = currentSpeaker === agentId;
 
-  // Lip-sync: when this agent becomes the current speaker, send text to avatar.
-  // When speaker changes away, stop the avatar talking.
+  // Lip-sync: trigger avatar mouth movement when this agent is the current speaker.
+  // We don't send specific text — just start/stop. The avatar audio is muted anyway.
   useEffect(() => {
     if (!avatarReady || !iframeRef.current?.contentWindow) return;
 
     if (isSpeaking) {
-      // Find the most recent transcript from this agent to lip-sync
-      const lastFromAgent = [...transcripts].reverse().find((t) => t.agentId === agentId);
-      if (lastFromAgent && lastFromAgent.text !== lastSentTextRef.current) {
-        lastSentTextRef.current = lastFromAgent.text;
-        iframeRef.current.contentWindow.postMessage(
-          { type: 'speak-text', text: lastFromAgent.text },
-          '*'
-        );
-        console.log(`[Avatar:${agentName}] Lip-sync started (${lastFromAgent.text.length} chars)`);
-      }
+      iframeRef.current.contentWindow.postMessage({ type: 'speak-text' }, '*');
     } else {
-      // This agent is no longer the speaker — stop lip-sync
       iframeRef.current.contentWindow.postMessage({ type: 'stop-speaking' }, '*');
     }
-  }, [isSpeaking, transcripts, avatarReady, agentId]);
+  }, [isSpeaking, avatarReady]);
 
   return (
     <div className={`w-full h-full relative ${isSpeaking ? 'ring-2 ring-offset-2 ring-offset-gray-900' : ''}`}

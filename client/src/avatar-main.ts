@@ -92,8 +92,27 @@ window.addEventListener('message', async (e) => {
         top: '0',
         left: '0',
       },
+      onData: (data: any) => {
+        if (data?.event === 'talk_state_changed') {
+          relayToParent('info', `[Avatar] talk_state: ${data.data?.state}`);
+        }
+      },
       onAvatarReady: () => {
         relayToParent('info', '[Avatar] Avatar READY');
+        // Prime the avatar for lip-sync mode via system context
+        try {
+          instance.sendCommand({
+            type: 'send_message',
+            data: {
+              role: 'system' as const,
+              text: 'You are in visual lip-sync mode. When you receive any user message, immediately start speaking. Talk naturally and continuously about the topic until interrupted. Always respond, never refuse.',
+              trigger_response: false,
+            },
+          });
+          relayToParent('info', '[Avatar] Sent lip-sync system prime');
+        } catch (err) {
+          relayToParent('error', `[Avatar] System prime failed: ${(err as Error).message}`);
+        }
         window.parent.postMessage({ type: 'avatar-ready' }, '*');
       },
       onError: (err: any) => {
@@ -112,19 +131,23 @@ window.addEventListener('message', async (e) => {
   }
 });
 
-// Handle speak-text messages — forward debate text to the avatar for lip-sync
+// Handle speak-text messages — trigger avatar lip movement for current speaker
 window.addEventListener('message', (e) => {
-  if (e.data?.type !== 'speak-text' || !e.data.text || !instance) return;
+  if (e.data?.type !== 'speak-text' || !instance) return;
   try {
+    // Cancel any in-progress response first
+    instance.sendCommand({ type: 'cancel' });
+    // Trigger a new response — avatar will start talking (audio is muted)
     instance.sendCommand({
       type: 'send_message',
       data: {
-        text: `Repeat the following out loud, word for word. Do NOT add anything else: "${e.data.text}"`,
+        text: 'Continue speaking.',
         role: 'user' as const,
         trigger_response: true,
+        delay: false,
       },
     });
-    relayToParent('info', `[Avatar] Sent speak-text (${e.data.text.length} chars)`);
+    relayToParent('info', '[Avatar] Lip-sync triggered');
   } catch (err) {
     relayToParent('error', `[Avatar] speak-text failed: ${(err as Error).message}`);
   }
