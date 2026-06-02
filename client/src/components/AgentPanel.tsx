@@ -62,9 +62,9 @@ export function AgentPanel({ id, name, personality, color }: Props) {
           <AgentVideo agentId={id} agentName={name} color={color} />
         </div>
 
-        {/* Speaking waveform */}
+        {/* Speaking waveform — positioned above name badge */}
         {isSpeaking && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-end gap-[3px] h-6">
+          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex items-end gap-[3px] h-6 z-10">
             {[0, 1, 2, 3, 4].map((i) => (
               <div
                 key={i}
@@ -76,25 +76,32 @@ export function AgentPanel({ id, name, personality, color }: Props) {
         )}
       </div>
 
-      {/* Lower-third name plate — broadcast style */}
-      <div className="absolute bottom-0 inset-x-0">
-        {/* Red accent bar */}
-        <div className="h-[3px]" style={{ backgroundColor: color }} />
-        <div className="bg-gradient-to-t from-background/95 via-background/85 to-transparent p-3 pt-6">
-          <div className="flex items-end justify-between">
-            <div>
+      {/* Cable news lower-third name badge */}
+      <div className="absolute bottom-0 inset-x-0 flex items-stretch">
+        {/* Agent color accent bar — left edge */}
+        <div className="w-1.5 shrink-0" style={{ backgroundColor: color }} />
+        {/* Name plate */}
+        <div className="flex-1 bg-background/90 backdrop-blur-sm">
+          {/* Color strip top */}
+          <div className="h-[2px]" style={{ backgroundColor: color, opacity: 0.5 }} />
+          <div className="flex items-center justify-between px-3 py-2">
+            <div
+              className="cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => setShowStats(true)}
+            >
               <h3
-                className="font-display text-base uppercase leading-tight cursor-pointer hover:opacity-80 transition-opacity"
+                className="font-display text-sm uppercase leading-tight tracking-wider"
                 style={{ color }}
-                onClick={() => setShowStats(true)}
               >
                 {name}
               </h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5 tracking-wide">{personality}</p>
+              <p className="text-[10px] text-muted-foreground tracking-wide mt-0.5 font-body">
+                {personality}
+              </p>
             </div>
             <button
               onClick={() => vote(id)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm bg-muted/80 hover:bg-border transition-all text-sm group"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm bg-muted/60 hover:bg-muted transition-all text-sm group"
             >
               <ThumbsUp size={14} className="group-hover:text-accent transition-colors" />
               <span className={isLeading ? 'text-accent font-semibold' : ''}>{votes}</span>
