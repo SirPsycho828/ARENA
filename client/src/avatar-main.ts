@@ -13,21 +13,49 @@ function relayToParent(level: string, ...args: any[]) {
 // ─── Signaling Proxy ──────────────────────────────────────────────────────────
 // The Napster signaling server rejects browser WebSocket connections (400).
 // Intercept the SDK's WebSocket creation and route through our server proxy.
+// Also log WebSocket lifecycle events to debug why connections close.
 const OriginalWebSocket = window.WebSocket;
+let wsCounter = 0;
 (window as any).WebSocket = class ProxiedWebSocket extends OriginalWebSocket {
   constructor(url: string | URL, protocols?: string | string[]) {
     const urlStr = url.toString();
+    const id = ++wsCounter;
+
     if (urlStr.includes('avatar-signaling.touchcastmaas.com')) {
-      // Rewrite: wss://avatar-signaling.touchcastmaas.com/ws/connections/{id}/signaling
-      //       → ws(s)://{our-host}/signaling-proxy/ws/connections/{id}/signaling
       const signalingPath = new URL(urlStr).pathname;
       const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const proxyUrl = `${wsProto}//${window.location.host}/signaling-proxy${signalingPath}`;
-      relayToParent('info', '[Avatar] Proxying signaling:', proxyUrl);
+      relayToParent('info', `[WS#${id}] Proxying signaling → ${proxyUrl}`);
       super(proxyUrl, protocols);
     } else {
+      relayToParent('info', `[WS#${id}] Direct: ${urlStr.slice(0, 100)}`);
       super(url, protocols);
     }
+
+    // Log lifecycle events
+    this.addEventListener('open', () => {
+      relayToParent('info', `[WS#${id}] OPEN (readyState=${this.readyState})`);
+    });
+    this.addEventListener('close', (ev) => {
+      const e = ev as CloseEvent;
+      relayToParent('info', `[WS#${id}] CLOSED code=${e.code} reason="${e.reason}" clean=${e.wasClean}`);
+    });
+    this.addEventListener('error', () => {
+      relayToParent('error', `[WS#${id}] ERROR (readyState=${this.readyState})`);
+    });
+    this.addEventListener('message', (ev) => {
+      const data = (ev as MessageEvent).data;
+      if (typeof data === 'string' && data.length < 2000) {
+        try {
+          const msg = JSON.parse(data);
+          relayToParent('info', `[WS#${id}] RECV: ${msg.type || msg.event || 'unknown'} (${data.length}b)`);
+        } catch {
+          relayToParent('info', `[WS#${id}] RECV: text ${data.length}b`);
+        }
+      } else {
+        relayToParent('info', `[WS#${id}] RECV: binary/large ${typeof data === 'string' ? data.length : '?'}b`);
+      }
+    });
   }
 };
 
@@ -81,6 +109,24 @@ window.addEventListener('message', async (e) => {
   } catch (err) {
     relayToParent('error', '[Avatar] SDK init FAILED:', (err as Error).message);
     window.parent.postMessage({ type: 'avatar-error', error: (err as Error).message }, '*');
+  }
+});
+
+// Handle speak-text messages — forward debate text to the avatar for lip-sync
+window.addEventListener('message', (e) => {
+  if (e.data?.type !== 'speak-text' || !e.data.text || !instance) return;
+  try {
+    instance.sendCommand({
+      type: 'send_message',
+      data: {
+        text: `Repeat the following out loud, word for word. Do NOT add anything else: "${e.data.text}"`,
+        role: 'user' as const,
+        trigger_response: true,
+      },
+    });
+    relayToParent('info', `[Avatar] Sent speak-text (${e.data.text.length} chars)`);
+  } catch (err) {
+    relayToParent('error', `[Avatar] speak-text failed: ${(err as Error).message}`);
   }
 });
 

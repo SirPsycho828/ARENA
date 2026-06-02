@@ -10,18 +10,19 @@ interface AgentVideoProps {
 export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const token = useArenaStore((s) => s.videoTokens[agentId]);
+  const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
+  const transcripts = useArenaStore((s) => s.transcripts);
   const [avatarReady, setAvatarReady] = useState(false);
   const tokenSentRef = useRef(false);
   const iframeReadyRef = useRef(false);
+  const lastSentTextRef = useRef('');
 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
-      // Only handle messages from our iframe
       if (e.source !== iframeRef.current?.contentWindow) return;
 
       if (e.data?.type === 'avatar-frame-ready') {
         iframeReadyRef.current = true;
-        // Send token if we already have it
         if (token && !tokenSentRef.current) {
           tokenSentRef.current = true;
           iframeRef.current?.contentWindow?.postMessage(
@@ -64,8 +65,29 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
     }
   }, [token]);
 
+  // Forward debate text to the avatar for lip-sync when this agent finishes speaking
+  useEffect(() => {
+    if (!avatarReady || !iframeRef.current?.contentWindow) return;
+
+    // Find the most recent transcript from this agent
+    const lastFromAgent = [...transcripts].reverse().find((t) => t.agentId === agentId);
+    if (!lastFromAgent || lastFromAgent.text === lastSentTextRef.current) return;
+
+    // Only send when this agent just finished speaking (it's no longer the current speaker,
+    // or a new transcript appeared)
+    lastSentTextRef.current = lastFromAgent.text;
+    iframeRef.current.contentWindow.postMessage(
+      { type: 'speak-text', text: lastFromAgent.text },
+      '*'
+    );
+    console.log(`[Avatar:${agentName}] Forwarding debate text for lip-sync (${lastFromAgent.text.length} chars)`);
+  }, [transcripts, avatarReady, agentId]);
+
+  const isSpeaking = currentSpeaker === agentId;
+
   return (
-    <div className="w-full h-full relative">
+    <div className={`w-full h-full relative ${isSpeaking ? 'ring-2 ring-offset-2 ring-offset-gray-900' : ''}`}
+      style={isSpeaking ? { ringColor: color } : undefined}>
       {token && (
         <iframe
           ref={iframeRef}
@@ -75,7 +97,6 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
           style={{ background: 'transparent', zIndex: avatarReady ? 1 : 0 }}
         />
       )}
-      {/* Placeholder shown until SDK avatar loads */}
       {!avatarReady && (
         <div className="w-full h-full flex items-center justify-center absolute inset-0 z-0">
           <div
