@@ -13,11 +13,18 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
 
     // Send current state on connect
     socket.emit('session_state', sessionManager.getSessionState());
-    const videoTokens = sessionManager.getVideoTokens();
-    if (Object.keys(videoTokens).length > 0) {
-      socket.emit('agent_video_tokens' as any, { tokens: videoTokens });
-    }
     broadcastSpectatorCount();
+
+    // Create fresh per-viewer video tokens (single-use for WebRTC signaling)
+    if (sessionManager.getActiveSession()?.status === 'active') {
+      sessionManager.createVideoTokensForViewer(socket.id).then((tokens) => {
+        if (Object.keys(tokens).length > 0) {
+          socket.emit('agent_video_tokens' as any, { tokens });
+        }
+      }).catch((err) => {
+        console.warn(`  Video tokens failed for ${socket.id}:`, (err as Error).message);
+      });
+    }
 
     // ─── Audience Events ──────────────────────────────────────────────────
 

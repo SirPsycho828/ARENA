@@ -560,17 +560,18 @@ export class SessionManager {
     }
   }
 
-  // ─── Private: Video Tokens ─────────────────────────────────────────────
+  // ─── Video Tokens ──────────────────────────────────────────────────────
+  // Tokens are single-use (one WebRTC signaling connection per token).
+  // Each viewer needs their own fresh set of tokens.
 
-  private async createVideoTokens(agentIds: string[]) {
-    if (process.env.USE_MOCK === 'true') return;
+  async createVideoTokensForViewer(viewerId: string): Promise<Record<string, string>> {
+    if (process.env.USE_MOCK === 'true' || !this.session) return {};
 
     const API_KEY = process.env.OMNIAGENT_API_KEY!;
     const tokens: Record<string, string> = {};
 
-    // Create WebRTC connections in parallel (non-blocking — video is optional)
     const results = await Promise.allSettled(
-      agentIds.map(async (agentId) => {
+      this.session.agentIds.map(async (agentId) => {
         const config = this.agentConfigs.get(agentId);
         const res = await fetch(
           `https://companion-api.napster.com/public/agents/${agentId}/connections`,
@@ -579,7 +580,7 @@ export class SessionManager {
             headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               channelType: 'webrtc',
-              externalClientId: `arena_vid_${(config?.name || agentId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}`.slice(0, 32),
+              externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}${(config?.name || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`.slice(0, 32),
             }),
           }
         );
@@ -595,14 +596,13 @@ export class SessionManager {
       }
     }
 
-    const count = Object.keys(tokens).length;
-    if (count > 0) {
-      this.videoTokens = tokens;
-      console.log(`  Video tokens created: ${count}/${agentIds.length}`);
-      this.io.emit('agent_video_tokens', { tokens });
-    } else {
-      console.log('  Video tokens: none created (video disabled)');
-    }
+    console.log(`  Video tokens for ${viewerId}: ${Object.keys(tokens).length}/${this.session.agentIds.length}`);
+    return tokens;
+  }
+
+  private async createVideoTokens(agentIds: string[]) {
+    // No longer broadcast shared tokens — each viewer gets their own via createVideoTokensForViewer
+    console.log('  Video tokens: per-viewer (created on connect)');
   }
 
   // ─── Private: Agent Creation ────────────────────────────────────────────
