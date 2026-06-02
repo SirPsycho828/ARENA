@@ -140,12 +140,26 @@ httpServer.on('upgrade', (req, socket, head) => {
 
     const upstream = new WS(targetUrl);
 
+    // Buffer client messages until upstream is ready (race condition fix:
+    // SDK sends initial signaling message immediately after WS opens)
+    const pendingMessages: { data: any; isBinary: boolean }[] = [];
+
+    clientWs.on('message', (data, isBinary) => {
+      if (upstream.readyState === WS.OPEN) {
+        upstream.send(data, { binary: isBinary });
+      } else {
+        pendingMessages.push({ data, isBinary });
+      }
+    });
+
     upstream.on('open', () => {
-      console.log(`  [SignalingProxy] Upstream connected`);
-      // Relay messages bidirectionally, preserving binary/text type
-      clientWs.on('message', (data, isBinary) => {
-        if (upstream.readyState === WS.OPEN) upstream.send(data, { binary: isBinary });
-      });
+      console.log(`  [SignalingProxy] Upstream connected (${pendingMessages.length} buffered)`);
+      // Flush any messages the client sent before upstream was ready
+      for (const msg of pendingMessages) {
+        upstream.send(msg.data, { binary: msg.isBinary });
+      }
+      pendingMessages.length = 0;
+      // Relay upstream → client
       upstream.on('message', (data, isBinary) => {
         if (clientWs.readyState === WS.OPEN) clientWs.send(data, { binary: isBinary });
       });
