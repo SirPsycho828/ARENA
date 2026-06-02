@@ -33,7 +33,7 @@ export function CreditShop({ open, onClose }: CreditShopProps) {
       });
       const { url, error } = await res.json();
       if (url) {
-        window.location.href = url;
+        window.open(url, '_blank');
       } else {
         console.error('Checkout error:', error);
       }
