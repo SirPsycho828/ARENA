@@ -65,7 +65,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
       </div>
 
       {/* ─── Cable news lower-third ─── */}
-      <div className="absolute bottom-0 inset-x-0">
+      <div className="absolute bottom-0 inset-x-0 z-20">
         {/* Top color bar — the signature chyron accent */}
         <div className="h-1" style={{ backgroundColor: color }} />
         {/* Name strip — solid opaque, like a real broadcast graphic */}
@@ -96,7 +96,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
       </div>
 
       {/* Status badges — top-right broadcast overlays */}
-      <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+      <div className="absolute top-2 right-2 z-20 flex flex-col gap-1 items-end">
         {isSpeaking && !isChallenged && (
           <motion.span
             initial={{ opacity: 0, x: 10 }}
