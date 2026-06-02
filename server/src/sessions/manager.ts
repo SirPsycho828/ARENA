@@ -174,6 +174,7 @@ ARENA RULES:
 11. NEVER use em dashes. Short sentences. Commas. Periods. This is speech.
 12. VARIETY IS KING: Never open two responses the same way. Never reuse a phrase from earlier. Switch tactics constantly.
 13. If the debate is stale, shake it up with a surprising take, temporary alliance, or complete reframe.
+14. NEVER start your response by echoing or repeating a word from the previous speaker as a question. No "Termites?", "Seatbelts?", "Really?" openers. Jump straight into your point or counterargument. Start with a STATEMENT, not a parrot-back question.
 `.trim();
 
 export class SessionManager {
