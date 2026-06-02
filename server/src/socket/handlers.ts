@@ -1,8 +1,22 @@
 import type { Server } from 'socket.io';
 import type { ServerEvents, ClientEvents } from '../../../shared/types.js';
 import type { SessionManager } from '../sessions/manager.js';
+import { adminAuth } from '../lib/firebase-admin.js';
+import { CreditService, CREDIT_COSTS } from '../lib/credits.js';
 
 export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sessionManager: SessionManager) {
+  const creditService = new CreditService();
+
+  async function verifyToken(token?: string): Promise<{ uid: string; name: string | null } | null> {
+    if (!token) return null;
+    try {
+      const decoded = await adminAuth.verifyIdToken(token);
+      return { uid: decoded.uid, name: decoded.name || null };
+    } catch {
+      return null;
+    }
+  }
+
   // Broadcast spectator count on connect/disconnect
   const broadcastSpectatorCount = () => {
     io.emit('spectator_count' as any, { count: io.engine.clientsCount });
@@ -28,25 +42,47 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
 
     // ─── Audience Events ──────────────────────────────────────────────────
 
-    socket.on('chaos_inject', (data) => {
+    socket.on('chaos_inject', async (data) => {
+      const token = (data as any).token;
+      const user = await verifyToken(token);
+      if (!user) {
+        return socket.emit('injection_rejected', { reason: 'auth_required', remainingMs: 0 });
+      }
+
+      await creditService.ensureUser(user.uid, user.name);
       const type = data.type || 'rule';
       const duration = (data as any).duration || 3;
-      const result = sessionManager.handleChaosInject(socket.id, null, data.text, type, duration);
+      const cost = type === 'topic_change' ? CREDIT_COSTS.topic_change : duration * CREDIT_COSTS.rule_per_turn;
+
+      const charged = await creditService.deductCredits(user.uid, cost, type, data.text);
+      if (!charged) {
+        return socket.emit('injection_rejected', { reason: 'insufficient_credits', remainingMs: 0 });
+      }
+
+      const result = sessionManager.handleChaosInject(socket.id, user.name, data.text, type, duration);
       if (!result.ok) {
-        socket.emit('injection_rejected', {
-          reason: result.reason || 'unknown',
-          remainingMs: (result as any).remainingMs || 0,
-        });
+        // Refund on failure
+        await creditService.addCredits(user.uid, cost, `refund_${Date.now()}`);
+        socket.emit('injection_rejected', { reason: result.reason || 'unknown', remainingMs: (result as any).remainingMs || 0 });
       }
     });
 
-    socket.on('quick_chaos' as any, (data: { preset: string }) => {
-      const result = sessionManager.handleQuickChaos(socket.id, null, data.preset);
+    socket.on('quick_chaos' as any, async (data: { preset: string; token?: string }) => {
+      const user = await verifyToken(data.token);
+      if (!user) {
+        return socket.emit('injection_rejected', { reason: 'auth_required', remainingMs: 0 });
+      }
+
+      await creditService.ensureUser(user.uid, user.name);
+      const charged = await creditService.deductCredits(user.uid, CREDIT_COSTS.quick_chaos, 'quick_chaos', data.preset);
+      if (!charged) {
+        return socket.emit('injection_rejected', { reason: 'insufficient_credits', remainingMs: 0 });
+      }
+
+      const result = sessionManager.handleQuickChaos(socket.id, user.name, data.preset);
       if (!result.ok) {
-        socket.emit('injection_rejected', {
-          reason: result.reason || 'unknown',
-          remainingMs: (result as any).remainingMs || 0,
-        });
+        await creditService.addCredits(user.uid, CREDIT_COSTS.quick_chaos, `refund_${Date.now()}`);
+        socket.emit('injection_rejected', { reason: result.reason || 'unknown', remainingMs: (result as any).remainingMs || 0 });
       }
     });
 
@@ -54,13 +90,23 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
       sessionManager.handleVote(socket.id, data.agentId);
     });
 
-    socket.on('topic_change', (data) => {
-      const result = sessionManager.handleChaosInject(socket.id, null, data.topic, 'topic_change');
+    socket.on('topic_change', async (data) => {
+      const token = (data as any).token;
+      const user = await verifyToken(token);
+      if (!user) {
+        return socket.emit('injection_rejected', { reason: 'auth_required', remainingMs: 0 });
+      }
+
+      await creditService.ensureUser(user.uid, user.name);
+      const charged = await creditService.deductCredits(user.uid, CREDIT_COSTS.topic_change, 'topic_change', data.topic);
+      if (!charged) {
+        return socket.emit('injection_rejected', { reason: 'insufficient_credits', remainingMs: 0 });
+      }
+
+      const result = sessionManager.handleChaosInject(socket.id, user.name, data.topic, 'topic_change');
       if (!result.ok) {
-        socket.emit('injection_rejected', {
-          reason: result.reason || 'unknown',
-          remainingMs: (result as any).remainingMs || 0,
-        });
+        await creditService.addCredits(user.uid, CREDIT_COSTS.topic_change, `refund_${Date.now()}`);
+        socket.emit('injection_rejected', { reason: result.reason || 'unknown', remainingMs: (result as any).remainingMs || 0 });
       }
     });
 
@@ -77,11 +123,22 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
 
     // ─── Voice Challenger ───────────────────────────────────────────────────
 
-    socket.on('challenge_start', (data) => {
-      const viewerName = (data as any).viewerName || null;
-      console.log(`  CHALLENGER APPROACHING! ${socket.id} (${viewerName || 'anon'}) → ${data.agentId}`);
+    socket.on('challenge_start', async (data) => {
+      const token = (data as any).token;
+      const user = await verifyToken(token);
+      if (!user) {
+        return socket.emit('injection_rejected', { reason: 'auth_required', remainingMs: 0 });
+      }
 
-      // Notify all viewers about the live challenger
+      await creditService.ensureUser(user.uid, user.name);
+      const charged = await creditService.deductCredits(user.uid, CREDIT_COSTS.voice_challenge, 'voice_challenge', data.agentId);
+      if (!charged) {
+        return socket.emit('injection_rejected', { reason: 'insufficient_credits', remainingMs: 0 });
+      }
+
+      const viewerName = user.name || (data as any).viewerName || 'Challenger';
+      console.log(`  CHALLENGER APPROACHING! ${socket.id} (${viewerName}) → ${data.agentId}`);
+
       io.emit('challenger_active' as any, {
         viewerId: socket.id,
         agentId: data.agentId,
@@ -89,7 +146,6 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
         startedAt: Date.now(),
       });
 
-      // Send a system prompt to the target agent about the challenger
       sessionManager.handleChallengerStart(socket.id, data.agentId, viewerName);
     });
 

@@ -11,6 +11,9 @@ import { OmniagentManager } from './omniagent/manager.js';
 import { SessionManager } from './sessions/manager.js';
 import { getNextTopic, getTopicPool } from './sessions/auto-start.js';
 import type { ServerEvents, ClientEvents } from '../../shared/types.js';
+import Stripe from 'stripe';
+import { adminAuth } from './lib/firebase-admin.js';
+import { CreditService } from './lib/credits.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +32,35 @@ const io = new Server<ClientEvents, ServerEvents>(httpServer, {
 
 const omniagent = new OmniagentManager();
 const sessionManager = new SessionManager(omniagent, io);
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
+const creditService = new CreditService();
+
+// ─── Stripe Webhook (MUST be before express.json) ─────────────────────────
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
+
+  const sig = req.headers['stripe-signature'] as string;
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+  } catch (err) {
+    console.error('  Stripe webhook error:', (err as Error).message);
+    return res.status(400).send(`Webhook Error: ${(err as Error).message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const uid = session.metadata?.uid;
+    const credits = parseInt(session.metadata?.credits || '0', 10);
+    if (uid && credits > 0) {
+      await creditService.addCredits(uid, credits, session.id);
+    }
+  }
+
+  res.json({ received: true });
+});
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
 
@@ -112,6 +144,47 @@ app.get('/api/topics', (_req, res) => {
 
 app.get('/api/sessions/tokens', (_req, res) => {
   res.json({ tokens: sessionManager.getVideoTokens() });
+});
+
+// ─── Credit Purchase ──────────────────────────────────────────────────────
+const CREDIT_PACKAGES: Record<string, { credits: number; price: number; name: string }> = {
+  starter: { credits: 10, price: 500, name: '10 ARENA Credits' },
+  popular: { credits: 25, price: 1000, name: '25 ARENA Credits' },
+  whale:   { credits: 50, price: 1800, name: '50 ARENA Credits' },
+};
+
+app.post('/api/credits/checkout', async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
+
+  const { packageId, token } = req.body;
+  if (!token) return res.status(401).json({ error: 'Auth required' });
+
+  try {
+    const decoded = await adminAuth.verifyIdToken(token);
+    const pkg = CREDIT_PACKAGES[packageId];
+    if (!pkg) return res.status(400).json({ error: 'Invalid package' });
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: { name: pkg.name },
+          unit_amount: pkg.price,
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: `${req.headers.origin || 'https://arenaserver-production-f84b.up.railway.app'}/?credits=success`,
+      cancel_url: `${req.headers.origin || 'https://arenaserver-production-f84b.up.railway.app'}/?credits=cancel`,
+      metadata: { uid: decoded.uid, credits: pkg.credits.toString() },
+    });
+
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('  Checkout error:', (err as Error).message);
+    res.status(500).json({ error: 'Checkout failed' });
+  }
 });
 
 // ─── SPA Catch-All (after API routes, before socket) ────────────────────────
@@ -238,4 +311,4 @@ async function shutdown(signal: string) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-export { app, io, httpServer, sessionManager };
+export { app, io, httpServer, sessionManager, creditService };

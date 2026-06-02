@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useArenaStore } from './store/arena';
+import { useAuth } from './contexts/AuthContext';
 import { SplashScreen } from './components/SplashScreen';
 import { AgentEntrance } from './components/AgentEntrance';
 import { TopicBanner } from './components/TopicBanner';
@@ -24,8 +25,12 @@ function App() {
     new URLSearchParams(window.location.search).has('judge')
   );
   const [mobileDrawer, setMobileDrawer] = useState(false);
+  const [creditSuccess, setCreditSuccess] = useState(false);
+  const { user } = useAuth();
   const connect = useArenaStore((s) => s.connect);
   const disconnect = useArenaStore((s) => s.disconnect);
+  const listenCredits = useArenaStore((s) => s.listenCredits);
+  const stopListeningCredits = useArenaStore((s) => s.stopListeningCredits);
   const session = useArenaStore((s) => s.session);
   const agents = useArenaStore((s) => s.agents);
   const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
@@ -40,6 +45,26 @@ function App() {
     connect();
     return () => disconnect();
   }, [connect, disconnect]);
+
+  // Credit listener lifecycle
+  useEffect(() => {
+    if (user) {
+      listenCredits(user.uid);
+    } else {
+      stopListeningCredits();
+    }
+    return () => stopListeningCredits();
+  }, [user, listenCredits, stopListeningCredits]);
+
+  // Handle Stripe success redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('credits') === 'success') {
+      setCreditSuccess(true);
+      window.history.replaceState({}, '', window.location.pathname);
+      setTimeout(() => setCreditSuccess(false), 3000);
+    }
+  }, []);
 
   const handleEnterArena = useCallback(() => {
     sounds.arenaEnter();
@@ -60,8 +85,8 @@ function App() {
     sounds.reaction();
   }, [sendReaction]);
 
-  const handleChallengeStart = useCallback((agentId: string, stream: MediaStream) => {
-    startChallenge(agentId, stream);
+  const handleChallengeStart = useCallback((agentId: string, stream: MediaStream, viewerName?: string, token?: string) => {
+    startChallenge(agentId, stream, viewerName, token);
   }, [startChallenge]);
 
   const handleChallengeEnd = useCallback(() => {
@@ -235,6 +260,20 @@ function App() {
       {/* Judge Mode debug panel */}
       <AnimatePresence>
         {judgeMode && phase === 'arena' && <JudgePanel />}
+      </AnimatePresence>
+
+      {/* Credit purchase success toast */}
+      <AnimatePresence>
+        {creditSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg bg-green-500/90 text-white font-semibold text-sm shadow-lg"
+          >
+            Credits added successfully!
+          </motion.div>
+        )}
       </AnimatePresence>
     </>
   );

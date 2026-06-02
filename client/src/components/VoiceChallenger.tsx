@@ -7,7 +7,7 @@ import { AuthModal } from './AuthModal';
 interface VoiceChallengerProps {
   agents: Array<{ id: string; name: string; color: string }>;
   isActive: boolean;
-  onStart: (agentId: string, stream: MediaStream, viewerName?: string) => void;
+  onStart: (agentId: string, stream: MediaStream, viewerName?: string, token?: string) => void;
   onEnd: () => void;
 }
 
@@ -62,7 +62,7 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
   }, []);
 
   const handleStart = async () => {
-    if (!selectedAgent) return;
+    if (!selectedAgent || !user) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -75,9 +75,10 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
       source.connect(analyser);
       analyserRef.current = analyser;
 
+      const token = await user.getIdToken();
       setRecording(true);
       setTimeLeft(60);
-      onStart(selectedAgent, stream, displayName || user?.email?.split('@')[0] || 'Challenger');
+      onStart(selectedAgent, stream, displayName || user.email?.split('@')[0] || 'Challenger', token);
       updateBars();
     } catch (err) {
       console.error('Microphone access denied:', err);
@@ -141,7 +142,7 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
               ) : !recording ? (
                 <>
                   {/* Agent selector */}
-                  <p className="text-xs text-arena-text-muted">Select an agent to challenge:</p>
+                  <p className="text-xs text-arena-text-muted">Select an agent to challenge: <span className="text-arena-magenta">(3 credits)</span></p>
                   <div className="flex flex-wrap gap-1.5">
                     {agents.map((agent) => (
                       <button

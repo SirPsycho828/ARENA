@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { io, Socket } from 'socket.io-client';
+import { doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { agentAudio } from '../lib/agent-audio';
 
 interface AgentInfo {
@@ -101,17 +103,24 @@ interface ArenaState {
   videoFrames: Record<string, string>; // agentId -> latest base64 JPEG frame (server-pushed)
   videoTokens: Record<string, string>; // agentId -> WebRTC token (for client-side video)
 
+  // Credits
+  credits: number | null;
+  creditsLoading: boolean;
+  lastRejectionReason: string | null;
+
   // Actions
   connect: () => void;
   disconnect: () => void;
   vote: (agentId: string) => void;
-  injectChaos: (text: string, type?: 'rule' | 'topic_change', duration?: number) => void;
-  changeTopic: (topic: string) => void;
-  quickChaos: (preset: string) => void;
+  injectChaos: (text: string, type?: 'rule' | 'topic_change', duration?: number, token?: string) => void;
+  changeTopic: (topic: string, token?: string) => void;
+  quickChaos: (preset: string, token?: string) => void;
   sendReaction: (emoji: string) => void;
-  startChallenge: (agentId: string, stream: MediaStream, viewerName?: string) => void;
+  startChallenge: (agentId: string, stream: MediaStream, viewerName?: string, token?: string) => void;
   endChallenge: () => void;
   sendChallengerText: (agentId: string, text: string) => void;
+  listenCredits: (uid: string) => void;
+  stopListeningCredits: () => void;
 }
 
 // ─── Transcript Pacer ──────────────────────────────────────────────────────
@@ -214,6 +223,7 @@ class TranscriptPacer {
 }
 
 const transcriptPacer = new TranscriptPacer();
+let creditsUnsub: Unsubscribe | null = null;
 
 export const useArenaStore = create<ArenaState>((set, get) => ({
   connected: false,
@@ -238,6 +248,9 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   victoryData: null,
   videoFrames: {},
   videoTokens: {},
+  credits: null,
+  creditsLoading: false,
+  lastRejectionReason: null,
 
   connect: () => {
     const socket = io(window.location.origin, {
@@ -343,6 +356,9 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     socket.on('injection_rejected', ({ reason, remainingMs }) => {
       if (reason === 'cooldown') {
         set({ injectionCooldown: remainingMs });
+      } else if (reason === 'auth_required' || reason === 'insufficient_credits') {
+        set({ lastRejectionReason: reason });
+        setTimeout(() => set({ lastRejectionReason: null }), 4000);
       }
     });
 
@@ -416,26 +432,26 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     get().socket?.emit('vote', { agentId });
   },
 
-  injectChaos: (text, type = 'rule', duration = 3) => {
-    get().socket?.emit('chaos_inject', { text, type, duration });
+  injectChaos: (text, type = 'rule', duration = 3, token) => {
+    get().socket?.emit('chaos_inject', { text, type, duration, token } as any);
   },
 
-  quickChaos: (preset) => {
-    (get().socket as any)?.emit('quick_chaos', { preset });
+  quickChaos: (preset, token) => {
+    (get().socket as any)?.emit('quick_chaos', { preset, token });
   },
 
-  changeTopic: (topic) => {
-    get().socket?.emit('topic_change', { topic });
+  changeTopic: (topic, token) => {
+    get().socket?.emit('topic_change', { topic, token } as any);
   },
 
   sendReaction: (emoji) => {
     get().socket?.emit('reaction', { emoji });
   },
 
-  startChallenge: (agentId, _stream, viewerName) => {
+  startChallenge: (agentId, _stream, viewerName, token) => {
     const socket = get().socket;
     if (!socket) return;
-    socket.emit('challenge_start', { agentId, viewerName });
+    socket.emit('challenge_start', { agentId, viewerName, token } as any);
     set({ challengerActive: true, challengerAgentId: agentId, challengerViewerName: viewerName || null });
   },
 
@@ -448,5 +464,21 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
   sendChallengerText: (agentId, text) => {
     (get().socket as any)?.emit('challenge_audio', { agentId, text });
+  },
+
+  listenCredits: (uid) => {
+    if (creditsUnsub) creditsUnsub();
+    set({ creditsLoading: true });
+    creditsUnsub = onSnapshot(doc(db, 'users', uid), (snap) => {
+      const data = snap.data();
+      set({ credits: data?.credits ?? 0, creditsLoading: false });
+    }, () => {
+      set({ credits: null, creditsLoading: false });
+    });
+  },
+
+  stopListeningCredits: () => {
+    if (creditsUnsub) { creditsUnsub(); creditsUnsub = null; }
+    set({ credits: null, creditsLoading: false });
   },
 }));
