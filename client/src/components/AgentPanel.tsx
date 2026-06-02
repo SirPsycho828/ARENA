@@ -17,6 +17,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
   const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
   const voteTallies = useArenaStore((s) => s.voteTallies);
   const vote = useArenaStore((s) => s.vote);
+  const hasVoted = useArenaStore((s) => s.hasVoted);
   const challengerActive = useArenaStore((s) => s.challengerActive);
   const challengerAgentId = useArenaStore((s) => s.challengerAgentId);
   const challengerViewerName = useArenaStore((s) => s.challengerViewerName);
@@ -65,33 +66,35 @@ export function AgentPanel({ id, name, personality, color }: Props) {
       </div>
 
       {/* ─── Cable news lower-third ─── */}
-      <div className="absolute bottom-0 inset-x-0 z-20">
-        {/* Top color bar — the signature chyron accent */}
-        <div className="h-1" style={{ backgroundColor: color }} />
-        {/* Name strip — solid opaque, like a real broadcast graphic */}
-        <div className="bg-[#0a0f18] px-3 py-1.5">
-          <div className="flex items-center justify-between">
-            <h3
-              className="font-display text-base uppercase leading-tight tracking-wider cursor-pointer hover:opacity-80 transition-opacity"
-              style={{ color }}
-              onClick={() => setShowStats(true)}
-            >
+      <div className="absolute bottom-0 inset-x-0 z-20 flex items-end">
+        {/* Color accent — left edge bar */}
+        <div className="w-1 self-stretch shrink-0" style={{ backgroundColor: color }} />
+        {/* Single compact strip */}
+        <div className="flex-1 flex items-center gap-2 bg-[#0a0f18]/95 backdrop-blur-sm pl-2.5 pr-2 py-1.5">
+          <div
+            className="flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => setShowStats(true)}
+          >
+            <span className="font-display text-[13px] uppercase tracking-wider leading-none" style={{ color }}>
               {name}
-            </h3>
-            <button
-              onClick={() => vote(id)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-sm bg-white/10 hover:bg-white/20 transition-all text-xs group"
-            >
-              <ThumbsUp size={12} className="group-hover:text-accent transition-colors" />
-              <span className={isLeading ? 'text-accent font-semibold' : 'text-foreground'}>{votes}</span>
-            </button>
+            </span>
+            <span className="text-[10px] text-[#64748b] ml-2 tracking-wide hidden sm:inline">
+              {personality}
+            </span>
           </div>
-        </div>
-        {/* Title strip — slightly lighter, two-tone like CNN */}
-        <div className="bg-[#111827] px-3 py-1">
-          <p className="text-[11px] text-[#94a3b8] tracking-wide font-body">
-            {personality}
-          </p>
+          <button
+            onClick={() => vote(id)}
+            disabled={hasVoted}
+            title={hasVoted ? 'You already voted this round' : 'Vote for this agent'}
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-sm transition-all text-xs group shrink-0 ${
+              hasVoted
+                ? 'bg-white/5 opacity-50 cursor-default'
+                : 'bg-white/8 hover:bg-white/15 cursor-pointer'
+            }`}
+          >
+            <ThumbsUp size={11} className={hasVoted ? 'text-muted-foreground' : 'group-hover:text-accent transition-colors'} />
+            <span className={isLeading ? 'text-accent font-semibold' : 'text-foreground/80'}>{votes}</span>
+          </button>
         </div>
       </div>
 

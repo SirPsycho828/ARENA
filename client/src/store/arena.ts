@@ -81,6 +81,7 @@ interface ArenaState {
   spectatorCount: number;
 
   // Audience
+  hasVoted: boolean;
   injectionCooldown: number;
   injectionQueue: string[];
 
@@ -237,6 +238,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   activeRules: [],
   chaosStatus: [],
   spectatorCount: 1,
+  hasVoted: false,
   injectionCooldown: 0,
   injectionQueue: [],
   incomingReactions: [],
@@ -387,6 +389,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     (socket as any).on('topic_changed', ({ topic }: { topic: string }) => {
       set((s) => ({
         session: s.session ? { ...s.session, topic } : null,
+        hasVoted: false,
       }));
     });
 
@@ -429,7 +432,9 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   },
 
   vote: (agentId) => {
+    if (get().hasVoted) return;
     get().socket?.emit('vote', { agentId });
+    set({ hasVoted: true });
   },
 
   injectChaos: (text, type = 'rule', duration = 3, token) => {

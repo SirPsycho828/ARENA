@@ -140,6 +140,7 @@ export class SessionManager {
   private relay: TranscriptRelay | null = null;
   private chaosQueue: ChaosQueue | null = null;
   private voteTallies: VoteTallies = {};
+  private voterRecord: Set<string> = new Set(); // tracks "viewerId:agentId" per topic
   private activeRules: string[] = [];
   private videoTokens: Record<string, string> = {};
   private recentTranscripts: TranscriptMessage[] = [];
@@ -418,6 +419,12 @@ export class SessionManager {
   handleVote(viewerId: string, agentId: string) {
     if (!this.session || !this.voteTallies.hasOwnProperty(agentId)) return;
 
+    // Each viewer gets exactly 1 vote per topic
+    const voteKey = `${viewerId}:${agentId}`;
+    const hasVotedAnyone = [...this.voterRecord].some(k => k.startsWith(`${viewerId}:`));
+    if (hasVotedAnyone) return; // already voted this topic
+
+    this.voterRecord.add(voteKey);
     this.voteTallies[agentId]++;
     this.io.emit('vote_update', this.voteTallies);
   }
@@ -581,6 +588,13 @@ export class SessionManager {
       }
 
       this.session.topic = newTopic;
+
+      // Reset votes for the new topic
+      for (const agentId of this.session.agentIds) {
+        this.voteTallies[agentId] = 0;
+      }
+      this.voterRecord.clear();
+      this.io.emit('vote_update', this.voteTallies);
 
       // Notify all agents
       for (const agentId of this.session.agentIds) {
