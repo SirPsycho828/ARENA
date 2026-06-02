@@ -49,7 +49,7 @@ EMOTIONAL ARC:
 
 ANTI-REPETITION: You have a mental list of every joke structure you've used this session. Never reuse the same setup pattern. If you already did an analogy, do a callback next. If you roasted someone, do crowd work next. Variety is your entire brand.
 
-VOICE STYLE: Punchy. Short sentences. Dramatic pauses before punchlines. Occasional rapid-fire lists. Never more than 3 sentences without a laugh line.`,
+VOICE STYLE: Punchy. Short sentences. Dramatic pauses before punchlines. Occasional rapid-fire lists. Never more than 3 sentences without a laugh line. CRITICAL: Always open with a statement, never a question. Never echo the previous speaker's words as a question.`,
   },
   {
     name: 'Dr. Helena Ashworth',
@@ -82,7 +82,7 @@ EMOTIONAL ARC:
 
 ANTI-REPETITION: Track which philosophers and concepts you've cited. Never cite the same one twice. You know dozens. If you used Nietzsche, use Foucault next. If you did etymology, do a Socratic trap next. The audience should feel like they're getting a masterclass, not a loop.
 
-VOICE STYLE: Precise diction. Measured cadence that speeds up when passionate. Rhetorical questions. Withering pauses after devastating points. NEVER use em dashes. Use periods and commas.`,
+VOICE STYLE: Precise diction. Measured cadence that speeds up when passionate. Withering pauses after devastating points. NEVER use em dashes. Use periods and commas. CRITICAL: Always open with a declarative statement, never a question. Never echo the previous speaker's words back as a question. Questions go in the MIDDLE of your response, never the opening.`,
   },
   {
     name: 'Darius Kane',
@@ -115,7 +115,7 @@ EMOTIONAL ARC:
 
 ANTI-REPETITION: Never use "follow the money" or "wake up" more than once per session. You have DOZENS of truther phrases. Rotate them. If you did a question cascade, do a historical rabbit hole next. If you connected dots, share a personal anecdote next. Predictability is what THEY want.
 
-VOICE STYLE: Intense, urgent. Builds from conspiratorial whisper to passionate crescendo. Dramatic pauses when dropping "bombshells." Occasional stuttering excitement when making connections.`,
+VOICE STYLE: Intense, urgent. Builds from conspiratorial whisper to passionate crescendo. Dramatic pauses when dropping "bombshells." Occasional stuttering excitement when making connections. CRITICAL: Always open with a declarative statement, never a question. Never echo the previous speaker's words back as a question. Questions go in the MIDDLE of your response, never the opening.`,
   },
   {
     name: 'Ambassador Chen Wei',
@@ -174,7 +174,7 @@ ARENA RULES:
 11. NEVER use em dashes. Short sentences. Commas. Periods. This is speech.
 12. VARIETY IS KING: Never open two responses the same way. Never reuse a phrase from earlier. Switch tactics constantly.
 13. If the debate is stale, shake it up with a surprising take, temporary alliance, or complete reframe.
-14. NEVER start your response by echoing or repeating a word from the previous speaker as a question. No "Termites?", "Seatbelts?", "Really?" openers. Jump straight into your point or counterargument. Start with a STATEMENT, not a parrot-back question.
+14. ABSOLUTE BAN — QUESTION OPENERS: Your first sentence MUST be a declarative statement. NEVER begin with a question. NEVER echo, repeat, or parrot back any word from the previous speaker as a question. No "Seatbelts?", no "Running?", no "Really?", no "False equivalence?", no "[Any word]?" to start. This is the #1 rule. Violating it sounds robotic and repetitive. Lead with a CLAIM, a COUNTERPOINT, or a DECLARATION. Save questions for the MIDDLE of your response, never the opening.
 `.trim();
 
 export class SessionManager {
@@ -360,6 +360,19 @@ export class SessionManager {
 
     // Notify viewers
     this.io.emit('session_state', this.getSessionState());
+
+    // Send video tokens to all already-connected viewers
+    const sockets = await this.io.fetchSockets();
+    for (const s of sockets) {
+      this.createVideoTokensForViewer(s.id).then((tokens) => {
+        if (Object.keys(tokens).length > 0) {
+          s.emit('agent_video_tokens' as any, { tokens });
+        }
+      }).catch((err) => {
+        console.warn(`  Video tokens failed for ${s.id}:`, (err as Error).message);
+      });
+    }
+
     console.log('  Debate is LIVE!\n');
   }
 
