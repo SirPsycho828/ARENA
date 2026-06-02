@@ -10,8 +10,8 @@ export function ConsensusNeedle() {
   const [jitter, setJitter] = useState(0);
   useEffect(() => {
     const interval = setInterval(() => {
-      setJitter((Math.random() - 0.5) * 3);
-    }, 120);
+      setJitter((Math.random() - 0.5) * 1.2);
+    }, 800);
     return () => clearInterval(interval);
   }, []);
 
@@ -36,17 +36,6 @@ export function ConsensusNeedle() {
       </div>
 
       <div className="px-4 py-3 space-y-2.5">
-        {/* Pole labels */}
-        <div className="flex justify-between items-start">
-          <span className="text-[11px] font-display tracking-wider text-accent max-w-[40%] leading-tight">
-            {consensus.leftPole}
-          </span>
-          <span className="text-[10px] font-mono text-muted-foreground/60 tracking-wider">VS</span>
-          <span className="text-[11px] font-display tracking-wider text-primary max-w-[40%] leading-tight text-right">
-            {consensus.rightPole}
-          </span>
-        </div>
-
         {/* Meter track */}
         <div className="relative h-4 bg-muted rounded-full overflow-visible">
           {/* Gradient fill */}
