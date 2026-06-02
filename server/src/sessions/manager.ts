@@ -724,7 +724,7 @@ export class SessionManager {
       companionId: config.companionId,
       name: config.name,
       voiceId: config.voiceId,
-      language: 'English',
+      language: 'en',
       disableIdleTimeout: true,
       tags: {
         arena_role: config.role || 'unknown',
