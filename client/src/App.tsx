@@ -14,6 +14,7 @@ import { ReactionOverlay } from './components/ReactionOverlay';
 import { VoiceChallenger } from './components/VoiceChallenger';
 import { VictoryScreen } from './components/VictoryScreen';
 import { JudgePanel } from './components/JudgePanel';
+import { ToolEffects } from './components/ToolEffects';
 import { sounds } from './lib/sounds';
 import { Zap, X } from 'lucide-react';
 
@@ -272,6 +273,9 @@ function App() {
           incomingReactions={incomingReactions}
         />
       )}
+
+      {/* Agent tool visual effects (dramatic_pause, crowd_appeal, mic_drop) */}
+      {phase === 'arena' && <ToolEffects />}
 
       {/* Victory screen */}
       <AnimatePresence>

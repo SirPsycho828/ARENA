@@ -62,6 +62,13 @@ interface ChaosRuleStatus {
   targetAgentId: string | null;
 }
 
+interface ToolEffect {
+  agentId: string;
+  agentName: string;
+  tool: string;
+  args: Record<string, any>;
+}
+
 interface ArenaState {
   // Connection
   connected: boolean;
@@ -103,6 +110,9 @@ interface ArenaState {
   // Video
   videoFrames: Record<string, string>; // agentId -> latest base64 JPEG frame (server-pushed)
   videoTokens: Record<string, string>; // agentId -> WebRTC token (for client-side video)
+
+  // Tool Effects
+  activeToolEffect: ToolEffect | null;
 
   // Credits
   credits: number | null;
@@ -250,6 +260,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   victoryData: null,
   videoFrames: {},
   videoTokens: {},
+  activeToolEffect: null,
   credits: null,
   creditsLoading: false,
   lastRejectionReason: null,
@@ -420,6 +431,12 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     (socket as any).on('chaos_status', (data: { active: ChaosRuleStatus[]; justActivated: string[]; justExpired: string[] }) => {
       set({ chaosStatus: data.active });
+    });
+
+    (socket as any).on('tool_effect', (data: ToolEffect) => {
+      set({ activeToolEffect: data });
+      const duration = data.tool === 'mic_drop' ? 4000 : data.tool === 'crowd_appeal' ? 3500 : 2500;
+      setTimeout(() => set({ activeToolEffect: null }), duration);
     });
 
     set({ socket });
