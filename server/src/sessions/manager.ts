@@ -242,10 +242,11 @@ export class SessionManager {
     const sessionId = uuid();
     const count = Math.min(agentCount, AGENT_PRESETS.length, this.companionIds.length);
 
-    console.log(`\n  Creating session "${topic}" with ${count} agents...`);
+    console.log(`\n  Creating session "${topic}" with ${count} agents (${this.companionIds.length} companions)...`);
 
     // Create agents
     const agentIds: string[] = [];
+    const errors: string[] = [];
     for (let i = 0; i < count; i++) {
       const preset = AGENT_PRESETS[i];
       const config: AgentConfig & { role: string } = {
@@ -267,12 +268,14 @@ export class SessionManager {
 
         // Video tokens created after debate starts (client-side WebRTC)
       } catch (err) {
-        console.error(`  Failed to create ${config.name}:`, (err as Error).message);
+        const msg = (err as Error).message;
+        errors.push(`${config.name}: ${msg}`);
+        console.error(`  Failed to create ${config.name}:`, msg);
       }
     }
 
     if (agentIds.length < 2) {
-      throw new Error(`Only ${agentIds.length} agents created. Need at least 2.`);
+      throw new Error(`Only ${agentIds.length}/${count} agents created. Errors: ${errors.join(' | ')}`);
     }
 
     // Create session record
