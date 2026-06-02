@@ -1,18 +1,25 @@
 import { OmniagentConnection } from './connection.js';
 import { MockOmniagentConnection } from './mock.js';
+import { WebRTCConnection } from './webrtc-connection.js';
 import type { AgentConfig } from '../../../shared/types.js';
 
 const USE_MOCK = process.env.USE_MOCK === 'true';
+const USE_WEBRTC = process.env.USE_WEBRTC !== 'false'; // default true
 
-export type AgentInstance = OmniagentConnection | MockOmniagentConnection;
+export type AgentInstance = OmniagentConnection | WebRTCConnection | MockOmniagentConnection;
 
 export class OmniagentManager {
   private agents: Map<string, AgentInstance> = new Map();
 
   async createAndConnect(config: AgentConfig): Promise<AgentInstance> {
-    const agent = USE_MOCK
-      ? new MockOmniagentConnection(config)
-      : new OmniagentConnection(config);
+    let agent: AgentInstance;
+    if (USE_MOCK) {
+      agent = new MockOmniagentConnection(config);
+    } else if (USE_WEBRTC) {
+      agent = new WebRTCConnection(config);
+    } else {
+      agent = new OmniagentConnection(config);
+    }
 
     await agent.connect();
     this.agents.set(config.id, agent);

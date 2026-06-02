@@ -218,8 +218,7 @@ export class SessionManager {
         agentIds.push(agentId);
         console.log(`  Created: ${config.name} (${agentId})`);
 
-        // WebRTC video disabled — creates independent sessions that conflict with debate orchestration
-        // TODO: Re-enable when Napster SDK supports syncing WebRTC avatar with WebSocket text
+        // Video enabled via server-side WebRTC (werift) — see webrtc-connection.ts
       } catch (err) {
         console.error(`  Failed to create ${config.name}:`, (err as Error).message);
       }
@@ -661,6 +660,12 @@ export class SessionManager {
         }
         this.audioTracker.get(agentId)!.totalB64Chars += data.audio.length;
         (this.io as any).emit('agent_audio', data);
+      }
+    });
+
+    agent.on('video_frame', (data: { agentId: string; frame: string }) => {
+      if (this.turnManager?.getCurrentSpeaker() === agentId) {
+        (this.io as any).emit('agent_video_frame', data);
       }
     });
 
