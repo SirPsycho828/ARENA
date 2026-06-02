@@ -62,51 +62,36 @@ export function AgentPanel({ id, name, personality, color }: Props) {
           <AgentVideo agentId={id} agentName={name} color={color} />
         </div>
 
-        {/* Speaking waveform — positioned above name badge */}
-        {isSpeaking && (
-          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex items-end gap-[3px] h-6 z-10">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="w-[3px] bg-accent rounded-full animate-waveform"
-                style={{ animationDelay: `${i * 0.15}s` }}
-              />
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* Cable news lower-third name badge */}
-      <div className="absolute bottom-0 inset-x-0 flex items-stretch">
-        {/* Agent color accent bar — left edge */}
-        <div className="w-1.5 shrink-0" style={{ backgroundColor: color }} />
-        {/* Name plate */}
-        <div className="flex-1 bg-background/90 backdrop-blur-sm">
-          {/* Color strip top */}
-          <div className="h-[2px]" style={{ backgroundColor: color, opacity: 0.5 }} />
-          <div className="flex items-center justify-between px-3 py-2">
-            <div
-              className="cursor-pointer hover:opacity-80 transition-opacity"
+      {/* ─── Cable news lower-third ─── */}
+      <div className="absolute bottom-0 inset-x-0">
+        {/* Top color bar — the signature chyron accent */}
+        <div className="h-1" style={{ backgroundColor: color }} />
+        {/* Name strip — solid opaque, like a real broadcast graphic */}
+        <div className="bg-[#0a0f18] px-3 py-1.5">
+          <div className="flex items-center justify-between">
+            <h3
+              className="font-display text-base uppercase leading-tight tracking-wider cursor-pointer hover:opacity-80 transition-opacity"
+              style={{ color }}
               onClick={() => setShowStats(true)}
             >
-              <h3
-                className="font-display text-sm uppercase leading-tight tracking-wider"
-                style={{ color }}
-              >
-                {name}
-              </h3>
-              <p className="text-[10px] text-muted-foreground tracking-wide mt-0.5 font-body">
-                {personality}
-              </p>
-            </div>
+              {name}
+            </h3>
             <button
               onClick={() => vote(id)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm bg-muted/60 hover:bg-muted transition-all text-sm group"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-sm bg-white/10 hover:bg-white/20 transition-all text-xs group"
             >
-              <ThumbsUp size={14} className="group-hover:text-accent transition-colors" />
-              <span className={isLeading ? 'text-accent font-semibold' : ''}>{votes}</span>
+              <ThumbsUp size={12} className="group-hover:text-accent transition-colors" />
+              <span className={isLeading ? 'text-accent font-semibold' : 'text-foreground'}>{votes}</span>
             </button>
           </div>
+        </div>
+        {/* Title strip — slightly lighter, two-tone like CNN */}
+        <div className="bg-[#111827] px-3 py-1">
+          <p className="text-[11px] text-[#94a3b8] tracking-wide font-body">
+            {personality}
+          </p>
         </div>
       </div>
 
