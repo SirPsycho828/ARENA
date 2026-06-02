@@ -127,8 +127,8 @@ app.get('*', (_req, res) => {
 //           → wss://avatar-signaling.touchcastmaas.com/ws/connections/{id}/signaling
 
 const signalingWss = new WebSocketServer({ noServer: true });
-// Track active proxy connections by connection ID to prevent duplicates
-const activeProxies = new Map<string, { client: InstanceType<typeof WS>; upstream: InstanceType<typeof WS> }>();
+// Track connection attempt counts per connection ID (for logging only)
+const proxyAttempts = new Map<string, number>();
 
 httpServer.on('upgrade', (req, socket, head) => {
   if (!req.url?.startsWith('/signaling-proxy/')) return;
@@ -137,19 +137,13 @@ httpServer.on('upgrade', (req, socket, head) => {
     const targetPath = req.url!.replace('/signaling-proxy/', '');
     const targetUrl = `wss://avatar-signaling.touchcastmaas.com/${targetPath}`;
 
-    // Extract connection ID for deduplication
+    // Extract connection ID for logging
     const connIdMatch = targetPath.match(/connections\/([^/]+)\//);
-    const connId = connIdMatch?.[1] || 'unknown';
-    console.log(`  [SignalingProxy] conn=${connId} → ${targetUrl}`);
-
-    // Close any existing proxy for this connection ID (SDK retries)
-    const existing = activeProxies.get(connId);
-    if (existing) {
-      console.log(`  [SignalingProxy] conn=${connId} closing stale proxy`);
-      try { existing.upstream.close(); } catch { /* ignore */ }
-      try { existing.client.close(); } catch { /* ignore */ }
-      activeProxies.delete(connId);
-    }
+    const connId = connIdMatch?.[1]?.slice(0, 8) || 'unknown';
+    const attempt = (proxyAttempts.get(connId) || 0) + 1;
+    proxyAttempts.set(connId, attempt);
+    const tag = `[Proxy:${connId}#${attempt}]`;
+    console.log(`  ${tag} → ${targetUrl}`);
 
     // Forward WebSocket subprotocols from the client request
     const protocols = req.headers['sec-websocket-protocol'];
@@ -157,12 +151,17 @@ httpServer.on('upgrade', (req, socket, head) => {
       ? new WS(targetUrl, protocols.split(',').map(p => p.trim()))
       : new WS(targetUrl);
 
-    activeProxies.set(connId, { client: clientWs as any, upstream });
-
     // Buffer client messages until upstream is ready
     const pendingMessages: { data: any; isBinary: boolean }[] = [];
 
     clientWs.on('message', (data, isBinary) => {
+      // Log signaling message direction (client → upstream)
+      if (!isBinary) {
+        try {
+          const msg = JSON.parse(data.toString());
+          console.log(`  ${tag} C→S: ${msg.type || msg.event || 'unknown'}`);
+        } catch { /* binary or non-JSON */ }
+      }
       if (upstream.readyState === WS.OPEN) {
         upstream.send(data, { binary: isBinary });
       } else {
@@ -172,25 +171,29 @@ httpServer.on('upgrade', (req, socket, head) => {
 
     // Relay upstream → client (register immediately, not inside 'open')
     upstream.on('message', (data, isBinary) => {
+      if (!isBinary) {
+        try {
+          const msg = JSON.parse(data.toString());
+          console.log(`  ${tag} S→C: ${msg.type || msg.event || 'unknown'}`);
+        } catch { /* binary or non-JSON */ }
+      }
       if (clientWs.readyState === WS.OPEN) clientWs.send(data, { binary: isBinary });
     });
 
     upstream.on('open', () => {
-      console.log(`  [SignalingProxy] conn=${connId} upstream connected (${pendingMessages.length} buffered)`);
+      console.log(`  ${tag} upstream connected (${pendingMessages.length} buffered)`);
       for (const msg of pendingMessages) {
         upstream.send(msg.data, { binary: msg.isBinary });
       }
       pendingMessages.length = 0;
     });
 
-    const cleanup = () => { activeProxies.delete(connId); };
-    clientWs.on('close', () => { upstream.close(); cleanup(); });
-    upstream.on('close', () => { if (clientWs.readyState <= WS.OPEN) clientWs.close(); cleanup(); });
-    clientWs.on('error', () => { upstream.close(); cleanup(); });
+    clientWs.on('close', () => { console.log(`  ${tag} client closed`); upstream.close(); });
+    upstream.on('close', () => { console.log(`  ${tag} upstream closed`); if (clientWs.readyState <= WS.OPEN) clientWs.close(); });
+    clientWs.on('error', () => { upstream.close(); });
     upstream.on('error', (err) => {
-      console.warn(`  [SignalingProxy] conn=${connId} upstream error:`, (err as Error).message);
+      console.warn(`  ${tag} upstream error:`, (err as Error).message);
       if (clientWs.readyState <= WS.OPEN) clientWs.close();
-      cleanup();
     });
   });
 });
