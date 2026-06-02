@@ -44,7 +44,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
 
   return (
     <motion.div
-      className={`relative rounded-sm border-2 overflow-hidden transition-all duration-300 ${borderClass}`}
+      className={`relative rounded-lg border-2 overflow-hidden transition-all duration-300 ${borderClass}`}
       style={{ '--agent-color': color } as React.CSSProperties}
       layout
       initial={{ opacity: 0, scale: 0.9 }}
