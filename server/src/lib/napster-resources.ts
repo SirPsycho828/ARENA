@@ -299,11 +299,19 @@ export async function initNapsterResources(serverUrl: string): Promise<NapsterRe
 
   console.log('\n  Initializing Napster resources...');
 
-  const [knowledgeBases, faqCollections, functionIds] = await Promise.all([
-    createKnowledgeBases(serverUrl),
-    createFaqCollections(),
-    createFunctions(serverUrl),
-  ]);
+  let knowledgeBases: Record<string, string> = {};
+  let faqCollections: Record<string, string> = {};
+  let functionIds: string[] = [];
+
+  try {
+    [knowledgeBases, faqCollections, functionIds] = await Promise.all([
+      createKnowledgeBases(serverUrl),
+      createFaqCollections(),
+      createFunctions(serverUrl),
+    ]);
+  } catch (err) {
+    console.error('  Napster resource init failed (non-fatal):', (err as Error).message);
+  }
 
   cached = { knowledgeBases, faqCollections, functionIds };
   console.log(`  Napster resources ready: ${Object.keys(knowledgeBases).length} KBs, ${Object.keys(faqCollections).length} FAQs, ${functionIds.length} functions\n`);
