@@ -87,7 +87,7 @@ export function ConsensusNeedle() {
                 : 'bg-accent/15 text-accent hover:bg-accent/25 active:scale-[0.97]'
             }`}
           >
-            THIS
+            {consensus.leftPole}
           </button>
           <button
             onClick={() => votePole('right')}
@@ -98,7 +98,7 @@ export function ConsensusNeedle() {
                 : 'bg-primary/15 text-primary hover:bg-primary/25 active:scale-[0.97]'
             }`}
           >
-            THAT
+            {consensus.rightPole}
           </button>
         </div>
 

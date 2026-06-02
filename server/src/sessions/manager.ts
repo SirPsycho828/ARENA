@@ -185,6 +185,8 @@ export class SessionManager {
   // Consensus meter
   private consensusState: ConsensusState | null = null;
   private poleVoterRecord: Set<string> = new Set();
+  private pendingPoleGeneration: string | null = null; // agentId awaiting pole response
+  private poleGenerationTimeout: ReturnType<typeof setTimeout> | null = null;
 
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
@@ -594,7 +596,8 @@ export class SessionManager {
   // ─── Consensus Meter ──────────────────────────────────────────────────
 
   private initConsensus(topic: string) {
-    const poles = this.generatePoles(topic);
+    // Start with template fallback poles
+    const fallback = this.generatePoles(topic);
     const agentStances: Record<string, number> = {};
 
     // Assign each agent a spread-out initial stance so the meter has visual tension
@@ -605,8 +608,8 @@ export class SessionManager {
     });
 
     this.consensusState = {
-      leftPole: poles.left,
-      rightPole: poles.right,
+      leftPole: fallback.left,
+      rightPole: fallback.right,
       needlePosition: 0,
       agentStances,
       viewerVotes: { left: 0, right: 0 },
@@ -614,6 +617,27 @@ export class SessionManager {
     this.poleVoterRecord.clear();
     this.updateNeedlePosition();
     (this.io as any).emit('consensus_update', this.consensusState);
+
+    // Ask a non-speaking agent to generate better AI poles
+    if (this.session && this.session.agentIds.length > 0) {
+      const currentSpeaker = this.turnManager?.getCurrentSpeaker();
+      const poleAgentId = this.session.agentIds.find(id => id !== currentSpeaker)
+        || this.session.agentIds[this.session.agentIds.length - 1];
+
+      this.pendingPoleGeneration = poleAgentId;
+      if (this.poleGenerationTimeout) clearTimeout(this.poleGenerationTimeout);
+      this.poleGenerationTimeout = setTimeout(() => {
+        if (this.pendingPoleGeneration) {
+          console.log('  [Consensus] Pole generation timed out — keeping fallback labels');
+          this.pendingPoleGeneration = null;
+        }
+      }, 8000);
+
+      const prompt = `SYSTEM TASK — not part of the debate. Reply with ONLY the formatted labels, nothing else.\n\nTopic: "${topic}"\n\nGenerate two short, witty opposing position labels for the extreme sides of this debate topic. Max 4 words each. Be creative, fun, and specific to this topic.\n\nFormat EXACTLY as: LEFT: [pro/for label] | RIGHT: [against/con label]\n\nExample for "Is pineapple on pizza acceptable?": LEFT: PINEAPPLE PARADISE | RIGHT: FRUIT-FREE ZONE`;
+
+      this.omniagent.sendMessage(poleAgentId, 'system', prompt, true);
+      console.log(`  [Consensus] Requesting AI poles from ${this.agentConfigs.get(poleAgentId)?.name || poleAgentId}`);
+    }
   }
 
   private generatePoles(topic: string): { left: string; right: string } {
@@ -704,6 +728,25 @@ export class SessionManager {
     const viewerRatio = totalVotes > 0 ? (right - left) / totalVotes : 0;
 
     this.consensusState.needlePosition = Math.max(-1, Math.min(1, agentAvg * 0.6 + viewerRatio * 0.4));
+  }
+
+  private parsePoleResponse(text: string) {
+    if (!this.consensusState) return;
+
+    // Try to parse "LEFT: xxx | RIGHT: yyy" format
+    const match = text.match(/LEFT:\s*(.+?)\s*\|\s*RIGHT:\s*(.+)/i);
+    if (match) {
+      const left = match[1].trim().replace(/['"]+/g, '').toUpperCase().slice(0, 30);
+      const right = match[2].trim().replace(/['"]+/g, '').toUpperCase().slice(0, 30);
+      if (left.length > 2 && right.length > 2) {
+        this.consensusState.leftPole = left;
+        this.consensusState.rightPole = right;
+        (this.io as any).emit('consensus_update', this.consensusState);
+        console.log(`  [Consensus] AI poles: "${left}" vs "${right}"`);
+        return;
+      }
+    }
+    console.log(`  [Consensus] Failed to parse AI poles, keeping fallback. Response: "${text.slice(0, 120)}"`);
   }
 
   // ─── Private: Debug ──────────────────────────────────────────────────
@@ -915,6 +958,14 @@ export class SessionManager {
 
     // Text response completed — save transcript, mark turn text as done
     agent.on('speech_end', (data: { agentId: string; agentName: string; text: string; timestamp: number }) => {
+      // Intercept pole generation responses before any other processing
+      if (this.pendingPoleGeneration === agentId) {
+        this.pendingPoleGeneration = null;
+        if (this.poleGenerationTimeout) { clearTimeout(this.poleGenerationTimeout); this.poleGenerationTimeout = null; }
+        this.parsePoleResponse(data.text);
+        return;
+      }
+
       // Only process transcripts from the current speaker (ignore auto-responses)
       if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
       // Napster API can fire multiple completed events per turn — only process the first
