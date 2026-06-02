@@ -69,16 +69,16 @@ export function AgentPanel({ id, name, personality, color }: Props) {
       <div className="absolute bottom-0 inset-x-0 z-20 flex items-end">
         {/* Color accent — left edge bar */}
         <div className="w-1 self-stretch shrink-0" style={{ backgroundColor: color }} />
-        {/* Single compact strip */}
-        <div className="flex-1 flex items-center gap-2 bg-[#0a0f18]/95 backdrop-blur-sm pl-2.5 pr-2 py-1.5">
+        {/* Single compact strip — never wraps */}
+        <div className="flex-1 flex items-center gap-1.5 sm:gap-2 bg-[#0a0f18]/95 backdrop-blur-sm pl-2 sm:pl-2.5 pr-1.5 sm:pr-2 py-1 sm:py-1.5 overflow-hidden">
           <div
-            className="flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+            className="flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity flex items-baseline gap-1.5 overflow-hidden"
             onClick={() => setShowStats(true)}
           >
-            <span className="font-display text-[13px] uppercase tracking-wider leading-none" style={{ color }}>
+            <span className="font-display text-[11px] sm:text-[13px] uppercase tracking-wider leading-none whitespace-nowrap truncate" style={{ color }}>
               {name}
             </span>
-            <span className="text-[10px] text-[#64748b] ml-2 tracking-wide hidden sm:inline">
+            <span className="text-[9px] sm:text-[10px] text-[#64748b] tracking-wide whitespace-nowrap truncate hidden sm:inline">
               {personality}
             </span>
           </div>

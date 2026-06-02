@@ -33,8 +33,12 @@ export function TranscriptFeed() {
 
   const debateStart = session?.startedAt || Date.now();
 
+  // Auto-scroll only within the transcript container itself, never the page
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = bottomRef.current?.parentElement;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [transcripts.length, streamingTranscript?.text]);
 
   return (

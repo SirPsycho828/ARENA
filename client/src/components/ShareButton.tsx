@@ -28,7 +28,7 @@ export function ShareButton() {
   return (
     <button
       onClick={handleShare}
-      className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      className="hidden sm:block p-1.5 rounded-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
       title={copied ? 'Copied!' : 'Share'}
     >
       {copied ? <Check size={14} className="text-success" /> : <Share2 size={14} />}
