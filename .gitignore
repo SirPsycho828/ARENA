@@ -9,3 +9,4 @@ poc/.env
 *.log
 .playwright-mcp/
 .claude/
+.worktrees/
