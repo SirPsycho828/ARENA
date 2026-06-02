@@ -65,25 +65,29 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
     }
   }, [token]);
 
-  // Forward debate text to the avatar for lip-sync when this agent finishes speaking
+  const isSpeaking = currentSpeaker === agentId;
+
+  // Lip-sync: when this agent becomes the current speaker, send text to avatar.
+  // When speaker changes away, stop the avatar talking.
   useEffect(() => {
     if (!avatarReady || !iframeRef.current?.contentWindow) return;
 
-    // Find the most recent transcript from this agent
-    const lastFromAgent = [...transcripts].reverse().find((t) => t.agentId === agentId);
-    if (!lastFromAgent || lastFromAgent.text === lastSentTextRef.current) return;
-
-    // Only send when this agent just finished speaking (it's no longer the current speaker,
-    // or a new transcript appeared)
-    lastSentTextRef.current = lastFromAgent.text;
-    iframeRef.current.contentWindow.postMessage(
-      { type: 'speak-text', text: lastFromAgent.text },
-      '*'
-    );
-    console.log(`[Avatar:${agentName}] Forwarding debate text for lip-sync (${lastFromAgent.text.length} chars)`);
-  }, [transcripts, avatarReady, agentId]);
-
-  const isSpeaking = currentSpeaker === agentId;
+    if (isSpeaking) {
+      // Find the most recent transcript from this agent to lip-sync
+      const lastFromAgent = [...transcripts].reverse().find((t) => t.agentId === agentId);
+      if (lastFromAgent && lastFromAgent.text !== lastSentTextRef.current) {
+        lastSentTextRef.current = lastFromAgent.text;
+        iframeRef.current.contentWindow.postMessage(
+          { type: 'speak-text', text: lastFromAgent.text },
+          '*'
+        );
+        console.log(`[Avatar:${agentName}] Lip-sync started (${lastFromAgent.text.length} chars)`);
+      }
+    } else {
+      // This agent is no longer the speaker — stop lip-sync
+      iframeRef.current.contentWindow.postMessage({ type: 'stop-speaking' }, '*');
+    }
+  }, [isSpeaking, transcripts, avatarReady, agentId]);
 
   return (
     <div className={`w-full h-full relative ${isSpeaking ? 'ring-2 ring-offset-2 ring-offset-gray-900' : ''}`}

@@ -130,6 +130,17 @@ window.addEventListener('message', (e) => {
   }
 });
 
+// Handle stop-speaking messages — stop avatar lip-sync when turn changes
+window.addEventListener('message', (e) => {
+  if (e.data?.type !== 'stop-speaking' || !instance) return;
+  try {
+    instance.stopAvatarTalking();
+    relayToParent('info', '[Avatar] Stopped talking');
+  } catch (err) {
+    relayToParent('error', `[Avatar] stopAvatarTalking failed: ${(err as Error).message}`);
+  }
+});
+
 // Signal parent that iframe is ready to receive token
 window.parent.postMessage({ type: 'avatar-frame-ready' }, '*');
 relayToParent('info', '[Avatar] Iframe script loaded, sent frame-ready');
