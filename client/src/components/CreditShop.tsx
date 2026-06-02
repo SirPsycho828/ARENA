@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Coins } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -43,7 +44,7 @@ export function CreditShop({ open, onClose }: CreditShopProps) {
     }
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -114,6 +115,7 @@ export function CreditShop({ open, onClose }: CreditShopProps) {
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
