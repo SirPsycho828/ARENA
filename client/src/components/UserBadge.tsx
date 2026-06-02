@@ -16,7 +16,7 @@ export function UserBadge() {
       <>
         <button
           onClick={() => setShowAuth(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-arena-surface border border-arena-border-subtle text-arena-text-secondary text-xs hover:text-arena-cyan hover:border-arena-cyan/40 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-muted border border-border text-muted-foreground text-xs font-body hover:text-accent hover:border-accent/40 transition-colors cursor-pointer"
         >
           <User size={14} />
           Sign In
@@ -28,38 +28,38 @@ export function UserBadge() {
 
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {/* Credit balance */}
         <button
           onClick={() => setShowShop(true)}
-          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-arena-surface border border-arena-border-subtle hover:border-arena-warning/40 transition-colors"
+          className="flex items-center gap-1 px-2 py-1 rounded-sm bg-muted border border-border hover:border-warning/40 transition-colors cursor-pointer"
           title="Buy credits"
         >
-          <Coins size={12} className="text-arena-warning" />
-          <span className="text-xs font-bold text-arena-warning">
+          <Coins size={11} className="text-warning" />
+          <span className="text-[10px] font-mono font-bold text-warning">
             {credits ?? '...'}
           </span>
         </button>
 
         {/* User info */}
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-arena-surface border border-arena-border-subtle">
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-sm bg-muted border border-border">
           {user.photoURL ? (
-            <img src={user.photoURL} alt="" className="w-5 h-5 rounded-full" />
+            <img src={user.photoURL} alt="" className="w-4 h-4 rounded-sm" />
           ) : (
-            <div className="w-5 h-5 rounded-full bg-arena-cyan/20 flex items-center justify-center text-[10px] font-bold text-arena-cyan">
+            <div className="w-4 h-4 rounded-sm bg-accent/20 flex items-center justify-center text-[9px] font-bold text-accent">
               {(displayName || user.email || '?')[0].toUpperCase()}
             </div>
           )}
-          <span className="text-xs text-arena-text-secondary max-w-[100px] truncate">
+          <span className="text-[10px] font-mono text-muted-foreground max-w-[80px] truncate hidden sm:inline">
             {displayName || user.email?.split('@')[0] || 'User'}
           </span>
         </div>
         <button
           onClick={() => signOut()}
-          className="text-arena-text-muted hover:text-arena-text transition-colors"
+          className="p-1 rounded-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           title="Sign out"
         >
-          <LogOut size={14} />
+          <LogOut size={12} />
         </button>
       </div>
       <CreditShop open={showShop} onClose={() => setShowShop(false)} />

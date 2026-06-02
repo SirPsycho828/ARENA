@@ -10,9 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@fontsource/inter": "^5.2.8",
-    "@fontsource/jetbrains-mono": "^5.2.8",
-    "@fontsource/space-grotesk": "^5.2.10",
     "@reduxjs/toolkit": "^2.12.0",
     "@touchcastllc/napster-companion-api": "^1.0.0-alpha.48",
     "firebase": "^12.14.0",

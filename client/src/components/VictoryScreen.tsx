@@ -37,14 +37,13 @@ export function VictoryScreen({ data }: VictoryScreenProps) {
     return () => clearInterval(t);
   }, [countdown]);
 
-  // Sort agents by votes
   const ranked = [...data.agents]
     .map((a) => ({ ...a, votes: data.voteTallies[a.id] || 0 }))
     .sort((a, b) => b.votes - a.votes);
 
   const confettiColors = data.winner
-    ? [data.winner.color, '#FFD700', '#00F0FF', '#FF2D6B', '#8B5CF6']
-    : ['#FFD700', '#00F0FF', '#FF2D6B'];
+    ? [data.winner.color, '#FFC800', '#3B9AE1', '#E63946', '#8B5CF6']
+    : ['#FFC800', '#3B9AE1', '#E63946'];
 
   return (
     <motion.div
@@ -52,10 +51,9 @@ export function VictoryScreen({ data }: VictoryScreenProps) {
       animate={{ opacity: 1 }}
       className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden"
     >
-      {/* Dark backdrop */}
-      <div className="absolute inset-0 bg-arena-base/95" />
+      <div className="absolute inset-0 bg-background/95" />
 
-      {/* Spotlight effect */}
+      {/* Spotlight */}
       {data.winner && (
         <div className="absolute inset-0 pointer-events-none" style={{
           background: `radial-gradient(ellipse at 50% 40%, ${data.winner.color}15, transparent 60%)`,
@@ -80,7 +78,7 @@ export function VictoryScreen({ data }: VictoryScreenProps) {
         ))}
       </div>
 
-      {/* Content */}
+      {/* Content — broadcast results card */}
       <div className="relative z-10 flex flex-col items-center gap-6 max-w-lg w-full px-6">
         {/* Trophy */}
         <motion.div
@@ -88,25 +86,29 @@ export function VictoryScreen({ data }: VictoryScreenProps) {
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
         >
-          <Trophy size={56} className="text-yellow-400" />
+          <Trophy size={56} className="text-breaking" />
         </motion.div>
 
-        {/* Winner name */}
+        {/* Winner lower-third */}
         {data.winner ? (
           <motion.div
-            initial={{ y: 30, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="text-center"
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ delay: 0.4, duration: 0.3 }}
+            className="w-full origin-left"
           >
-            <p className="text-arena-text-muted text-sm uppercase tracking-widest mb-2">Winner</p>
-            <h1
-              className="font-display text-5xl md:text-6xl font-bold"
-              style={{ color: data.winner.color, textShadow: `0 0 40px ${data.winner.color}60` }}
-            >
-              {data.winner.name}
-            </h1>
-            <p className="text-arena-text-secondary mt-1">{data.winner.votes} votes</p>
+            <div className="h-[3px]" style={{ backgroundColor: data.winner.color }} />
+            <div className="bg-card/90 backdrop-blur-sm px-6 py-4 text-center">
+              <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-1">Tonight's Winner</p>
+              <h1
+                className="font-display text-5xl md:text-6xl uppercase"
+                style={{ color: data.winner.color, textShadow: `0 0 40px ${data.winner.color}60` }}
+              >
+                {data.winner.name}
+              </h1>
+              <p className="text-muted-foreground mt-1 font-mono tabular-nums">{data.winner.votes} votes</p>
+            </div>
+            <div className="h-[2px]" style={{ backgroundColor: data.winner.color, opacity: 0.4 }} />
           </motion.div>
         ) : (
           <motion.div
@@ -115,35 +117,35 @@ export function VictoryScreen({ data }: VictoryScreenProps) {
             transition={{ delay: 0.4 }}
             className="text-center"
           >
-            <h1 className="font-display text-4xl font-bold text-arena-text-bright">It's a Tie!</h1>
+            <h1 className="font-display text-4xl uppercase text-foreground">It's a Tie!</h1>
           </motion.div>
         )}
 
-        {/* Vote breakdown */}
+        {/* Vote breakdown — election night style */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.6 }}
-          className="w-full space-y-2 bg-arena-surface/80 rounded-xl p-4 border border-arena-border-subtle"
+          className="w-full space-y-2 bg-card/80 rounded-sm p-4 border border-border"
         >
           {ranked.map((agent, i) => {
             const pct = totalVotes > 0 ? (agent.votes / totalVotes) * 100 : 0;
             return (
               <div key={agent.id} className="flex items-center gap-3">
-                <span className="text-arena-text-muted text-sm w-5">#{i + 1}</span>
-                <span className="font-semibold text-sm w-28 truncate" style={{ color: agent.color }}>
+                <span className="text-muted-foreground text-sm font-mono w-5">#{i + 1}</span>
+                <span className="font-display text-sm w-28 truncate uppercase" style={{ color: agent.color }}>
                   {agent.name}
                 </span>
-                <div className="flex-1 h-5 bg-arena-elevated rounded-full overflow-hidden">
+                <div className="flex-1 h-5 bg-muted rounded-sm overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${pct}%` }}
                     transition={{ delay: 0.8 + i * 0.15, duration: 0.6, ease: 'easeOut' }}
-                    className="h-full rounded-full"
+                    className="h-full rounded-sm"
                     style={{ backgroundColor: agent.color }}
                   />
                 </div>
-                <span className="text-sm font-mono text-arena-text-secondary w-16 text-right">
+                <span className="text-sm font-mono text-muted-foreground w-16 text-right tabular-nums">
                   {agent.votes} ({Math.round(pct)}%)
                 </span>
               </div>
@@ -151,16 +153,16 @@ export function VictoryScreen({ data }: VictoryScreenProps) {
           })}
         </motion.div>
 
-        {/* Stats row */}
+        {/* Stats strip */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
-          className="flex gap-6 text-arena-text-muted text-sm"
+          className="flex gap-6 text-muted-foreground text-sm font-mono"
         >
           <span className="flex items-center gap-1.5"><Clock size={14} /> {formatDuration(data.duration)}</span>
-          <span className="flex items-center gap-1.5"><MessageSquare size={14} /> {data.totalMessages} messages</span>
-          <span className="flex items-center gap-1.5"><ThumbsUp size={14} /> {totalVotes} votes</span>
+          <span className="flex items-center gap-1.5"><MessageSquare size={14} /> {data.totalMessages}</span>
+          <span className="flex items-center gap-1.5"><ThumbsUp size={14} /> {totalVotes}</span>
         </motion.div>
 
         {/* Next debate countdown */}
@@ -168,7 +170,7 @@ export function VictoryScreen({ data }: VictoryScreenProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1.2 }}
-          className="text-arena-text-muted text-sm mt-4"
+          className="text-muted-foreground text-sm mt-4 font-mono"
         >
           {countdown > 0 ? `Next debate in ${countdown}s...` : 'Starting new debate...'}
         </motion.p>

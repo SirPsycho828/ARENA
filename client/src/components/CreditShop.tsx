@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Coins } from 'lucide-react';
+import { X, Coins, Zap, Mic, MessageSquare } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useArenaStore } from '../store/arena';
 
@@ -11,9 +11,16 @@ interface CreditShopProps {
 }
 
 const PACKAGES = [
-  { id: 'starter', credits: 10, price: '$5', highlight: false },
-  { id: 'popular', credits: 25, price: '$10', highlight: true },
-  { id: 'whale', credits: 50, price: '$18', highlight: false },
+  { id: 'starter', credits: 10, price: '$5', label: 'STARTER', highlight: false },
+  { id: 'popular', credits: 25, price: '$10', label: 'POPULAR', highlight: true },
+  { id: 'whale', credits: 50, price: '$18', label: 'WHALE', highlight: false },
+];
+
+const COSTS = [
+  { icon: Zap, label: 'Chaos Rule', cost: '1/turn', color: 'text-primary' },
+  { icon: Zap, label: 'Quick Chaos', cost: '3', color: 'text-primary' },
+  { icon: MessageSquare, label: 'Topic', cost: '5', color: 'text-accent' },
+  { icon: Mic, label: 'Voice Challenge', cost: '3', color: 'text-accent' },
 ];
 
 export function CreditShop({ open, onClose }: CreditShopProps) {
@@ -51,67 +58,93 @@ export function CreditShop({ open, onClose }: CreditShopProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-background/80 backdrop-blur-sm"
           onClick={onClose}
         >
           <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            className="bg-arena-elevated border border-arena-border-subtle rounded-2xl p-6 w-full max-w-sm mx-4 space-y-5"
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 10 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className="bg-card border border-border rounded-md w-full max-w-sm mx-4 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
+            {/* Header — broadcast lower-third style */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted">
               <div className="flex items-center gap-2">
-                <Coins size={20} className="text-arena-warning" />
-                <h2 className="font-display font-bold text-lg text-arena-text-bright">
-                  Buy Credits
+                <div className="w-1 h-6 bg-warning animate-lower-third-bar" />
+                <Coins size={16} className="text-warning" />
+                <h2 className="font-display text-lg tracking-wider text-card-foreground">
+                  CREDIT SHOP
                 </h2>
               </div>
-              <button onClick={onClose} className="text-arena-text-muted hover:text-arena-text">
+              <button onClick={onClose} className="ml-auto text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
                 <X size={18} />
               </button>
             </div>
 
-            {credits !== null && (
-              <p className="text-sm text-arena-text-secondary">
-                Current balance: <span className="font-bold text-arena-warning">{credits}</span> credits
-              </p>
-            )}
+            <div className="p-5 space-y-4">
+              {/* Balance display */}
+              {credits !== null && (
+                <div className="flex items-center justify-between px-3 py-2 rounded-sm bg-muted border border-border">
+                  <span className="text-xs font-body text-muted-foreground tracking-wider uppercase">Balance</span>
+                  <span className="font-display text-xl tracking-wider text-warning">{credits}</span>
+                </div>
+              )}
 
-            <div className="space-y-3">
-              {PACKAGES.map((pkg) => (
-                <button
-                  key={pkg.id}
-                  onClick={() => handlePurchase(pkg.id)}
-                  disabled={loading !== null}
-                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl border-2 transition-all ${
-                    pkg.highlight
-                      ? 'border-arena-cyan bg-arena-cyan/5 hover:bg-arena-cyan/10'
-                      : 'border-arena-border-subtle hover:border-arena-border bg-arena-surface'
-                  } disabled:opacity-50`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="font-display font-bold text-xl text-arena-text-bright">
-                      {pkg.credits}
-                    </span>
-                    <span className="text-sm text-arena-text-secondary">credits</span>
-                    {pkg.highlight && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-arena-cyan/20 text-arena-cyan">
-                        Best Value
+              {/* Credit packages */}
+              <div className="space-y-2">
+                {PACKAGES.map((pkg) => (
+                  <button
+                    key={pkg.id}
+                    onClick={() => handlePurchase(pkg.id)}
+                    disabled={loading !== null}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-sm border transition-all disabled:opacity-50 cursor-pointer ${
+                      pkg.highlight
+                        ? 'border-accent bg-accent/5 hover:bg-accent/10'
+                        : 'border-border bg-muted hover:bg-muted/80'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-display text-2xl tracking-wider text-card-foreground">
+                        {pkg.credits}
                       </span>
-                    )}
-                  </div>
-                  <span className="font-display font-bold text-lg text-arena-text-bright">
-                    {loading === pkg.id ? '...' : pkg.price}
-                  </span>
-                </button>
-              ))}
-            </div>
+                      <div className="text-left">
+                        <span className="text-xs font-body text-muted-foreground">credits</span>
+                        {pkg.highlight && (
+                          <div className="mt-0.5">
+                            <span className="px-1.5 py-0.5 rounded-sm text-[9px] font-mono font-bold tracking-wider bg-accent/20 text-accent">
+                              BEST VALUE
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <span className="font-display text-lg tracking-wider text-card-foreground">
+                      {loading === pkg.id ? '...' : pkg.price}
+                    </span>
+                  </button>
+                ))}
+              </div>
 
-            <p className="text-[10px] text-arena-text-muted text-center">
-              Secure payment via Stripe. Credits never expire.
-            </p>
+              {/* Cost reference */}
+              <div className="pt-2 border-t border-border">
+                <p className="text-[10px] font-mono text-muted-foreground tracking-wider uppercase mb-2">CREDIT COSTS</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {COSTS.map((cost) => (
+                    <div key={cost.label} className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
+                      <cost.icon size={10} className={cost.color} />
+                      <span>{cost.label}</span>
+                      <span className="ml-auto text-card-foreground">{cost.cost}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-[10px] font-mono text-muted-foreground text-center tracking-wider">
+                Secure payment via Stripe. Credits never expire.
+              </p>
+            </div>
           </motion.div>
         </motion.div>
       )}

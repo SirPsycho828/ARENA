@@ -36,11 +36,11 @@ export function QuickInjects() {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs text-arena-text-muted uppercase tracking-wide">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-wider font-display">
           <Sparkles size={12} />
           Quick Chaos
         </div>
-        <span className="text-[10px] text-arena-text-muted">3 credits each</span>
+        <span className="text-[10px] text-muted-foreground font-mono">3 credits each</span>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {PRESETS.map((preset) => (
@@ -48,14 +48,14 @@ export function QuickInjects() {
             key={preset.key}
             onClick={() => handleClick(preset.key)}
             disabled={!isActive || (!!user && !canAfford)}
-            className="px-2.5 py-1 rounded-full text-xs font-medium bg-arena-surface border border-arena-border-subtle text-arena-text-secondary hover:text-arena-cyan hover:border-arena-cyan/40 hover:bg-arena-cyan/5 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-2.5 py-1 rounded-sm text-xs font-medium bg-muted border border-border text-muted-foreground hover:text-accent hover:border-accent/40 hover:bg-accent/5 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {preset.label}
           </button>
         ))}
       </div>
       {user && !canAfford && (
-        <p className="text-[10px] text-arena-error">Not enough credits for quick chaos</p>
+        <p className="text-[10px] text-destructive font-mono">Not enough credits for quick chaos</p>
       )}
       <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
     </div>

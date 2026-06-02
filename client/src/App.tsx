@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useArenaStore } from './store/arena';
 import { useAuth } from './contexts/AuthContext';
-import { SplashScreen } from './components/SplashScreen';
+import { LandingPage } from './components/LandingPage';
 import { AgentEntrance } from './components/AgentEntrance';
 import { TopicBanner } from './components/TopicBanner';
 import { SpectatorBar } from './components/SpectatorBar';
@@ -15,7 +15,7 @@ import { VoiceChallenger } from './components/VoiceChallenger';
 import { VictoryScreen } from './components/VictoryScreen';
 import { JudgePanel } from './components/JudgePanel';
 import { sounds } from './lib/sounds';
-import { Zap } from 'lucide-react';
+import { Zap, X } from 'lucide-react';
 
 type Phase = 'splash' | 'entrance' | 'arena';
 
@@ -24,7 +24,7 @@ function App() {
   const [judgeMode, setJudgeMode] = useState(() =>
     new URLSearchParams(window.location.search).has('judge')
   );
-  const [mobileDrawer, setMobileDrawer] = useState(false);
+  const [chaosDrawer, setChaosDrawer] = useState(false);
   const [creditSuccess, setCreditSuccess] = useState(false);
   const { user } = useAuth();
   const connect = useArenaStore((s) => s.connect);
@@ -68,7 +68,6 @@ function App() {
 
   const handleEnterArena = useCallback(() => {
     sounds.arenaEnter();
-    // If agents are ready, show entrance sequence; otherwise go straight to arena
     if (agents.length > 0) {
       setPhase('entrance');
     } else {
@@ -95,7 +94,7 @@ function App() {
 
   return (
     <>
-      {/* Splash screen overlay */}
+      {/* Landing page overlay */}
       <AnimatePresence>
         {phase === 'splash' && (
           <motion.div
@@ -103,7 +102,7 @@ function App() {
             exit={{ opacity: 0, y: -50 }}
             transition={{ duration: 0.6 }}
           >
-            <SplashScreen onEnter={handleEnterArena} />
+            <LandingPage onEnter={handleEnterArena} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -121,128 +120,130 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* Main arena */}
-      <div className={`flex flex-col h-screen bg-arena-base relative z-0 ${phase !== 'arena' ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}>
+      {/* ═══ FULL CANVAS ARENA ═══ */}
+      {phase === 'arena' && <div className="flex flex-col h-screen bg-background relative z-0 transition-opacity duration-500">
+        {/* Broadcast chyron bar */}
         <TopicBanner judgeMode={judgeMode} onToggleJudge={() => setJudgeMode((j) => !j)} />
         <SpectatorBar />
 
-        <div className="flex-1 flex overflow-hidden">
-          {/* Main stage */}
-          <main className="flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
-            {!session && (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center space-y-4">
-                  <h2 className="font-display text-3xl font-bold text-arena-text-bright">
-                    Welcome to the Arena
-                  </h2>
-                  <p className="text-arena-text-secondary max-w-md mx-auto">
-                    A live multi-agent debate arena where AI personalities argue in real-time.
-                    A debate will start automatically — hang tight.
-                  </p>
-                  <div className="flex items-center justify-center gap-2 text-arena-text-muted text-sm">
-                    <div className="w-2 h-2 bg-arena-cyan rounded-full animate-pulse" />
-                    Waiting for debate to begin...
-                  </div>
+        {/* Full-width main stage (Full Canvas — no sidebar) */}
+        <main className="flex-1 flex flex-col p-3 gap-3 overflow-y-auto">
+          {/* Empty state */}
+          {!session && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center space-y-4">
+                <h2 className="font-display text-3xl tracking-wider text-foreground">
+                  WELCOME TO THE ARENA
+                </h2>
+                <p className="text-sm font-body text-muted-foreground max-w-md mx-auto leading-relaxed">
+                  A live multi-agent debate arena where AI personalities argue in real-time.
+                  A debate will start automatically — hang tight.
+                </p>
+                <div className="flex items-center justify-center gap-2 text-muted-foreground text-xs font-mono tracking-wider">
+                  <div className="w-2 h-2 bg-accent rounded-full animate-live-pulse" />
+                  WAITING FOR DEBATE...
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {session && (
-              <>
-                {/* Agent video grid */}
-                <div className={`grid gap-3 ${
-                  agents.length <= 2
-                    ? 'grid-cols-1 sm:grid-cols-2'
-                    : agents.length === 3
-                    ? 'grid-cols-1 sm:grid-cols-3'
-                    : agents.length === 4
-                    ? 'grid-cols-2 lg:grid-cols-4'
-                    : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
-                }`}>
-                  {agents.map((agent) => (
-                    <AgentPanel
-                      key={agent.id}
-                      id={agent.id}
-                      name={agent.name}
-                      personality={agent.personality}
-                      color={agent.color}
-                    />
-                  ))}
-                </div>
+          {session && (
+            <>
+              {/* Agent video grid — full width */}
+              <div className={`grid gap-2 ${
+                agents.length <= 2
+                  ? 'grid-cols-1 sm:grid-cols-2'
+                  : agents.length === 3
+                  ? 'grid-cols-1 sm:grid-cols-3'
+                  : agents.length === 4
+                  ? 'grid-cols-2 lg:grid-cols-4'
+                  : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+              }`}>
+                {agents.map((agent) => (
+                  <AgentPanel
+                    key={agent.id}
+                    id={agent.id}
+                    name={agent.name}
+                    personality={agent.personality}
+                    color={agent.color}
+                  />
+                ))}
+              </div>
 
-                <ChaosStatusBar />
+              <ChaosStatusBar />
 
-                {/* Transcript feed */}
-                <div className="flex-1 min-h-0 bg-arena-surface rounded-xl border border-arena-border-subtle overflow-hidden">
-                  <TranscriptFeed />
-                </div>
-              </>
-            )}
-          </main>
+              {/* Transcript feed — full width */}
+              <div className="flex-1 min-h-0 bg-card rounded-md border border-border overflow-hidden">
+                <TranscriptFeed />
+              </div>
+            </>
+          )}
+        </main>
+      </div>}
 
-          {/* Sidebar (desktop) */}
-          <aside className="w-80 border-l border-arena-border-subtle bg-arena-surface/50 p-4 overflow-y-auto hidden lg:flex flex-col gap-4">
-            <ChaosPanel />
-
-            {/* Voice Challenger */}
-            {session?.status === 'active' && (
-              <VoiceChallenger
-                agents={agents}
-                isActive={challengerActive}
-                onStart={handleChallengeStart}
-                onEnd={handleChallengeEnd}
-              />
-            )}
-          </aside>
-        </div>
-      </div>
-
-      {/* Mobile chaos button */}
+      {/* ═══ FLOATING CHAOS TRIGGER (Full Canvas: edge-triggered) ═══ */}
       {phase === 'arena' && session && (
         <button
-          onClick={() => setMobileDrawer(true)}
-          className="fixed bottom-20 right-4 z-20 lg:hidden w-12 h-12 rounded-full bg-arena-magenta text-white flex items-center justify-center shadow-lg shadow-arena-magenta/30 cursor-pointer"
+          onClick={() => setChaosDrawer(true)}
+          aria-label="Open chaos controls"
+          className="fixed bottom-6 right-6 z-20 w-12 h-12 rounded-sm bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/30 hover:brightness-110 active:scale-95 transition-all cursor-pointer animate-button-pulse"
         >
           <Zap size={20} />
         </button>
       )}
 
-      {/* Mobile bottom drawer */}
+      {/* ═══ CHAOS PANEL — Edge-triggered slide-in (Full Canvas) ═══ */}
       <AnimatePresence>
-        {mobileDrawer && (
+        {chaosDrawer && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-30 lg:hidden bg-arena-base/60 backdrop-blur-sm"
-            onClick={() => setMobileDrawer(false)}
+            className="fixed inset-0 z-30 bg-background/60 backdrop-blur-sm"
+            onClick={() => setChaosDrawer(false)}
           >
+            {/* Right-edge panel on desktop, bottom sheet on mobile */}
             <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="absolute bottom-0 inset-x-0 bg-arena-surface rounded-t-2xl border-t border-arena-border-subtle p-4 max-h-[70vh] overflow-y-auto"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+              className="absolute right-0 top-0 bottom-0 w-full sm:w-96 bg-card border-l border-border overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="w-10 h-1 bg-arena-border rounded-full mx-auto mb-4" />
-              <ChaosPanel />
-              {session?.status === 'active' && (
-                <div className="mt-4">
+              {/* Panel header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted sticky top-0 z-10">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-5 bg-primary animate-lower-third-bar" />
+                  <Zap size={14} className="text-primary" />
+                  <span className="font-display text-sm tracking-wider">CHAOS CONTROLS</span>
+                </div>
+                <button
+                  onClick={() => setChaosDrawer(false)}
+                  aria-label="Close chaos panel"
+                  className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <ChaosPanel />
+                {session?.status === 'active' && (
                   <VoiceChallenger
                     agents={agents}
                     isActive={challengerActive}
                     onStart={handleChallengeStart}
                     onEnd={handleChallengeEnd}
                   />
-                </div>
-              )}
+                )}
+              </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Reaction overlay (always on top) */}
+      {/* Reaction overlay */}
       {phase === 'arena' && (
         <ReactionOverlay
           onReaction={handleReaction}
@@ -269,7 +270,7 @@ function App() {
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg bg-green-500/90 text-white font-semibold text-sm shadow-lg"
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-sm bg-success text-white font-body font-semibold text-sm"
           >
             Credits added successfully!
           </motion.div>

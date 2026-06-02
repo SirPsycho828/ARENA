@@ -34,7 +34,7 @@ export function SoundToggle() {
     <div className="flex items-center gap-1">
       <button
         onClick={handleToggle}
-        className="p-1.5 rounded-md hover:bg-white/5 transition-colors text-arena-text-secondary hover:text-arena-text-bright"
+        className="p-1.5 rounded-sm hover:bg-muted transition-colors text-muted-foreground hover:text-foreground cursor-pointer"
         title={soundMuted ? 'Unmute' : 'Mute'}
       >
         <Icon size={16} />
@@ -46,7 +46,7 @@ export function SoundToggle() {
         step="0.05"
         value={soundMuted ? 0 : volume}
         onChange={handleVolume}
-        className="w-16 h-1 accent-arena-cyan cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+        className="w-16 h-1 accent-accent cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
       />
     </div>
   );

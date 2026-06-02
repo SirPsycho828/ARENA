@@ -13,7 +13,7 @@ interface ReactionOverlayProps {
   incomingReactions: Array<{ emoji: string; id: string; x?: number }>;
 }
 
-const EMOJI_OPTIONS = ['🔥', '😂', '🤯', '👏', '💀', '🎤'];
+const EMOJI_OPTIONS = ['\u{1F525}', '\u{1F602}', '\u{1F92F}', '\u{1F44F}', '\u{1F480}', '\u{1F3A4}'];
 
 export function ReactionOverlay({ onReaction, incomingReactions }: ReactionOverlayProps) {
   const [localEmojis, setLocalEmojis] = useState<FloatingEmoji[]>([]);
@@ -29,7 +29,6 @@ export function ReactionOverlay({ onReaction, incomingReactions }: ReactionOverl
     setLocalEmojis((prev) => [...prev.slice(-14), newEmoji]);
     onReaction(emoji);
 
-    // Cleanup after animation
     setTimeout(() => {
       setLocalEmojis((prev) => prev.filter((e) => e.id !== id));
     }, 2000);
@@ -69,14 +68,14 @@ export function ReactionOverlay({ onReaction, incomingReactions }: ReactionOverl
         ))}
       </AnimatePresence>
 
-      {/* Reaction bar */}
+      {/* Reaction bar — broadcast style */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto">
-        <div className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-arena-base/70 backdrop-blur-md border border-arena-border-subtle/50">
+        <div className="flex items-center gap-1.5 px-3 py-2 rounded-sm bg-background/70 backdrop-blur-md border border-border/50">
           {EMOJI_OPTIONS.map((emoji) => (
             <button
               key={emoji}
               onClick={() => handleClick(emoji)}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-lg hover:bg-arena-hover/80 hover:scale-110 active:scale-95 transition-all"
+              className="w-9 h-9 rounded-sm flex items-center justify-center text-lg hover:bg-muted/80 hover:scale-110 active:scale-95 transition-all"
             >
               {emoji}
             </button>

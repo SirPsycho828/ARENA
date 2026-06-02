@@ -34,22 +34,22 @@ export function AgentEntrance({ agents, onComplete }: AgentEntranceProps) {
   const current = agents[currentIndex];
 
   return (
-    <div className="fixed inset-0 z-40 bg-arena-base/95 flex items-center justify-center overflow-hidden">
-      {/* Grid background */}
+    <div className="fixed inset-0 z-40 bg-background/95 flex items-center justify-center overflow-hidden">
+      {/* Grid background — broadcast control room */}
       <div className="absolute inset-0 opacity-5" style={{
-        backgroundImage: `linear-gradient(rgba(0,240,255,0.1) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(0,240,255,0.1) 1px, transparent 1px)`,
+        backgroundImage: `linear-gradient(rgba(59,154,225,0.15) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(59,154,225,0.15) 1px, transparent 1px)`,
         backgroundSize: '80px 80px',
       }} />
 
-      {/* VS text */}
+      {/* VS watermark */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <span className="text-[120px] md:text-[200px] font-display font-bold text-arena-border-subtle/20 select-none">
+        <span className="text-[120px] md:text-[200px] font-display text-border/20 select-none">
           VS
         </span>
       </div>
 
-      {/* Agent entrance */}
+      {/* Agent entrance — broadcast intro */}
       <AnimatePresence mode="wait">
         {current && (
           <motion.div
@@ -84,35 +84,44 @@ export function AgentEntrance({ agents, onComplete }: AgentEntranceProps) {
               {current.name.split(' ').pop()?.[0] || current.name[0]}
             </motion.div>
 
-            {/* Name */}
-            <motion.h2
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.25 }}
-              className="font-display text-4xl md:text-5xl font-bold"
-              style={{ color: current.color }}
+            {/* Lower-third name plate — broadcast style */}
+            <motion.div
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={{ delay: 0.2, duration: 0.3 }}
+              className="w-80 origin-left"
             >
-              {current.name}
-            </motion.h2>
+              <div className="h-[3px]" style={{ backgroundColor: current.color }} />
+              <div className="bg-card/90 backdrop-blur-sm px-5 py-3">
+                <motion.h2
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.35 }}
+                  className="font-display text-3xl md:text-4xl uppercase text-center"
+                  style={{ color: current.color }}
+                >
+                  {current.name}
+                </motion.h2>
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.45 }}
+                  className="text-muted-foreground text-sm tracking-widest uppercase text-center"
+                >
+                  {current.personality}
+                </motion.p>
+              </div>
+              <div className="h-[2px]" style={{ backgroundColor: current.color, opacity: 0.4 }} />
+            </motion.div>
 
-            {/* Personality */}
-            <motion.p
-              initial={{ y: 10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="text-arena-text-secondary text-lg tracking-wide uppercase"
-            >
-              {current.personality}
-            </motion.p>
-
-            {/* Fighter number */}
+            {/* Panelist number */}
             <motion.span
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
-              className="text-arena-text-muted text-sm font-mono"
+              className="text-muted-foreground text-sm font-mono tracking-wider"
             >
-              FIGHTER {currentIndex + 1} OF {agents.length}
+              PANELIST {currentIndex + 1} OF {agents.length}
             </motion.span>
           </motion.div>
         )}
@@ -125,7 +134,7 @@ export function AgentEntrance({ agents, onComplete }: AgentEntranceProps) {
             key={a.id}
             className="w-3 h-3 rounded-full transition-all duration-300"
             style={{
-              backgroundColor: i <= currentIndex ? a.color : 'rgba(107,107,138,0.3)',
+              backgroundColor: i <= currentIndex ? a.color : 'rgba(123,138,158,0.3)',
               boxShadow: i === currentIndex ? `0 0 12px ${a.color}` : 'none',
             }}
           />

@@ -24,27 +24,26 @@ export function AgentPanel({ id, name, personality, color }: Props) {
   const isChallenged = challengerActive && challengerAgentId === id;
   const votes = voteTallies[id] || 0;
 
-  // Determine momentum tier based on vote percentage
   const totalVotes = Object.values(voteTallies).reduce((a, b) => a + b, 0);
   const votePercent = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
   const momentum = votePercent > 70 ? 'dominating' : votePercent > 50 ? 'favorite' : votePercent > 30 ? 'rising' : 'normal';
   const isLeading = momentum !== 'normal' && votes > 0;
 
-  const momentumClass = isChallenged
-    ? 'border-arena-magenta animate-challenger-glow'
+  const borderClass = isChallenged
+    ? 'border-primary animate-challenger-glow'
     : isSpeaking
-    ? 'border-arena-cyan animate-speaker-glow'
+    ? 'border-accent animate-speaker-glow'
     : momentum === 'dominating'
-    ? 'border-arena-warning animate-momentum-dominating'
+    ? 'border-warning animate-momentum-dominating'
     : momentum === 'favorite'
-    ? 'border-arena-warning/70 animate-momentum-favorite'
+    ? 'border-warning/70 animate-momentum-favorite'
     : momentum === 'rising'
-    ? 'border-arena-warning/40 animate-momentum-rising'
-    : 'border-arena-border-subtle hover:border-arena-border';
+    ? 'border-warning/40 animate-momentum-rising'
+    : 'border-border hover:border-muted-foreground/30';
 
   return (
     <motion.div
-      className={`relative rounded-xl border-2 overflow-hidden transition-all duration-300 ${momentumClass}`}
+      className={`relative rounded-sm border-2 overflow-hidden transition-all duration-300 ${borderClass}`}
       style={{ '--agent-color': color } as React.CSSProperties}
       layout
       initial={{ opacity: 0, scale: 0.9 }}
@@ -52,8 +51,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
       transition={{ duration: 0.4 }}
     >
       {/* Video / Avatar */}
-      <div className="aspect-video bg-arena-elevated flex items-center justify-center relative overflow-hidden">
-        {/* Animated background gradient */}
+      <div className="aspect-video bg-card flex items-center justify-center relative overflow-hidden">
         <div
           className="absolute inset-0 opacity-10"
           style={{
@@ -64,13 +62,13 @@ export function AgentPanel({ id, name, personality, color }: Props) {
           <AgentVideo agentId={id} agentName={name} color={color} />
         </div>
 
-        {/* Speaking audio wave indicator */}
+        {/* Speaking waveform */}
         {isSpeaking && (
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-end gap-[3px] h-6">
             {[0, 1, 2, 3, 4].map((i) => (
               <div
                 key={i}
-                className="w-[3px] bg-arena-cyan rounded-full animate-waveform"
+                className="w-[3px] bg-accent rounded-full animate-waveform"
                 style={{ animationDelay: `${i * 0.15}s` }}
               />
             ))}
@@ -78,36 +76,40 @@ export function AgentPanel({ id, name, personality, color }: Props) {
         )}
       </div>
 
-      {/* Bottom overlay */}
-      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[rgba(10,10,15,0.95)] via-[rgba(10,10,15,0.7)] to-transparent p-3 pt-8">
-        <div className="flex items-end justify-between">
-          <div>
-            <h3
-              className="font-display font-semibold text-base leading-tight cursor-pointer hover:underline"
-              style={{ color }}
-              onClick={() => setShowStats(true)}
+      {/* Lower-third name plate — broadcast style */}
+      <div className="absolute bottom-0 inset-x-0">
+        {/* Red accent bar */}
+        <div className="h-[3px]" style={{ backgroundColor: color }} />
+        <div className="bg-gradient-to-t from-background/95 via-background/85 to-transparent p-3 pt-6">
+          <div className="flex items-end justify-between">
+            <div>
+              <h3
+                className="font-display text-base uppercase leading-tight cursor-pointer hover:opacity-80 transition-opacity"
+                style={{ color }}
+                onClick={() => setShowStats(true)}
+              >
+                {name}
+              </h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5 tracking-wide">{personality}</p>
+            </div>
+            <button
+              onClick={() => vote(id)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm bg-muted/80 hover:bg-border transition-all text-sm group"
             >
-              {name}
-            </h3>
-            <p className="text-[11px] text-arena-text-muted mt-0.5">{personality}</p>
+              <ThumbsUp size={14} className="group-hover:text-accent transition-colors" />
+              <span className={isLeading ? 'text-accent font-semibold' : ''}>{votes}</span>
+            </button>
           </div>
-          <button
-            onClick={() => vote(id)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-arena-hover/80 hover:bg-arena-border-subtle transition-all text-sm group"
-          >
-            <ThumbsUp size={14} className="group-hover:text-arena-cyan transition-colors" />
-            <span className={isLeading ? 'text-arena-cyan font-semibold' : ''}>{votes}</span>
-          </button>
         </div>
       </div>
 
-      {/* Status badges */}
+      {/* Status badges — top-right broadcast overlays */}
       <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
         {isSpeaking && !isChallenged && (
           <motion.span
             initial={{ opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-arena-cyan text-arena-base"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase bg-accent text-accent-foreground tracking-wider"
           >
             Speaking
           </motion.span>
@@ -116,7 +118,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
           <motion.span
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-arena-magenta text-white animate-challenger-badge"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase bg-primary text-primary-foreground animate-challenger-badge tracking-wider"
           >
             <Mic size={10} />
             {challengerViewerName ? `${challengerViewerName} CHALLENGING` : 'LIVE CHALLENGER'}
@@ -127,18 +129,18 @@ export function AgentPanel({ id, name, personality, color }: Props) {
             initial={{ scale: 0 }}
             animate={{ scale: [1, 1.1, 1] }}
             transition={{ repeat: Infinity, duration: 1.5 }}
-            className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-arena-warning/30 text-arena-warning border border-arena-warning/40"
+            className="px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase bg-warning/30 text-warning border border-warning/40"
           >
             DOMINATING
           </motion.span>
         )}
         {momentum === 'favorite' && (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-arena-warning/20 text-arena-warning">
+          <span className="px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase bg-warning/20 text-warning">
             CROWD FAVORITE
           </span>
         )}
         {momentum === 'rising' && (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-arena-warning/10 text-arena-warning/80">
+          <span className="px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase bg-warning/10 text-warning/80">
             Rising
           </span>
         )}

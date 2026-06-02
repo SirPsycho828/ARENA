@@ -35,143 +35,151 @@ export function ChaosPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Main chaos controls */}
-      <div className="bg-arena-elevated rounded-xl p-4 space-y-4">
-        <div className="flex items-center gap-2">
-          <Zap size={18} className="text-arena-magenta" />
-          <h2 className="font-display font-semibold text-base text-arena-text-bright">
+      {/* Main chaos controls — broadcast control room */}
+      <div className="bg-card rounded-sm overflow-hidden">
+        {/* Chyron header */}
+        <div className="h-[3px] bg-primary" />
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+          <Zap size={16} className="text-primary" />
+          <h2 className="font-display text-sm text-foreground uppercase tracking-wider">
             Chaos Controls
           </h2>
         </div>
 
-        {!user ? (
-          <>
-            <div className="flex flex-col items-center gap-2 py-3">
-              <Lock size={20} className="text-arena-text-muted" />
-              <p className="text-xs text-arena-text-muted text-center">
-                Sign in to inject chaos into the debate
-              </p>
-              <button
-                onClick={() => setShowAuth(true)}
-                className="px-4 py-2 rounded-lg bg-arena-magenta text-white font-semibold text-sm hover:brightness-110 transition-all"
-              >
-                Sign In to Inject
-              </button>
-            </div>
-            <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
-          </>
-        ) : (
-          <>
-            {/* Mode toggle */}
-            <div className="flex gap-1 bg-arena-base rounded-lg p-1">
-              <button
-                onClick={() => setMode('rule')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${
-                  mode === 'rule'
-                    ? 'bg-arena-hover text-arena-cyan'
-                    : 'text-arena-text-muted hover:text-arena-text'
-                }`}
-              >
-                <Sparkles size={14} />
-                Add Rule
-              </button>
-              <button
-                onClick={() => setMode('topic_change')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${
-                  mode === 'topic_change'
-                    ? 'bg-arena-hover text-arena-cyan'
-                    : 'text-arena-text-muted hover:text-arena-text'
-                }`}
-              >
-                <MessageSquare size={14} />
-                New Topic
-              </button>
-            </div>
-
-            {/* Duration selector (rule mode only) */}
-            {mode === 'rule' && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-arena-text-muted">Duration:</span>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4].map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setDuration(t)}
-                      className={`w-7 h-7 rounded text-xs font-bold transition-colors ${
-                        duration === t
-                          ? 'bg-arena-cyan text-arena-base'
-                          : 'bg-arena-surface text-arena-text-muted hover:text-arena-text border border-arena-border-subtle'
-                      }`}
-                    >
-                      {t}t
-                    </button>
-                  ))}
-                </div>
-                <span className="text-[10px] text-arena-text-muted">
-                  = {duration} credit{duration !== 1 ? 's' : ''}
-                </span>
+        <div className="p-4 space-y-4">
+          {!user ? (
+            <>
+              <div className="flex flex-col items-center gap-2 py-3">
+                <Lock size={20} className="text-muted-foreground" />
+                <p className="text-xs text-muted-foreground text-center">
+                  Sign in to inject chaos into the debate
+                </p>
+                <button
+                  onClick={() => setShowAuth(true)}
+                  className="px-4 py-2 rounded-sm bg-primary text-primary-foreground font-semibold text-sm hover:brightness-110 transition-all"
+                >
+                  Sign In to Inject
+                </button>
               </div>
-            )}
+              <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
+            </>
+          ) : (
+            <>
+              {/* Mode toggle */}
+              <div className="flex gap-1 bg-background rounded-sm p-1">
+                <button
+                  onClick={() => setMode('rule')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-sm text-sm transition-colors ${
+                    mode === 'rule'
+                      ? 'bg-muted text-accent'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Sparkles size={14} />
+                  Add Rule
+                </button>
+                <button
+                  onClick={() => setMode('topic_change')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-sm text-sm transition-colors ${
+                    mode === 'topic_change'
+                      ? 'bg-muted text-accent'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <MessageSquare size={14} />
+                  New Topic
+                </button>
+              </div>
 
-            {/* Cost label for topic mode */}
-            {mode === 'topic_change' && (
-              <p className="text-[10px] text-arena-text-muted">5 credits per topic suggestion</p>
-            )}
+              {/* Duration selector */}
+              {mode === 'rule' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Duration:</span>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4].map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setDuration(t)}
+                        className={`w-7 h-7 rounded-sm text-xs font-bold transition-colors ${
+                          duration === t
+                            ? 'bg-accent text-accent-foreground'
+                            : 'bg-muted text-muted-foreground hover:text-foreground border border-border'
+                        }`}
+                      >
+                        {t}t
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    = {duration} credit{duration !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
 
-            {/* Input */}
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <input
-                type="text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder={
-                  mode === 'rule'
-                    ? 'e.g. "Everyone must speak in rhymes"'
-                    : 'e.g. "Is cereal a soup?"'
-                }
-                maxLength={200}
-                disabled={!isActive}
-                className="flex-1 px-3 py-2 rounded-lg bg-arena-base border border-arena-border-subtle text-arena-text text-sm placeholder:text-arena-text-muted focus:outline-none focus:ring-2 focus:ring-arena-cyan/50 disabled:opacity-40"
-              />
-              <button
-                type="submit"
-                disabled={!isActive || !text.trim() || !canAfford}
-                title={!canAfford ? 'Not enough credits' : undefined}
-                className="px-3 py-2 rounded-lg bg-arena-cyan text-arena-base hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Send size={16} />
-              </button>
-            </form>
+              {mode === 'topic_change' && (
+                <p className="text-[10px] text-muted-foreground font-mono">5 credits per topic suggestion</p>
+              )}
 
-            {/* Insufficient credits warning */}
-            {credits !== null && !canAfford && (
-              <p className="text-[10px] text-arena-error">
-                Not enough credits ({credits} available, {cost} needed)
-              </p>
-            )}
-          </>
-        )}
+              {/* Input */}
+              <form onSubmit={handleSubmit} className="flex gap-2">
+                <input
+                  type="text"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder={
+                    mode === 'rule'
+                      ? 'e.g. "Everyone must speak in rhymes"'
+                      : 'e.g. "Is cereal a soup?"'
+                  }
+                  maxLength={200}
+                  disabled={!isActive}
+                  className="flex-1 px-3 py-2 rounded-sm bg-background border border-input text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 disabled:opacity-40"
+                />
+                <button
+                  type="submit"
+                  disabled={!isActive || !text.trim() || !canAfford}
+                  title={!canAfford ? 'Not enough credits' : undefined}
+                  className="px-3 py-2 rounded-sm bg-accent text-accent-foreground hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Send size={16} />
+                </button>
+              </form>
+
+              {credits !== null && !canAfford && (
+                <p className="text-[10px] text-destructive font-mono">
+                  Not enough credits ({credits} available, {cost} needed)
+                </p>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Quick inject presets */}
-      <div className="bg-arena-elevated rounded-xl p-4">
-        <QuickInjects />
+      <div className="bg-card rounded-sm overflow-hidden">
+        <div className="h-[2px] bg-accent/40" />
+        <div className="p-4">
+          <QuickInjects />
+        </div>
       </div>
 
-      {/* Active rules */}
+      {/* Active rules — broadcast alert style */}
       {activeRules.length > 0 && (
-        <div className="bg-arena-elevated rounded-xl p-4 space-y-2">
-          <p className="text-xs text-arena-text-muted uppercase tracking-wide font-semibold">
-            Active Rules
-          </p>
-          {activeRules.map((rule, i) => (
-            <div
-              key={i}
-              className="px-3 py-2 rounded-lg bg-arena-magenta/10 border border-arena-magenta/30 text-xs text-arena-text-secondary leading-relaxed"
-            >
-              {rule}
-            </div>
-          ))}
+        <div className="bg-card rounded-sm overflow-hidden">
+          <div className="h-[2px] bg-warning/60" />
+          <div className="p-4 space-y-2">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-display">
+              Active Rules
+            </p>
+            {activeRules.map((rule, i) => (
+              <div
+                key={i}
+                className="px-3 py-2 rounded-sm bg-primary/10 border border-primary/30 text-xs text-secondary-foreground leading-relaxed"
+              >
+                {rule}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -15,41 +15,47 @@ export function TopicBanner({ judgeMode, onToggleJudge }: TopicBannerProps) {
   const connected = useArenaStore((s) => s.connected);
 
   return (
-    <header className="flex items-center justify-between px-6 py-3 border-b border-arena-border-subtle bg-arena-surface/90 backdrop-blur-sm">
-      <div className="flex items-center gap-3">
-        <h1 className="font-display font-bold text-xl text-arena-text-bright tracking-tight">
-          <span className="text-arena-cyan">A</span>
-          <span className="text-arena-text-muted">.</span>
-          <span className="text-arena-text-bright">R</span>
-          <span className="text-arena-text-muted">.</span>
-          <span className="text-arena-text-bright">E</span>
-          <span className="text-arena-text-muted">.</span>
-          <span className="text-arena-text-bright">N</span>
-          <span className="text-arena-text-muted">.</span>
-          <span className="text-arena-magenta">A</span>
-          <span className="text-arena-text-muted">.</span>
+    <header className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/95 backdrop-blur-sm">
+      {/* Left: Logo + Live badge */}
+      <div className="flex items-center gap-3 shrink-0">
+        <h1 className="font-display text-lg tracking-wider text-foreground">
+          <span className="text-primary">A</span>
+          <span className="text-muted-foreground">.</span>
+          <span>R</span>
+          <span className="text-muted-foreground">.</span>
+          <span>E</span>
+          <span className="text-muted-foreground">.</span>
+          <span>N</span>
+          <span className="text-muted-foreground">.</span>
+          <span className="text-primary">A</span>
+          <span className="text-muted-foreground">.</span>
         </h1>
         {session?.status === 'active' && <LiveBadge />}
       </div>
 
-      <div className="flex-1 text-center px-4">
+      {/* Center: Topic chyron */}
+      <div className="flex-1 flex items-center justify-center px-4 min-w-0">
         {session ? (
-          <h2 className="font-display font-semibold text-lg text-arena-cyan truncate">
-            {session.topic}
-          </h2>
+          <div className="flex items-center gap-2 max-w-xl">
+            <div className="w-1 h-5 bg-primary shrink-0 animate-lower-third-bar" />
+            <h2 className="font-display text-sm sm:text-base tracking-wider text-foreground truncate animate-lower-third-text">
+              {session.topic}
+            </h2>
+          </div>
         ) : (
-          <p className="text-arena-text-muted text-sm">
-            No active debate
+          <p className="text-muted-foreground text-xs font-mono tracking-wider">
+            NO ACTIVE DEBATE
           </p>
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* Right: Controls */}
+      <div className="flex items-center gap-1.5 shrink-0">
         {onToggleJudge && (
           <button
             onClick={onToggleJudge}
-            className={`p-1.5 rounded transition-colors cursor-pointer ${
-              judgeMode ? 'text-arena-purple bg-arena-purple/10' : 'text-arena-text-muted hover:text-arena-text-secondary'
+            className={`p-1.5 rounded-sm transition-colors cursor-pointer ${
+              judgeMode ? 'text-[#8B5CF6] bg-[#8B5CF6]/10' : 'text-muted-foreground hover:text-foreground'
             }`}
             title="Judge Mode"
           >
@@ -60,14 +66,13 @@ export function TopicBanner({ judgeMode, onToggleJudge }: TopicBannerProps) {
         <ShareButton />
         <SoundToggle />
         {connected ? (
-          <div className="flex items-center gap-1.5 text-arena-success text-xs">
-            <Wifi size={14} />
-            <span className="hidden sm:inline">Connected</span>
+          <div className="flex items-center gap-1 text-success text-[10px] font-mono">
+            <Wifi size={12} />
+            <span className="hidden sm:inline tracking-wider">OK</span>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 text-yellow-400 text-xs">
-            <WifiOff size={14} className="animate-pulse" />
-            <span className="hidden sm:inline">Reconnecting...</span>
+          <div className="flex items-center gap-1 text-warning text-[10px] font-mono">
+            <WifiOff size={12} className="animate-pulse" />
           </div>
         )}
       </div>

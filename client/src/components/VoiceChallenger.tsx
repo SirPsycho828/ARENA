@@ -24,7 +24,6 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
   const animFrameRef = useRef<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -33,7 +32,6 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
     };
   }, []);
 
-  // Timer countdown
   useEffect(() => {
     if (!recording) return;
     timerRef.current = setInterval(() => {
@@ -48,7 +46,6 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [recording]);
 
-  // Waveform animation
   const updateBars = useCallback(() => {
     if (!analyserRef.current) return;
     const data = new Uint8Array(analyserRef.current.frequencyBinCount);
@@ -67,7 +64,6 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // Set up analyser for waveform
       const ctx = new AudioContext();
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
@@ -98,19 +94,20 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   return (
-    <div className="bg-arena-elevated rounded-xl overflow-hidden">
-      {/* Header */}
+    <div className="bg-card rounded-sm overflow-hidden">
+      {/* Chyron header */}
+      <div className="h-[3px] bg-primary" />
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-4 hover:bg-arena-hover/30 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <Mic size={18} className="text-arena-magenta" />
-          <h2 className="font-display font-semibold text-sm text-arena-text-bright">
+          <Mic size={16} className="text-primary" />
+          <h2 className="font-display text-sm text-foreground uppercase tracking-wider">
             Voice Challenge
           </h2>
         </div>
-        {expanded ? <ChevronUp size={16} className="text-arena-text-muted" /> : <ChevronDown size={16} className="text-arena-text-muted" />}
+        {expanded ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
       </button>
 
       <AnimatePresence>
@@ -122,17 +119,17 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 space-y-3">
+            <div className="px-4 pb-4 space-y-3 border-t border-border">
               {!user ? (
                 <>
-                  <div className="flex flex-col items-center gap-2 py-2">
-                    <Lock size={20} className="text-arena-text-muted" />
-                    <p className="text-xs text-arena-text-muted text-center">
+                  <div className="flex flex-col items-center gap-2 py-3">
+                    <Lock size={20} className="text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground text-center">
                       Sign in to challenge agents directly
                     </p>
                     <button
                       onClick={() => setShowAuth(true)}
-                      className="px-4 py-2 rounded-lg bg-arena-magenta text-white font-semibold text-sm hover:brightness-110 transition-all"
+                      className="px-4 py-2 rounded-sm bg-primary text-primary-foreground font-semibold text-sm hover:brightness-110 transition-all"
                     >
                       Sign In to Challenge
                     </button>
@@ -142,16 +139,16 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
               ) : !recording ? (
                 <>
                   {/* Agent selector */}
-                  <p className="text-xs text-arena-text-muted">Select an agent to challenge: <span className="text-arena-magenta">(3 credits)</span></p>
+                  <p className="text-xs text-muted-foreground pt-3">Select an agent to challenge: <span className="text-primary font-mono">(3 credits)</span></p>
                   <div className="flex flex-wrap gap-1.5">
                     {agents.map((agent) => (
                       <button
                         key={agent.id}
                         onClick={() => setSelectedAgent(agent.id)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all ${
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-xs transition-all ${
                           selectedAgent === agent.id
-                            ? 'bg-arena-magenta/20 border border-arena-magenta/50 text-arena-text-bright'
-                            : 'bg-arena-surface border border-arena-border-subtle text-arena-text-secondary hover:border-arena-border'
+                            ? 'bg-primary/20 border border-primary/50 text-foreground'
+                            : 'bg-muted border border-border text-muted-foreground hover:border-muted-foreground/30'
                         }`}
                       >
                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: agent.color }} />
@@ -160,11 +157,10 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
                     ))}
                   </div>
 
-                  {/* Start button */}
                   <button
                     onClick={handleStart}
                     disabled={!selectedAgent || isActive}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-arena-magenta text-white font-semibold text-sm hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-sm bg-primary text-primary-foreground font-display text-sm uppercase tracking-wider hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Mic size={16} />
                     START CHALLENGE
@@ -172,32 +168,31 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
                 </>
               ) : (
                 <>
-                  {/* Live indicator */}
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-arena-live text-white animate-pulse-glow">
+                  {/* Live indicator — broadcast style */}
+                  <div className="flex items-center justify-between pt-3">
+                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase bg-live text-white animate-live-pulse tracking-wider">
                       <span className="w-1.5 h-1.5 rounded-full bg-white" />
                       LIVE
                     </span>
-                    <span className="font-mono text-lg font-bold text-arena-text-bright">
+                    <span className="font-mono text-lg font-bold text-foreground tabular-nums">
                       {formatTime(timeLeft)}
                     </span>
                   </div>
 
                   {/* Waveform */}
-                  <div className="flex items-end justify-center gap-[2px] h-8 bg-arena-base rounded-lg px-2 py-1">
+                  <div className="flex items-end justify-center gap-[2px] h-8 bg-background rounded-sm px-2 py-1">
                     {bars.map((h, i) => (
                       <div
                         key={i}
-                        className="w-[4px] rounded-full bg-arena-magenta transition-all duration-75"
+                        className="w-[4px] rounded-full bg-primary transition-all duration-75"
                         style={{ height: `${h}px` }}
                       />
                     ))}
                   </div>
 
-                  {/* Stop button */}
                   <button
                     onClick={handleStop}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-arena-error text-white font-semibold text-sm hover:brightness-110 transition-all"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-sm bg-destructive text-white font-display text-sm uppercase tracking-wider hover:brightness-110 transition-all"
                   >
                     <MicOff size={16} />
                     END CHALLENGE

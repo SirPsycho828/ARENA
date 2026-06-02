@@ -1,33 +1,82 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════════════════
+   Design System — A.R.E.N.A. "The Newsroom"
+   Cable news war room meets late-night panel comedy
+   ═══════════════════════════════════════════════════════════════════ */
+
 @theme {
-  --color-arena-base: #0A0A0F;
-  --color-arena-surface: #12121A;
-  --color-arena-elevated: #1A1A2E;
-  --color-arena-hover: #252540;
-  --color-arena-border-subtle: #2A2A3E;
-  --color-arena-border: #3D3D5C;
-  --color-arena-text-muted: #6B6B8A;
-  --color-arena-text-secondary: #9B9BB0;
-  --color-arena-text: #E8E8F0;
+  /* ─── Typography ────────────────────────────────────────────────── */
+  --font-display: 'Anton', sans-serif;
+  --font-body: 'Rubik', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* ─── Colors — Core ─────────────────────────────────────────────── */
+  --color-primary: #E63946;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #1A2332;
+  --color-secondary-foreground: #C8D1DB;
+  --color-accent: #3B9AE1;
+  --color-accent-foreground: #FFFFFF;
+
+  /* ─── Colors — Surfaces ─────────────────────────────────────────── */
+  --color-background: #0D1117;
+  --color-foreground: #F0F4F8;
+  --color-card: #161D27;
+  --color-card-foreground: #E8ECF1;
+  --color-muted: #1E2736;
+  --color-muted-foreground: #7B8A9E;
+
+  /* ─── Colors — Borders ──────────────────────────────────────────── */
+  --color-border: #2A3545;
+  --color-input: #2A3545;
+  --color-ring: #3B9AE1;
+
+  /* ─── Colors — Semantic ─────────────────────────────────────────── */
+  --color-destructive: #DC2626;
+  --color-success: #16A34A;
+  --color-warning: #F59E0B;
+
+  /* ─── Colors — Newsroom-Specific ────────────────────────────────── */
+  --color-live: #FF3B3B;
+  --color-ticker-bg: #131A24;
+  --color-chyron: #E63946;
+  --color-breaking: #FFC800;
+
+  /* ─── Legacy Aliases (bridge for existing components) ───────────── */
+  --color-arena-base: #0D1117;
+  --color-arena-surface: #161D27;
+  --color-arena-elevated: #1E2736;
+  --color-arena-hover: #2A3545;
+  --color-arena-border-subtle: #2A3545;
+  --color-arena-border: #3A4A5E;
+  --color-arena-text-muted: #7B8A9E;
+  --color-arena-text-secondary: #C8D1DB;
+  --color-arena-text: #E8ECF1;
   --color-arena-text-bright: #FFFFFF;
-  --color-arena-cyan: #00F0FF;
-  --color-arena-magenta: #FF2D6B;
+  --color-arena-cyan: #3B9AE1;
+  --color-arena-magenta: #E63946;
   --color-arena-purple: #8B5CF6;
   --color-arena-live: #FF3B3B;
-  --color-arena-success: #00D68F;
-  --color-arena-warning: #FFAA00;
-  --color-arena-error: #FF4757;
+  --color-arena-success: #16A34A;
+  --color-arena-warning: #F59E0B;
+  --color-arena-error: #DC2626;
 
-  --font-display: 'Space Grotesk', sans-serif;
-  --font-body: 'Inter', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* ─── Radius ────────────────────────────────────────────────────── */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Base Styles
+   ═══════════════════════════════════════════════════════════════════ */
 
 body {
   margin: 0;
-  background: var(--color-arena-base);
-  color: var(--color-arena-text);
+  background: var(--color-background);
+  color: var(--color-foreground);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -37,20 +86,102 @@ body {
   min-height: 100vh;
 }
 
+/* Display headings — Anton, ALL CAPS */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1.1;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-arena-base);
+  background: var(--color-background);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-arena-border-subtle);
+  background: var(--color-border);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-arena-border);
+  background: var(--color-muted-foreground);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Newsroom Animations
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Lower Third Slide-In (Signature Animation) ─────────────────── */
+
+@keyframes lower-third-bar {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+
+@keyframes lower-third-text {
+  0% { transform: translateX(-20px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+.animate-lower-third-bar {
+  animation: lower-third-bar 300ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  transform-origin: left;
+}
+
+.animate-lower-third-text {
+  animation: lower-third-text 250ms cubic-bezier(0.22, 0.61, 0.36, 1) 150ms forwards;
+  opacity: 0;
+}
+
+/* ─── Breaking News Flash ─────────────────────────────────────────── */
+
+@keyframes breaking-flash {
+  0%, 100% { background-color: var(--color-primary); }
+  50% { background-color: var(--color-breaking); }
+}
+
+.animate-breaking {
+  animation: breaking-flash 1.5s ease-in-out infinite;
+}
+
+/* ─── News Ticker Scroll ──────────────────────────────────────────── */
+
+@keyframes ticker-scroll {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+.animate-ticker {
+  animation: ticker-scroll 30s linear infinite;
+}
+
+/* ─── Live Badge Pulse ────────────────────────────────────────────── */
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-live-pulse {
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+/* ─── Camera Cut (Speaker Transition) ─────────────────────────────── */
+
+@keyframes camera-cut {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.animate-camera-cut {
+  animation: camera-cut 100ms ease-out forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Preserved Animations (Existing Functionality)
+   ═══════════════════════════════════════════════════════════════════ */
 
 /* ─── Glow Animations ─────────────────────────────────────────────── */
 
@@ -60,13 +191,13 @@ body {
 }
 
 @keyframes speaker-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.2); }
-  50% { box-shadow: 0 0 40px rgba(0, 240, 255, 0.4); }
+  0%, 100% { box-shadow: 0 0 20px rgba(59, 154, 225, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(59, 154, 225, 0.4); }
 }
 
 @keyframes challenger-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(255, 45, 107, 0.3); }
-  50% { box-shadow: 0 0 50px rgba(255, 45, 107, 0.6); }
+  0%, 100% { box-shadow: 0 0 20px rgba(230, 57, 70, 0.3); }
+  50% { box-shadow: 0 0 50px rgba(230, 57, 70, 0.6); }
 }
 
 .animate-pulse-glow {
@@ -94,13 +225,13 @@ body {
 }
 
 @keyframes text-glow {
-  0%, 100% { text-shadow: 0 0 20px rgba(0, 240, 255, 0.5); }
-  50% { text-shadow: 0 0 40px rgba(0, 240, 255, 0.8), 0 0 80px rgba(0, 240, 255, 0.3); }
+  0%, 100% { text-shadow: 0 0 20px rgba(230, 57, 70, 0.5); }
+  50% { text-shadow: 0 0 40px rgba(230, 57, 70, 0.8), 0 0 80px rgba(230, 57, 70, 0.3); }
 }
 
 @keyframes button-pulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.3); }
-  50% { box-shadow: 0 0 40px rgba(0, 240, 255, 0.5), 0 0 60px rgba(0, 240, 255, 0.2); }
+  0%, 100% { box-shadow: 0 0 20px rgba(230, 57, 70, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(230, 57, 70, 0.5), 0 0 60px rgba(230, 57, 70, 0.2); }
 }
 
 .animate-grid-pulse {
@@ -156,11 +287,11 @@ body {
 @keyframes challenger-badge-pulse {
   0%, 100% {
     transform: scale(1);
-    box-shadow: 0 0 10px rgba(255, 45, 107, 0.5);
+    box-shadow: 0 0 10px rgba(230, 57, 70, 0.5);
   }
   50% {
     transform: scale(1.05);
-    box-shadow: 0 0 20px rgba(255, 45, 107, 0.8);
+    box-shadow: 0 0 20px rgba(230, 57, 70, 0.8);
   }
 }
 
@@ -171,17 +302,17 @@ body {
 /* ─── Crowd Momentum ────────────────────────────────────────────── */
 
 @keyframes golden-aura {
-  0%, 100% { box-shadow: 0 0 20px rgba(255, 170, 0, 0.3); }
-  50% { box-shadow: 0 0 50px rgba(255, 170, 0, 0.6), 0 0 80px rgba(255, 170, 0, 0.2); }
+  0%, 100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
+  50% { box-shadow: 0 0 50px rgba(245, 158, 11, 0.6), 0 0 80px rgba(245, 158, 11, 0.2); }
 }
 
 @keyframes dominate-aura {
   0%, 100% {
-    box-shadow: 0 0 30px rgba(255, 170, 0, 0.4), 0 0 60px rgba(255, 100, 0, 0.2);
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.4), 0 0 60px rgba(220, 120, 0, 0.2);
     filter: brightness(1);
   }
   50% {
-    box-shadow: 0 0 60px rgba(255, 170, 0, 0.7), 0 0 100px rgba(255, 100, 0, 0.3);
+    box-shadow: 0 0 60px rgba(245, 158, 11, 0.7), 0 0 100px rgba(220, 120, 0, 0.3);
     filter: brightness(1.05);
   }
 }
@@ -213,4 +344,36 @@ body {
 
 .animate-confetti {
   animation: confetti-fall 3s ease-in forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Micro-Interactions
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Focus-visible — broadcast ring */
+*:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Accessibility: prefers-reduced-motion
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
