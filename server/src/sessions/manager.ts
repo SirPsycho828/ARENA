@@ -197,6 +197,7 @@ export class SessionManager {
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
   private turnAudioDone = false;
+  private deltaOpenerState: Map<string, { buffer: string; stripped: boolean }> = new Map();
 
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
@@ -796,14 +797,44 @@ export class SessionManager {
     // Strip em dashes server-side — LLMs ignore the "no em dashes" instruction
     const stripEmDashes = (s: string) => s.replace(/\u2014/g, ', ').replace(/ ,/g, ',');
 
-    // Stream text deltas to client for word-by-word transcript display
+    // Strip echo-question openers — LLMs stubbornly start with "Word? Word word?" patterns.
+    // Removes 1-5 word questions at the very start, up to 2 consecutive ones.
+    const stripQuestionOpener = (s: string): string => {
+      // Match 1-2 short questions (1-5 words each) at the start, followed by remaining text
+      return s.replace(/^(?:\s*\S+(?:\s+\S+){0,4}\?\s*){1,2}/, (match, _offset, full) => {
+        // Only strip if there's substantial text after the opener
+        const rest = full.slice(match.length).trim();
+        return rest.length > 20 ? '' : match;
+      }).trimStart();
+    };
+
+    // Stream text deltas to client for word-by-word transcript display.
+    // Buffer initial characters to strip echo-question openers before they reach the client.
     agent.on('response_delta', (data: { itemId: string; content: string }) => {
-      if (this.turnManager?.getCurrentSpeaker() === agentId) {
-        (this.io as any).emit('transcript_delta', {
-          agentId,
-          agentName: agentName(),
-          content: stripEmDashes(data.content),
-        });
+      if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+
+      const cleaned = stripEmDashes(data.content);
+      const state = this.deltaOpenerState.get(agentId);
+
+      if (!state || state.stripped) {
+        // Already past the opener — emit directly
+        (this.io as any).emit('transcript_delta', { agentId, agentName: agentName(), content: cleaned });
+        return;
+      }
+
+      // Buffer until we have enough to detect the opener pattern
+      state.buffer += cleaned;
+
+      // Check if we have at least one question mark (potential opener end)
+      const qIdx = state.buffer.indexOf('?');
+      if (qIdx === -1 && state.buffer.length < 60) return; // keep buffering
+
+      // Strip opener and emit the rest
+      state.stripped = true;
+      const stripped = stripQuestionOpener(state.buffer);
+      state.buffer = '';
+      if (stripped.length > 0) {
+        (this.io as any).emit('transcript_delta', { agentId, agentName: agentName(), content: stripped });
       }
     });
 
@@ -811,8 +842,10 @@ export class SessionManager {
     agent.on('speech_end', (data: { agentId: string; agentName: string; text: string; timestamp: number }) => {
       // Only process transcripts from the current speaker (ignore auto-responses)
       if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+      // Napster API can fire multiple completed events per turn — only process the first
+      if (this.turnTextComplete) return;
 
-      const cleanText = stripEmDashes(data.text);
+      const cleanText = stripQuestionOpener(stripEmDashes(data.text));
       const msg: TranscriptMessage = {
         agentId: data.agentId,
         agentName: data.agentName,
@@ -944,6 +977,7 @@ export class SessionManager {
       // Reset turn state for new speaker
       this.turnTextComplete = false;
       this.turnAudioDone = false;
+      this.deltaOpenerState.set(agentId, { buffer: '', stripped: false });
       if (this.turnAdvanceTimer) { clearTimeout(this.turnAdvanceTimer); this.turnAdvanceTimer = null; }
       if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
       this.audioTracker.delete(agentId);
