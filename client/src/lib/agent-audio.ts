@@ -115,6 +115,15 @@ class AgentAudioPlayer {
     this.generation++; // Invalidate stale onended callbacks from previous speaker
     this.noMoreChunks = false;
     this.onDoneCallback = null;
+
+    // Swap the GainNode so any still-playing sources from the previous speaker
+    // are disconnected from the output → instant silence.
+    if (this.gainNode && this.ctx && this.ctx.state !== 'closed') {
+      this.gainNode.disconnect();
+      this.gainNode = this.ctx.createGain();
+      this.gainNode.gain.value = this._muted ? 0 : this._volume;
+      this.gainNode.connect(this.ctx.destination);
+    }
   }
 
   /** Full stop — closes AudioContext. Only used for mute. */
