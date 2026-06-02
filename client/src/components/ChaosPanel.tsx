@@ -93,20 +93,19 @@ export function ChaosPanel() {
 
               {/* Duration selector */}
               {mode === 'rule' && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Duration:</span>
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex gap-1">
                     {[1, 2, 3, 4].map((t) => (
                       <button
                         key={t}
                         onClick={() => setDuration(t)}
-                        className={`w-7 h-7 rounded-sm text-xs font-bold transition-colors ${
+                        className={`h-7 px-2 rounded-sm text-xs font-bold transition-colors ${
                           duration === t
                             ? 'bg-accent text-accent-foreground'
                             : 'bg-muted text-muted-foreground hover:text-foreground border border-border'
                         }`}
                       >
-                        {t}t
+                        {t} {t === 1 ? 'turn' : 'turns'}
                       </button>
                     ))}
                   </div>

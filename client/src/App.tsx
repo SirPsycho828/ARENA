@@ -126,59 +126,81 @@ function App() {
         <TopicBanner judgeMode={judgeMode} onToggleJudge={() => setJudgeMode((j) => !j)} />
         <SpectatorBar />
 
-        {/* Full-width main stage (Full Canvas — no sidebar) */}
-        <main className="flex-1 flex flex-col p-3 gap-3 overflow-y-auto">
-          {/* Empty state */}
-          {!session && (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center space-y-4">
-                <h2 className="font-display text-3xl tracking-wider text-foreground">
-                  WELCOME TO THE ARENA
-                </h2>
-                <p className="text-sm font-body text-muted-foreground max-w-md mx-auto leading-relaxed">
-                  A live multi-agent debate arena where AI personalities argue in real-time.
-                  A debate will start automatically — hang tight.
-                </p>
-                <div className="flex items-center justify-center gap-2 text-muted-foreground text-xs font-mono tracking-wider">
-                  <div className="w-2 h-2 bg-accent rounded-full animate-live-pulse" />
-                  WAITING FOR DEBATE...
+        {/* Main stage + persistent sidebar */}
+        <div className="flex-1 flex min-h-0">
+          <main className="flex-1 flex flex-col p-3 gap-3 overflow-y-auto">
+            {/* Empty state */}
+            {!session && (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center space-y-4">
+                  <h2 className="font-display text-3xl tracking-wider text-foreground">
+                    WELCOME TO THE ARENA
+                  </h2>
+                  <p className="text-sm font-body text-muted-foreground max-w-md mx-auto leading-relaxed">
+                    A live multi-agent debate arena where AI personalities argue in real-time.
+                    A debate will start automatically — hang tight.
+                  </p>
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground text-xs font-mono tracking-wider">
+                    <div className="w-2 h-2 bg-accent rounded-full animate-live-pulse" />
+                    WAITING FOR DEBATE...
+                  </div>
                 </div>
               </div>
+            )}
+
+            {session && (
+              <>
+                {/* Agent video grid */}
+                <div className={`grid gap-2 ${
+                  agents.length <= 2
+                    ? 'grid-cols-1 sm:grid-cols-2'
+                    : agents.length === 3
+                    ? 'grid-cols-1 sm:grid-cols-3'
+                    : agents.length === 4
+                    ? 'grid-cols-2 lg:grid-cols-4'
+                    : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+                }`}>
+                  {agents.map((agent) => (
+                    <AgentPanel
+                      key={agent.id}
+                      id={agent.id}
+                      name={agent.name}
+                      personality={agent.personality}
+                      color={agent.color}
+                    />
+                  ))}
+                </div>
+
+                <ChaosStatusBar />
+
+                {/* Transcript feed */}
+                <div className="flex-1 min-h-0 bg-card rounded-md border border-border overflow-hidden">
+                  <TranscriptFeed />
+                </div>
+              </>
+            )}
+          </main>
+
+          {/* Persistent chaos sidebar — xl+ only */}
+          <aside className="hidden xl:flex xl:flex-col w-96 shrink-0 border-l border-border bg-card overflow-y-auto">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted sticky top-0 z-10">
+              <div className="w-1 h-5 bg-primary animate-lower-third-bar" />
+              <Zap size={14} className="text-primary" />
+              <span className="font-display text-sm tracking-wider">CHAOS CONTROLS</span>
             </div>
-          )}
-
-          {session && (
-            <>
-              {/* Agent video grid — full width */}
-              <div className={`grid gap-2 ${
-                agents.length <= 2
-                  ? 'grid-cols-1 sm:grid-cols-2'
-                  : agents.length === 3
-                  ? 'grid-cols-1 sm:grid-cols-3'
-                  : agents.length === 4
-                  ? 'grid-cols-2 lg:grid-cols-4'
-                  : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
-              }`}>
-                {agents.map((agent) => (
-                  <AgentPanel
-                    key={agent.id}
-                    id={agent.id}
-                    name={agent.name}
-                    personality={agent.personality}
-                    color={agent.color}
-                  />
-                ))}
-              </div>
-
-              <ChaosStatusBar />
-
-              {/* Transcript feed — full width */}
-              <div className="flex-1 min-h-0 bg-card rounded-md border border-border overflow-hidden">
-                <TranscriptFeed />
-              </div>
-            </>
-          )}
-        </main>
+            <div className="p-4 space-y-4">
+              <ChaosPanel />
+              {session?.status === 'active' && (
+                <VoiceChallenger
+                  agents={agents}
+                  isActive={challengerActive}
+                  onStart={handleChallengeStart}
+                  onEnd={handleChallengeEnd}
+                />
+              )}
+            </div>
+          </aside>
+        </div>
       </div>}
 
       {/* ═══ FLOATING CHAOS TRIGGER (Full Canvas: edge-triggered) ═══ */}
@@ -186,7 +208,7 @@ function App() {
         <button
           onClick={() => setChaosDrawer(true)}
           aria-label="Open chaos controls"
-          className="fixed bottom-6 right-6 z-20 w-12 h-12 rounded-sm bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/30 hover:brightness-110 active:scale-95 transition-all cursor-pointer animate-button-pulse"
+          className="fixed bottom-6 right-6 z-20 xl:hidden w-12 h-12 rounded-sm bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/30 hover:brightness-110 active:scale-95 transition-all cursor-pointer animate-button-pulse"
         >
           <Zap size={20} />
         </button>
