@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import type { TurnState, TurnMode, TurnManagerConfig } from '../../../shared/types.js';
 
 const DEFAULT_CONFIG: TurnManagerConfig = {
-  mode: 'round_robin',
+  mode: 'dynamic',
   turnTimeout: 20000,
   speechEndDebounce: 800,
   minTurnGap: 500,
@@ -18,6 +18,7 @@ export class TurnManager extends EventEmitter {
   private turnTimer: NodeJS.Timeout | null = null;
   private gapTimer: NodeJS.Timeout | null = null;
   private paused = false;
+  private recentSpeakers: string[] = [];
 
   constructor(config: Partial<TurnManagerConfig> = {}) {
     super();
@@ -31,8 +32,9 @@ export class TurnManager extends EventEmitter {
   start(agentIds: string[]) {
     this.agentIds = agentIds;
     this.currentIndex = -1;
+    this.recentSpeakers = [];
     this.state = 'SELECTING_NEXT';
-    console.log(`  [TurnManager] Started with ${agentIds.length} agents`);
+    console.log(`  [TurnManager] Started with ${agentIds.length} agents (mode: ${this.config.mode})`);
     this.selectNext();
   }
 
@@ -94,6 +96,8 @@ export class TurnManager extends EventEmitter {
     if (this.interruptQueue.length > 0) {
       nextId = this.interruptQueue.shift()!;
       this.emit('turn_interrupted', { byAgentId: nextId });
+    } else if (this.config.mode === 'dynamic') {
+      nextId = this.selectDynamic();
     } else if (this.config.mode === 'round_robin') {
       this.currentIndex = (this.currentIndex + 1) % this.agentIds.length;
       nextId = this.agentIds[this.currentIndex];
@@ -102,6 +106,9 @@ export class TurnManager extends EventEmitter {
       const candidates = this.agentIds.filter(id => id !== this.currentSpeaker);
       nextId = candidates[Math.floor(Math.random() * candidates.length)];
     }
+
+    this.recentSpeakers.push(nextId);
+    if (this.recentSpeakers.length > 12) this.recentSpeakers.shift();
 
     this.currentSpeaker = nextId;
     this.state = 'WAITING_FOR_RESPONSE';
@@ -114,6 +121,75 @@ export class TurnManager extends EventEmitter {
       this.state = 'SELECTING_NEXT';
       this.selectNext();
     }, this.config.turnTimeout);
+  }
+
+  /**
+   * Dynamic turn selection: creates natural back-and-forth exchanges
+   * between agents rather than strict round-robin.
+   *
+   * - Never the same agent twice in a row
+   * - ~35% chance of continuing a direct exchange (A-B-A-B pattern)
+   * - Exchanges capped at 4 turns before forcing the third agent
+   * - Otherwise weighted random favoring less-recent speakers
+   */
+  private selectDynamic(): string {
+    const others = this.agentIds.filter(id => id !== this.currentSpeaker);
+    if (others.length === 0) return this.agentIds[0]; // shouldn't happen
+
+    const pairTurns = this.consecutivePairTurns();
+
+    // Force the third agent after 4+ turns between the same pair
+    if (pairTurns >= 4) {
+      const recentPair = new Set(this.recentSpeakers.slice(-2));
+      const fresh = this.agentIds.filter(id => !recentPair.has(id));
+      if (fresh.length > 0) {
+        return fresh[Math.floor(Math.random() * fresh.length)];
+      }
+    }
+
+    // 35% chance: continue or start a direct exchange (pick who spoke 2 turns ago)
+    if (this.recentSpeakers.length >= 2 && Math.random() < 0.35) {
+      const twoBack = this.recentSpeakers[this.recentSpeakers.length - 2];
+      if (twoBack && twoBack !== this.currentSpeaker && others.includes(twoBack)) {
+        return twoBack;
+      }
+    }
+
+    // Weighted random: agents who haven't spoken recently get higher weight
+    return this.weightedRandom(others);
+  }
+
+  /**
+   * Count consecutive turns from the end that involve only 2 agents.
+   */
+  private consecutivePairTurns(): number {
+    if (this.recentSpeakers.length < 2) return 0;
+    const pair = new Set<string>();
+    let count = 0;
+    for (let i = this.recentSpeakers.length - 1; i >= 0; i--) {
+      pair.add(this.recentSpeakers[i]);
+      if (pair.size > 2) break;
+      count++;
+    }
+    return count;
+  }
+
+  /**
+   * Weighted random selection favoring agents who haven't spoken recently.
+   */
+  private weightedRandom(candidates: string[]): string {
+    const weights = candidates.map(id => {
+      const lastIndex = this.recentSpeakers.lastIndexOf(id);
+      if (lastIndex === -1) return 10; // never spoke — highest weight
+      return Math.max(1, this.recentSpeakers.length - lastIndex);
+    });
+    const total = weights.reduce((a, b) => a + b, 0);
+    let r = Math.random() * total;
+    for (let i = 0; i < candidates.length; i++) {
+      r -= weights[i];
+      if (r <= 0) return candidates[i];
+    }
+    return candidates[candidates.length - 1];
   }
 
   /**

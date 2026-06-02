@@ -2,17 +2,36 @@ import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useArenaStore } from '../store/arena';
 
+/** Convert hex color to rgba with given alpha */
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Format ms elapsed as M:SS */
+function formatTime(timestampMs: number, startMs: number): string {
+  const elapsed = Math.max(0, Math.floor((timestampMs - startMs) / 1000));
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export function TranscriptFeed() {
   const transcripts = useArenaStore((s) => s.transcripts);
   const streamingTranscript = useArenaStore((s) => s.streamingTranscript);
   const agents = useArenaStore((s) => s.agents);
   const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
+  const session = useArenaStore((s) => s.session);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const getAgentColor = (agentId: string) => {
     if (agentId === 'challenger') return '#E63946';
     return agents.find((a) => a.id === agentId)?.color || '#7B8A9E';
   };
+
+  const debateStart = session?.startedAt || Date.now();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -33,7 +52,7 @@ export function TranscriptFeed() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-2 pb-16 space-y-1">
+      <div className="flex-1 overflow-y-auto px-3 py-2 pb-16 space-y-0.5">
         {transcripts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 gap-2">
             <div className="flex items-center gap-1.5">
@@ -56,18 +75,30 @@ export function TranscriptFeed() {
             const color = getAgentColor(msg.agentId);
             const isActive = msg.agentId === currentSpeaker && i === transcripts.length - 1;
             const isChallenger = msg.agentId === 'challenger';
+            const prevSameAgent = i > 0 && transcripts[i - 1].agentId === msg.agentId;
 
             return (
               <motion.div
                 key={`${msg.timestamp}-${i}`}
-                initial={{ opacity: 0, x: -10 }}
+                initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.2 }}
-                className={`flex gap-2 py-1.5 rounded-sm px-2 transition-colors ${
-                  isActive ? 'bg-muted/50' : 'hover:bg-muted/30'
-                } ${isChallenger ? 'border-l-2 border-primary bg-primary/5' : isActive ? 'border-l-2' : ''}`}
-                style={isActive && !isChallenger ? { borderColor: color } : undefined}
+                className={`flex items-start gap-2 py-2 px-2.5 rounded-md border-l-2 transition-colors ${
+                  prevSameAgent ? 'mt-0' : 'mt-1'
+                }`}
+                style={{
+                  borderColor: isChallenger ? 'var(--primary)' : color,
+                  backgroundColor: isChallenger
+                    ? 'rgba(230, 57, 70, 0.05)'
+                    : hexToRgba(color, isActive ? 0.1 : 0.05),
+                }}
               >
+                {/* Timestamp */}
+                <span className="text-[10px] text-muted-foreground/50 font-mono tabular-nums shrink-0 mt-0.5 w-8 text-right">
+                  {formatTime(msg.timestamp, debateStart)}
+                </span>
+
+                {/* Name */}
                 {isChallenger ? (
                   <span className="flex items-center gap-1 shrink-0 mt-0.5">
                     <span className="px-1 py-0.5 rounded-sm text-[9px] font-bold uppercase bg-primary/20 text-primary">
@@ -79,12 +110,14 @@ export function TranscriptFeed() {
                   </span>
                 ) : (
                   <span
-                    className="font-mono text-xs font-semibold shrink-0 mt-0.5"
+                    className="font-mono text-xs font-bold shrink-0 mt-0.5 min-w-[4rem]"
                     style={{ color }}
                   >
-                    {msg.agentName}
+                    {prevSameAgent ? '' : msg.agentName}
                   </span>
                 )}
+
+                {/* Text */}
                 <span className="font-mono text-xs text-secondary-foreground leading-relaxed break-words overflow-hidden">
                   {msg.text}
                 </span>
@@ -97,13 +130,19 @@ export function TranscriptFeed() {
         {streamingTranscript && (
           <motion.div
             key="streaming"
-            initial={{ opacity: 0, x: -10 }}
+            initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
-            className="flex gap-2 py-1.5 rounded-sm px-2 bg-muted/50 border-l-2"
-            style={{ borderColor: getAgentColor(streamingTranscript.agentId) }}
+            className="flex items-start gap-2 py-2 px-2.5 rounded-md border-l-2 mt-1"
+            style={{
+              borderColor: getAgentColor(streamingTranscript.agentId),
+              backgroundColor: hexToRgba(getAgentColor(streamingTranscript.agentId), 0.1),
+            }}
           >
+            <span className="text-[10px] text-muted-foreground/50 font-mono tabular-nums shrink-0 mt-0.5 w-8 text-right">
+              {formatTime(Date.now(), debateStart)}
+            </span>
             <span
-              className="font-mono text-xs font-semibold shrink-0 mt-0.5"
+              className="font-mono text-xs font-bold shrink-0 mt-0.5 min-w-[4rem]"
               style={{ color: getAgentColor(streamingTranscript.agentId) }}
             >
               {streamingTranscript.agentName}

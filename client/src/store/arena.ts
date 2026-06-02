@@ -114,6 +114,10 @@ interface ArenaState {
   // Tool Effects
   activeToolEffect: ToolEffect | null;
 
+  // Topic Reveal
+  pendingTopic: string | null;
+  dismissTopic: () => void;
+
   // Credits
   credits: number | null;
   creditsLoading: boolean;
@@ -261,6 +265,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   videoFrames: {},
   videoTokens: {},
   activeToolEffect: null,
+  pendingTopic: null,
+  dismissTopic: () => set({ pendingTopic: null }),
   credits: null,
   creditsLoading: false,
   lastRejectionReason: null,
@@ -401,6 +407,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set((s) => ({
         session: s.session ? { ...s.session, topic } : null,
         hasVoted: false,
+        pendingTopic: topic,
       }));
     });
 

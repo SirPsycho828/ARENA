@@ -40,7 +40,7 @@ export type TurnState =
   | 'WAITING_FOR_RESPONSE'
   | 'SPEAKING';
 
-export type TurnMode = 'round_robin' | 'free_for_all';
+export type TurnMode = 'round_robin' | 'free_for_all' | 'dynamic';
 
 export interface TurnManagerConfig {
   mode: TurnMode;

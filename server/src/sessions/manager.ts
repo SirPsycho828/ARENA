@@ -332,7 +332,7 @@ export class SessionManager {
     this.createVideoTokens(connectedAgentIds);
 
     // Initialize orchestration
-    this.turnManager = new TurnManager({ mode: 'round_robin' });
+    this.turnManager = new TurnManager({ mode: 'dynamic' });
     this.relay = new TranscriptRelay(this.omniagent);
     this.chaosQueue = new ChaosQueue();
 
