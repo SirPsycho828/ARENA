@@ -644,9 +644,16 @@ export class SessionManager {
     const t = topic.toLowerCase().replace(/[?.!]+$/, '').trim();
 
     // Pattern: "X or Y" binary choice
-    let m = t.match(/(?:is|are|should)\s+.+?\b([\w]+(?:\s+[\w]+)?)\s+or\s+([\w]+(?:\s+[\w]+)?)\s*$/);
+    let m = t.match(/(?:is|are|should|was|were)\s+.+?\b([\w]+(?:\s+[\w]+)?)\s+or\s+([\w]+(?:\s+[\w]+)?)\s*$/);
     if (m) {
       return { left: `TEAM ${m[1].toUpperCase()}`, right: `TEAM ${m[2].toUpperCase()}` };
+    }
+
+    // Pattern: "was/is X worth Y"
+    m = t.match(/(?:was|is|are|were)\s+(.+?)\s+worth\s+(.+)/);
+    if (m) {
+      const sub = this.topicKey(m[1]);
+      return { left: `${sub} WORTH IT`, right: `NOT WORTH IT` };
     }
 
     // Pattern: "should X come/go before Y"
@@ -655,20 +662,25 @@ export class SessionManager {
       return { left: `${this.topicKey(m[1])} FIRST`, right: `${this.topicKey(m[2])} FIRST` };
     }
 
+    // Pattern: "has/have X ruined/destroyed/killed Y"
+    m = t.match(/(?:has|have|did|does|is)\s+(.+?)\s+(ruined?|destroy(?:ed)?|killed?|replaced?|hurt)\s+(.+)/);
+    if (m) {
+      return { left: `${this.topicKey(m[1])} DID NOTHING WRONG`, right: `SAVE ${this.topicKey(m[3])}` };
+    }
+
     // Extract the core subject for all other patterns
     const subject = this.topicKey(
-      t.replace(/^(should|can|could|will|would|do|does|is|are|has|have)\s+/i, '')
-       .replace(/^(we|you|people|everyone|one|it|the)\s+/i, '')
-       .replace(/\s+(acceptable|good|bad|okay|essential|pretentious|necessary|overrated|underrated|important|better|worse|real|fake|worth it|a thing|ever).*$/i, '')
-       .replace(/\s+(be|been|being|get|have|has)\s+/g, ' ')
+      t.replace(/^(should|can|could|will|would|do|does|did|is|are|was|were|has|have|had)\s+/i, '')
+       .replace(/^(we|you|people|everyone|one|it|the|they)\s+/i, '')
+       .replace(/\s+(acceptable|good|bad|okay|essential|pretentious|necessary|overrated|underrated|important|better|worse|real|fake|worth|a thing|ever|actually|truly|really).*$/i, '')
+       .replace(/\s+(be|been|being|get|got|have|has|had)\s+/g, ' ')
     );
 
     // Witty pro/con templates using the subject
     const pairs = [
       { left: `${subject} FOREVER`, right: `CANCEL ${subject}` },
       { left: `TEAM ${subject}`, right: `ANTI-${subject}` },
-      { left: `${subject} GANG`, right: `${subject} IS OVER` },
-      { left: `YES TO ${subject}`, right: `HARD NO ON ${subject}` },
+      { left: `YES TO ${subject}`, right: `NO TO ${subject}` },
       { left: `LONG LIVE ${subject}`, right: `${subject}? NEVER` },
       { left: `${subject} RULES`, right: `BAN ${subject}` },
     ];
@@ -676,7 +688,7 @@ export class SessionManager {
   }
 
   private topicKey(s: string): string {
-    const stops = new Set(['the','a','an','to','of','in','for','and','or','it','be','on','at','by','with','from','that','this','than','as','but','if','about','just','really','very','too','also','some','more','still','even','our','your','their','its','my','all','any','each','only','into','over','up','out','own','other']);
+    const stops = new Set(['the','a','an','to','of','in','for','and','or','it','be','on','at','by','with','from','that','this','than','as','but','if','about','just','really','very','too','also','some','more','still','even','our','your','their','its','my','all','any','each','only','into','over','up','out','own','other','was','were','did','does','do','is','are','has','have','had','been','being','not','so','yet','ever','actually','truly','worth']);
     const words = s.trim().split(/\s+/).filter(w => !stops.has(w) && w.length > 1);
     return words.slice(0, 2).join(' ').toUpperCase() || 'THIS';
   }
