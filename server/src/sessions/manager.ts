@@ -633,9 +633,9 @@ export class SessionManager {
         }
       }, 8000);
 
-      const prompt = `SYSTEM TASK — not part of the debate. Reply with ONLY the formatted labels, nothing else.\n\nTopic: "${topic}"\n\nGenerate two short, witty opposing position labels for the extreme sides of this debate topic. Max 4 words each. Be creative, fun, and specific to this topic.\n\nFormat EXACTLY as: LEFT: [pro/for label] | RIGHT: [against/con label]\n\nExample for "Is pineapple on pizza acceptable?": LEFT: PINEAPPLE PARADISE | RIGHT: FRUIT-FREE ZONE`;
+      const prompt = `Quick task, not a debate question. The topic is: "${topic}". Give me two short witty labels (max 4 words each) for the FOR side and AGAINST side. Reply ONLY in this format: LEFT: [for label] | RIGHT: [against label]`;
 
-      this.omniagent.sendMessage(poleAgentId, 'system', prompt, true);
+      this.omniagent.sendMessage(poleAgentId, 'user', prompt, true);
       console.log(`  [Consensus] Requesting AI poles from ${this.agentConfigs.get(poleAgentId)?.name || poleAgentId}`);
     }
   }
@@ -643,39 +643,42 @@ export class SessionManager {
   private generatePoles(topic: string): { left: string; right: string } {
     const t = topic.toLowerCase().replace(/[?.!]+$/, '').trim();
 
-    // Try to extract subject for topic-aware labels
-    let subject = '';
-    const m = t.match(/^(?:should|can|could|will|would|do|does|is|are)\s+(?:we\s+)?(.+)/);
-    if (m) subject = m[1];
-    else subject = t;
-    const keyWord = subject.split(/\s+/).filter(w => !['the','a','an','be','to','of','in','for','and','or','it','is','we'].includes(w))[0] || '';
+    // Pattern: "X or Y" binary choice
+    let m = t.match(/(?:is|are|should)\s+.+?\b([\w]+(?:\s+[\w]+)?)\s+or\s+([\w]+(?:\s+[\w]+)?)\s*$/);
+    if (m) {
+      return { left: `TEAM ${m[1].toUpperCase()}`, right: `TEAM ${m[2].toUpperCase()}` };
+    }
 
-    // Topic-specific pairs that use the extracted keyword
-    const specificPairs = keyWord.length > 2 ? [
-      { left: `PRO-${keyWord.toUpperCase()}`, right: `ANTI-${keyWord.toUpperCase()}` },
-      { left: `${keyWord.toUpperCase()} GANG`, right: `NO ${keyWord.toUpperCase()} EVER` },
-      { left: `TEAM ${keyWord.toUpperCase()}`, right: `${keyWord.toUpperCase()} IS OVER` },
-    ] : [];
+    // Pattern: "should X come/go before Y"
+    m = t.match(/should\s+(.+?)\s+(?:come|go|be)\s+before\s+(.+)/);
+    if (m) {
+      return { left: `${this.topicKey(m[1])} FIRST`, right: `${this.topicKey(m[2])} FIRST` };
+    }
 
-    // Generic witty pole pairs that work for any topic
-    const genericPairs = [
-      { left: 'ABSOLUTELY BASED', right: 'COMPLETELY UNHINGED' },
-      { left: 'PEAK CIVILIZATION', right: 'THIS IS THE END' },
-      { left: 'SIGN ME UP', right: 'HARD PASS FOREVER' },
-      { left: 'GALAXY BRAIN', right: 'SMOOTH BRAIN MOMENT' },
-      { left: 'SPITTING FACTS', right: 'OBJECTIVELY WRONG' },
-      { left: 'THE FUTURE IS NOW', right: 'ABSOLUTELY NOT' },
-      { left: 'NO DEBATE NEEDED', right: 'FIGHT ME ON THIS' },
-      { left: 'COMMON SENSE', right: 'TOTAL MADNESS' },
-      { left: 'OBVIOUSLY YES', right: 'OBVIOUSLY NO' },
-      { left: 'ENLIGHTENED TAKE', right: 'DELUSIONAL TAKE' },
-      { left: 'CHEF\'S KISS', right: 'CURSED OPINION' },
-      { left: 'THIS IS THE WAY', right: 'THIS IS NOT THE WAY' },
+    // Extract the core subject for all other patterns
+    const subject = this.topicKey(
+      t.replace(/^(should|can|could|will|would|do|does|is|are|has|have)\s+/i, '')
+       .replace(/^(we|you|people|everyone|one|it|the)\s+/i, '')
+       .replace(/\s+(acceptable|good|bad|okay|essential|pretentious|necessary|overrated|underrated|important|better|worse|real|fake|worth it|a thing|ever).*$/i, '')
+       .replace(/\s+(be|been|being|get|have|has)\s+/g, ' ')
+    );
+
+    // Witty pro/con templates using the subject
+    const pairs = [
+      { left: `${subject} FOREVER`, right: `CANCEL ${subject}` },
+      { left: `TEAM ${subject}`, right: `ANTI-${subject}` },
+      { left: `${subject} GANG`, right: `${subject} IS OVER` },
+      { left: `YES TO ${subject}`, right: `HARD NO ON ${subject}` },
+      { left: `LONG LIVE ${subject}`, right: `${subject}? NEVER` },
+      { left: `${subject} RULES`, right: `BAN ${subject}` },
     ];
+    return pairs[Math.floor(Math.random() * pairs.length)];
+  }
 
-    // 50% topic-specific if available, otherwise generic
-    const pool = specificPairs.length > 0 && Math.random() < 0.5 ? specificPairs : genericPairs;
-    return pool[Math.floor(Math.random() * pool.length)];
+  private topicKey(s: string): string {
+    const stops = new Set(['the','a','an','to','of','in','for','and','or','it','be','on','at','by','with','from','that','this','than','as','but','if','about','just','really','very','too','also','some','more','still','even','our','your','their','its','my','all','any','each','only','into','over','up','out','own','other']);
+    const words = s.trim().split(/\s+/).filter(w => !stops.has(w) && w.length > 1);
+    return words.slice(0, 2).join(' ').toUpperCase() || 'THIS';
   }
 
   private analyzeAgentStance(agentId: string, text: string) {
@@ -733,11 +736,26 @@ export class SessionManager {
   private parsePoleResponse(text: string) {
     if (!this.consensusState) return;
 
-    // Try to parse "LEFT: xxx | RIGHT: yyy" format
-    const match = text.match(/LEFT:\s*(.+?)\s*\|\s*RIGHT:\s*(.+)/i);
+    const clean = (s: string) => s.trim().replace(/['"*_`]+/g, '').replace(/\s+/g, ' ').toUpperCase().slice(0, 30);
+
+    // Try "LEFT: xxx | RIGHT: yyy"
+    let match = text.match(/LEFT:\s*(.+?)\s*\|\s*RIGHT:\s*(.+)/i);
+    if (!match) {
+      // Try "FOR: xxx | AGAINST: yyy"
+      match = text.match(/FOR:\s*(.+?)\s*\|\s*AGAINST:\s*(.+)/i);
+    }
+    if (!match) {
+      // Try "xxx vs yyy" or "xxx | yyy" with no prefix
+      match = text.match(/^[^a-z]*([A-Z][A-Z\s]{2,20})\s*(?:vs\.?|\|)\s*([A-Z][A-Z\s]{2,20})/m);
+    }
+    if (!match) {
+      // Try two lines with labels
+      match = text.match(/(?:left|for|pro)[:\s]+(.+?)[\n|]+\s*(?:right|against|con)[:\s]+(.+)/is);
+    }
+
     if (match) {
-      const left = match[1].trim().replace(/['"]+/g, '').toUpperCase().slice(0, 30);
-      const right = match[2].trim().replace(/['"]+/g, '').toUpperCase().slice(0, 30);
+      const left = clean(match[1]);
+      const right = clean(match[2]);
       if (left.length > 2 && right.length > 2) {
         this.consensusState.leftPole = left;
         this.consensusState.rightPole = right;
@@ -746,7 +764,7 @@ export class SessionManager {
         return;
       }
     }
-    console.log(`  [Consensus] Failed to parse AI poles, keeping fallback. Response: "${text.slice(0, 120)}"`);
+    console.log(`  [Consensus] Could not parse AI poles, keeping fallback. Raw: "${text.slice(0, 150)}"`);
   }
 
   // ─── Private: Debug ──────────────────────────────────────────────────
