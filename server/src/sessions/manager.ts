@@ -146,7 +146,6 @@ export class SessionManager {
   private agentConfigs: Map<string, AgentConfig> = new Map();
   private companionIds: string[] = [];
   private topicRotationTimer: ReturnType<typeof setInterval> | null = null;
-  private videoTokens: Map<string, string> = new Map();
   private audioTracker: Map<string, { firstChunkTime: number; totalB64Chars: number }> = new Map();
   // Track both conditions for turn advance — advance when BOTH are true.
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
@@ -473,10 +472,6 @@ export class SessionManager {
 
   getActiveSession(): DebateSession | null {
     return this.session;
-  }
-
-  getVideoTokens(): Map<string, string> {
-    return this.videoTokens;
   }
 
   getVideoTokens(): Record<string, string> {

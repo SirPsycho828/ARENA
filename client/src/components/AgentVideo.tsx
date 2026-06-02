@@ -34,6 +34,19 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
       if (e.data?.type === 'avatar-ready') {
         setAvatarReady(true);
       }
+
+      if (e.data?.type === 'avatar-debug') {
+        const prefix = `[Avatar:${agentName}]`;
+        if (e.data.level === 'error') {
+          console.error(prefix, e.data.message);
+        } else {
+          console.log(prefix, e.data.message);
+        }
+      }
+
+      if (e.data?.type === 'avatar-error') {
+        console.error(`[Avatar:${agentName}] Error:`, e.data.error);
+      }
     };
 
     window.addEventListener('message', handleMessage);
