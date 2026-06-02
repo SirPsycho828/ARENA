@@ -89,6 +89,7 @@ export interface ServerEvents {
   spectator_count: (data: { count: number }) => void;
   agent_disconnected: (data: { agentId: string; reason: string }) => void;
   agent_video_frame: (data: { agentId: string; frame: string }) => void;
+  agent_video_tokens: (data: { tokens: Record<string, string> }) => void;
   session_ended: (data: { reason: string }) => void;
 }
 

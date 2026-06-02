@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { RTCPeerConnection, RTCIceCandidate } from 'werift';
+import { RTCPeerConnection, RTCIceCandidate, useH264, useVP8, useOPUS, usePCMU } from 'werift';
 import { AudioDecoder, VideoDecoder } from './media-decoder.js';
 import type { AgentConfig } from '../../../shared/types.js';
 
@@ -8,11 +8,12 @@ const API_BASE = 'https://companion-api.napster.com';
 const API_KEY = process.env.OMNIAGENT_API_KEY!;
 
 interface TokenPayload {
-  url: string;
-  token?: string;
-  authToken?: string;
-  connection: { id: string };
-  signalingEndpoint?: string;
+  connection: {
+    id: string;
+    signalingEndpoint?: string;
+  };
+  // WebRTC tokens have signalingEndpoint inside connection, not at top level.
+  // No authToken — the connection ID in the URL path is the auth.
   expiresAt: string;
 }
 
@@ -68,32 +69,43 @@ export class WebRTCConnection extends EventEmitter {
     );
 
     this.connectionId = decoded.connection.id;
-    const signalingUrl = decoded.signalingEndpoint || decoded.url;
-    const authToken = decoded.authToken || decoded.token;
+    // WebRTC token: signalingEndpoint is inside connection, URL path includes connection ID
+    const signalingBase = decoded.connection.signalingEndpoint;
+    if (!signalingBase) {
+      throw new Error(`No signalingEndpoint in token for ${this.config.name}`);
+    }
+    const signalingUrl = `${signalingBase}/ws/connections/${this.connectionId}/signaling`;
 
-    console.log(`  [${this.config.name}] WebRTC token decoded, connection=${this.connectionId}`);
+    console.log(`  [${this.config.name}] WebRTC token decoded, connection=${this.connectionId}, signaling=${signalingBase}`);
 
-    // Create werift RTCPeerConnection
+    // Create werift RTCPeerConnection with H264 + VP8 video codecs
+    // Napster server requires H264 for avatar video rendering
     this.pc = new RTCPeerConnection({
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      codecs: {
+        audio: [useOPUS(), usePCMU()],
+        video: [useH264(), useVP8()],
+      },
     });
 
-    // Add audio + video transceivers (receive only — we consume the agent's media)
-    this.pc.addTransceiver('audio', { direction: 'recvonly' });
-    this.pc.addTransceiver('video', { direction: 'recvonly' });
+    // Add audio + video transceivers as sendrecv (Napster server rejects recvonly offers)
+    // We don't actually send media, but the SDP must advertise sendrecv to match what
+    // a browser would offer. The server still sends its video/audio to us.
+    this.pc.addTransceiver('audio', { direction: 'sendrecv' });
+    this.pc.addTransceiver('video', { direction: 'sendrecv' });
 
     // Create data channel for text events (same JSON format as current WS events)
     this.dc = this.pc.createDataChannel('events');
     this.wireDataChannel();
     this.wireMediaTracks();
 
-    // Perform signaling exchange
-    await this.performSignaling(signalingUrl, authToken);
+    // Perform signaling exchange (no auth token — connection ID in URL is the auth)
+    await this.performSignaling(signalingUrl);
   }
 
   // ─── Signaling ───────────────────────────────────────────────────────────
 
-  private performSignaling(signalingUrl: string, authToken: string | undefined): Promise<void> {
+  private performSignaling(signalingUrl: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error(`Signaling timeout for ${this.config.name}`));
@@ -102,10 +114,8 @@ export class WebRTCConnection extends EventEmitter {
       // Track if we already resolved (answer received)
       let resolved = false;
 
-      // Open signaling WebSocket
-      this.signalingWs = new WebSocket(signalingUrl, {
-        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
-      });
+      // Open signaling WebSocket (no auth header — connection ID in URL path is the auth)
+      this.signalingWs = new WebSocket(signalingUrl);
 
       this.signalingWs.on('open', async () => {
         console.log(`  [${this.config.name}] Signaling WS connected`);
@@ -126,14 +136,17 @@ export class WebRTCConnection extends EventEmitter {
           console.log(`  [${this.config.name}] Sent SDP offer via signaling`);
 
           // Send ICE candidates as they become available
+          // Napster expects: { type: "add_ice_candidate", data: { candidate: { candidate, sdpMid, sdpMLineIndex } } }
           this.pc!.onIceCandidate.subscribe((candidate) => {
             if (candidate && this.signalingWs?.readyState === WebSocket.OPEN) {
               this.signalingWs.send(JSON.stringify({
                 type: 'add_ice_candidate',
                 data: {
-                  candidate: candidate.candidate,
-                  sdpMid: candidate.sdpMid ?? '',
-                  sdpMLineIndex: candidate.sdpMLineIndex ?? 0,
+                  candidate: {
+                    candidate: candidate.candidate,
+                    sdpMid: String(candidate.sdpMid ?? '0'),
+                    sdpMLineIndex: candidate.sdpMLineIndex ?? 0,
+                  },
                 },
               }));
             }
@@ -146,10 +159,12 @@ export class WebRTCConnection extends EventEmitter {
 
       this.signalingWs.on('message', async (raw) => {
         try {
-          const msg = JSON.parse(Buffer.isBuffer(raw) ? raw.toString('utf-8') : String(raw));
+          const text = Buffer.isBuffer(raw) ? raw.toString('utf-8') : String(raw);
+          const msg = JSON.parse(text);
+          console.log(`  [${this.config.name}] Signaling RECV: type=${msg.type} data=${JSON.stringify(msg.data).slice(0, 300)}`);
 
-          if (msg.type === 'set_local_description' && msg.data) {
-            // Server's SDP answer (named from server's perspective: set_local_description)
+          if ((msg.type === 'set_local_description' || msg.type === 'set_remote_description') && msg.data?.sdp) {
+            // Server's SDP answer — may come as set_local_description or set_remote_description
             console.log(`  [${this.config.name}] Received SDP answer`);
             await this.pc!.setRemoteDescription({
               type: msg.data.type || 'answer',
@@ -164,6 +179,12 @@ export class WebRTCConnection extends EventEmitter {
           } else if (msg.type === 'add_ice_candidate' && msg.data) {
             // Server ICE candidate
             await this.pc!.addIceCandidate(msg.data as RTCIceCandidate);
+          } else if (msg.type === 'error') {
+            // Error response to a command we sent
+            console.error(`  [${this.config.name}] Signaling error: ${JSON.stringify(msg.data)}`);
+          } else if (msg.event || ['message_received', 'talk_state_changed', 'avatar_state_changed', 'audio_received'].includes(msg.type)) {
+            // Event forwarded through signaling WS — handle same as data channel events
+            this.handleEvent(msg);
           }
         } catch (err) {
           console.error(`  [${this.config.name}] Signaling message error:`, (err as Error).message);
@@ -205,11 +226,10 @@ export class WebRTCConnection extends EventEmitter {
       if (state === 'open') {
         this.dcReady = true;
 
-        // Override stock companion instructions with our debate persona
-        if (this.config.systemPrompt) {
-          this.updateSettings(this.config.systemPrompt);
-          console.log(`  [${this.config.name}] Sent set_settings via data channel`);
-        }
+        // Instructions are set at agent creation time (providerSettings.instructions)
+        // because WebRTC data channel rejects set_settings ("Modalitites other than video
+        // are not supported in WebRTC connection"). send_message works via DC.
+        console.log(`  [${this.config.name}] DC ready — instructions already set at agent creation`);
 
         // Prime the audio channel with silence (same as OmniagentConnection)
         const silence = Buffer.alloc(3200); // 1600 samples * 2 bytes = 100ms 16kHz 16-bit mono
@@ -217,7 +237,7 @@ export class WebRTCConnection extends EventEmitter {
           type: 'send_audio',
           data: { data: silence.toString('base64') },
         }));
-        console.log(`  [${this.config.name}] Sent silent audio to prime audio channel`);
+        console.log(`  [${this.config.name}] Sent silent audio prime via DC`);
       }
 
       if (state === 'closed') {
@@ -386,33 +406,40 @@ export class WebRTCConnection extends EventEmitter {
   // ─── Public API (same as OmniagentConnection) ───────────────────────
 
   sendMessage(role: 'user' | 'system', text: string, triggerResponse = true) {
-    if (!this.dcReady || !this.dc) {
-      console.warn(`  [${this.config.name}] Cannot send - data channel not ready`);
-      return;
-    }
-
-    const payload = {
+    const payload = JSON.stringify({
       type: 'send_message',
       data: { role, text, trigger_response: triggerResponse },
-    };
+    });
     console.log(`  [${this.config.name}] Sending: role=${role} trigger=${triggerResponse} text="${text.slice(0, 80)}..."`);
-    this.dc.send(JSON.stringify(payload));
+    this.sendCommand(payload);
   }
 
   updateSettings(instructions: string) {
-    if (!this.dcReady || !this.dc) return;
-
-    this.dc.send(JSON.stringify({
+    const payload = JSON.stringify({
       type: 'set_settings',
       data: {
         instructions,
-        // High silence threshold so agent doesn't self-trigger from silence priming
         turn_detection: {
           threshold: 0.9,
           silence_duration_ms: 2000,
         },
       },
-    }));
+    });
+    this.sendCommand(payload);
+  }
+
+  /**
+   * Send a command to the Napster server via data channel.
+   * send_message and send_audio work via DC.
+   * set_settings does NOT work via DC ("Modalitites other than video are not supported").
+   * Instructions must be set at agent creation time via providerSettings.
+   */
+  private sendCommand(json: string) {
+    if (this.dcReady && this.dc) {
+      this.dc.send(json);
+      return;
+    }
+    console.warn(`  [${this.config.name}] Cannot send command - data channel not ready`);
   }
 
   disconnect() {

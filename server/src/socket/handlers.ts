@@ -13,6 +13,10 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
 
     // Send current state on connect
     socket.emit('session_state', sessionManager.getSessionState());
+    const videoTokens = sessionManager.getVideoTokens();
+    if (Object.keys(videoTokens).length > 0) {
+      socket.emit('agent_video_tokens' as any, { tokens: videoTokens });
+    }
     broadcastSpectatorCount();
 
     // ─── Audience Events ──────────────────────────────────────────────────

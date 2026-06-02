@@ -4,7 +4,7 @@ import { WebRTCConnection } from './webrtc-connection.js';
 import type { AgentConfig } from '../../../shared/types.js';
 
 const USE_MOCK = process.env.USE_MOCK === 'true';
-const USE_WEBRTC = process.env.USE_WEBRTC !== 'false'; // default true
+const USE_WEBRTC = process.env.USE_WEBRTC === 'true'; // default false — debate uses WebSocket; video uses client-side WebRTC
 
 export type AgentInstance = OmniagentConnection | WebRTCConnection | MockOmniagentConnection;
 

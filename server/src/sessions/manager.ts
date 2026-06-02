@@ -141,6 +141,7 @@ export class SessionManager {
   private injectionQueue: InjectionQueue | null = null;
   private voteTallies: VoteTallies = {};
   private activeRules: string[] = [];
+  private videoTokens: Record<string, string> = {};
   private recentTranscripts: TranscriptMessage[] = [];
   private agentConfigs: Map<string, AgentConfig> = new Map();
   private companionIds: string[] = [];
@@ -218,7 +219,7 @@ export class SessionManager {
         agentIds.push(agentId);
         console.log(`  Created: ${config.name} (${agentId})`);
 
-        // Video enabled via server-side WebRTC (werift) — see webrtc-connection.ts
+        // Video tokens created after debate starts (client-side WebRTC)
       } catch (err) {
         console.error(`  Failed to create ${config.name}:`, (err as Error).message);
       }
@@ -281,6 +282,9 @@ export class SessionManager {
     const totalCreated = this.session.agentIds.length;
     this.session.agentIds = connectedAgentIds;
     console.log(`  ${connectedAgentIds.length}/${totalCreated} agents connected`);
+
+    // Create WebRTC connections for client-side video avatars
+    this.createVideoTokens(connectedAgentIds);
 
     // Initialize orchestration
     this.turnManager = new TurnManager({ mode: 'round_robin' });
@@ -475,6 +479,10 @@ export class SessionManager {
     return this.videoTokens;
   }
 
+  getVideoTokens(): Record<string, string> {
+    return this.videoTokens;
+  }
+
   getSessionState(): SessionState {
     return {
       session: this.session,
@@ -557,6 +565,51 @@ export class SessionManager {
     }
   }
 
+  // ─── Private: Video Tokens ─────────────────────────────────────────────
+
+  private async createVideoTokens(agentIds: string[]) {
+    if (process.env.USE_MOCK === 'true') return;
+
+    const API_KEY = process.env.OMNIAGENT_API_KEY!;
+    const tokens: Record<string, string> = {};
+
+    // Create WebRTC connections in parallel (non-blocking — video is optional)
+    const results = await Promise.allSettled(
+      agentIds.map(async (agentId) => {
+        const config = this.agentConfigs.get(agentId);
+        const res = await fetch(
+          `https://companion-api.napster.com/public/agents/${agentId}/connections`,
+          {
+            method: 'POST',
+            headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              channelType: 'webrtc',
+              externalClientId: `arena_vid_${(config?.name || agentId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}`.slice(0, 32),
+            }),
+          }
+        );
+        if (!res.ok) throw new Error(`${res.status}`);
+        const data = await res.json() as { token: string };
+        return { agentId, token: data.token };
+      })
+    );
+
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        tokens[r.value.agentId] = r.value.token;
+      }
+    }
+
+    const count = Object.keys(tokens).length;
+    if (count > 0) {
+      this.videoTokens = tokens;
+      console.log(`  Video tokens created: ${count}/${agentIds.length}`);
+      this.io.emit('agent_video_tokens', { tokens });
+    } else {
+      console.log('  Video tokens: none created (video disabled)');
+    }
+  }
+
   // ─── Private: Agent Creation ────────────────────────────────────────────
 
   private async createOmniagentAgent(config: AgentConfig): Promise<string> {
@@ -575,6 +628,10 @@ export class SessionManager {
         providerSettings: {
           temperature: 0.85,
           instructions: config.systemPrompt,
+          turnDetection: {
+            threshold: 0.9,
+            silence_duration_ms: 2000,
+          },
         },
       }),
     });

@@ -86,7 +86,8 @@ interface ArenaState {
   victoryData: VictoryData | null;
 
   // Video
-  videoFrames: Record<string, string>; // agentId -> latest base64 JPEG frame
+  videoFrames: Record<string, string>; // agentId -> latest base64 JPEG frame (server-pushed)
+  videoTokens: Record<string, string>; // agentId -> WebRTC token (for client-side video)
 
   // Actions
   connect: () => void;
@@ -221,6 +222,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   toggleSound: () => set((s) => ({ soundMuted: !s.soundMuted })),
   victoryData: null,
   videoFrames: {},
+  videoTokens: {},
 
   connect: () => {
     const socket = io(window.location.origin, {
@@ -286,6 +288,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set((s) => ({
         videoFrames: { ...s.videoFrames, [data.agentId]: data.frame },
       }));
+    });
+
+    // Receive WebRTC video tokens for client-side video rendering
+    (socket as any).on('agent_video_tokens', (data: { tokens: Record<string, string> }) => {
+      set({ videoTokens: data.tokens });
     });
 
     // Server says no more audio chunks for this turn — play remaining buffered audio,
