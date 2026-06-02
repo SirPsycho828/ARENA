@@ -14,6 +14,8 @@ import type { ServerEvents, ClientEvents } from '../../shared/types.js';
 import Stripe from 'stripe';
 import { adminAuth } from './lib/firebase-admin.js';
 import { CreditService } from './lib/credits.js';
+import { initNapsterResources } from './lib/napster-resources.js';
+import { createToolRoutes } from './routes/tools.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,6 +73,10 @@ app.use(express.json());
 const clientDist = path.resolve(__dirname, '../../client/dist');
 app.use(express.static(clientDist));
 
+// Serve knowledge base playbooks as static files for Napster API to download
+const contentDir = path.resolve(__dirname, 'content');
+app.use('/static', express.static(contentDir));
+
 // ─── Health Endpoint ────────────────────────────────────────────────────────
 
 app.get('/health', (_req, res) => {
@@ -83,6 +89,9 @@ app.get('/health', (_req, res) => {
     timestamp: Date.now(),
   });
 });
+
+// ─── Tool Endpoints (called by Napster explicit tools) ──────────────────────
+app.use('/api/tools', createToolRoutes(sessionManager));
 
 // ─── API Routes ─────────────────────────────────────────────────────────────
 
@@ -288,6 +297,12 @@ httpServer.listen(PORT, () => {
 
   setTimeout(async () => {
     try {
+      // Initialize Napster resources (KBs, FAQs, Functions) before first session
+      const serverUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+        ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+        : `http://localhost:${PORT}`;
+      await initNapsterResources(serverUrl);
+
       const topic = getNextTopic();
       await sessionManager.createSession(topic, 3);
       await sessionManager.startDebate();

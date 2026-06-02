@@ -207,6 +207,40 @@ export class OmniagentConnection extends EventEmitter {
         }
         break;
       }
+      case 'function_implicitly_called': {
+        const callId = event.data?.call_id;
+        const toolName = event.data?.name;
+        const args = event.data?.arguments ? JSON.parse(event.data.arguments) : {};
+        console.log(`  [${this.config.name}] implicit tool call: ${toolName} (${callId})`);
+
+        // Emit tool effect for the session manager to forward to clients
+        this.emit('tool_effect', {
+          agentId: this.config.id,
+          agentName: this.config.name,
+          toolName,
+          args,
+          callId,
+        });
+
+        // Send the tool output back so the agent can continue
+        const outputs: Record<string, any> = {
+          dramatic_pause: { status: 'ready' },
+          crowd_appeal: { status: 'acknowledged', message: 'The audience is fired up!' },
+          mic_drop: { status: 'dropped', message: 'The arena erupts!' },
+        };
+
+        if (this.ws && this.ws.readyState === 1) {
+          this.ws.send(JSON.stringify({
+            type: 'send_function_output',
+            data: {
+              call_id: callId,
+              output: outputs[toolName] || { status: 'ok' },
+              delay: false,
+            },
+          }));
+        }
+        break;
+      }
       default:
         // Log unknown event types for debugging
         if (eventType) console.log(`  [${this.config.name}] unknown event: ${eventType}`);
