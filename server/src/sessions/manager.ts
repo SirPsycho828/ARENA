@@ -672,37 +672,54 @@ export class SessionManager {
 
   private turnAdvanceTimer: ReturnType<typeof setTimeout> | null = null;
   private turnTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private turnGeneration = 0;
 
   // Called when BOTH text and audio are done from Napster.
-  // Audio streams in real-time, so by the time this fires, the client has already
-  // played most of the audio. Just wait a short fixed delay for trailing buffers.
+  // Client-driven: the client knows exactly when audio finishes playing and
+  // sends playback_done with a generation counter to prevent stale signals.
   private maybeAdvanceTurn(agentId: string) {
     if (!this.turnTextComplete || !this.turnAudioDone) return;
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
 
+    this.turnGeneration++;
+    const gen = this.turnGeneration;
     const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
-    console.log(`  [${name}] text+audio done — advancing in 3s`);
+    console.log(`  [${name}] text+audio done — waiting for client playback_done (gen=${gen})`);
 
-    // Tell client no more audio chunks are coming (for transcript pacing)
-    (this.io as any).emit('turn_audio_complete', { agentId });
+    // Tell client no more audio chunks are coming — include generation for matching
+    (this.io as any).emit('turn_audio_complete', { agentId, gen });
 
     // Cancel the no-response timeout — agent DID respond
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
 
-    // Fixed 3s delay: audio streams in real-time, so only a few seconds of
-    // trailing buffered audio remains by the time the API says it's done.
+    // Fallback: if client never sends playback_done (backgrounded tab, dead socket),
+    // advance after 30s. This is intentionally long — the client should respond faster.
     if (this.turnAdvanceTimer) clearTimeout(this.turnAdvanceTimer);
     this.turnAdvanceTimer = setTimeout(() => {
-      const currentId = this.turnManager?.getCurrentSpeaker();
-      if (currentId === agentId) {
-        console.log(`  [${name}] advancing turn`);
-        this.turnManager?.onSpeechEnd(agentId, '');
+      if (this.turnGeneration === gen) {
+        console.log(`  [${name}] playback fallback (30s) — advancing`);
+        this.doAdvanceTurn(agentId);
       }
-    }, 3000);
+    }, 30000);
   }
 
-  /** @deprecated — kept for interface compat, now a no-op. */
-  advanceFromPlayback() {}
+  /** Called when client signals playback finished. Generation counter prevents stale signals. */
+  advanceFromPlayback(gen?: number) {
+    if (gen !== undefined && gen !== this.turnGeneration) {
+      console.log(`  Ignoring stale playback_done (got gen=${gen}, current=${this.turnGeneration})`);
+      return;
+    }
+    const currentId = this.turnManager?.getCurrentSpeaker();
+    if (currentId) this.doAdvanceTurn(currentId);
+  }
+
+  private doAdvanceTurn(agentId: string) {
+    if (this.turnAdvanceTimer) { clearTimeout(this.turnAdvanceTimer); this.turnAdvanceTimer = null; }
+    if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
+    const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
+    console.log(`  [${name}] advancing turn`);
+    this.turnManager?.onSpeechEnd(agentId, '');
+  }
 
   private wireTurnManagerEvents() {
     if (!this.turnManager) return;

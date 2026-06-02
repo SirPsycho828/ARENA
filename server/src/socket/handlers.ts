@@ -80,9 +80,9 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
       sessionManager.handleChallengerEnd(socket.id);
     });
 
-    // Client signals audio playback finished — advance to next speaker
-    socket.on('playback_done' as any, () => {
-      sessionManager.advanceFromPlayback();
+    // Client signals audio playback finished — generation counter prevents stale signals
+    socket.on('playback_done' as any, (data: { gen?: number }) => {
+      sessionManager.advanceFromPlayback(data?.gen);
     });
 
     socket.on('disconnect', (reason) => {
