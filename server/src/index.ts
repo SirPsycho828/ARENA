@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { WebSocketServer, WebSocket as WS } from 'ws';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { setupSocketHandlers } from './socket/handlers.js';
@@ -119,6 +120,45 @@ app.get('/api/sessions/tokens', (_req, res) => {
 
 app.get('*', (_req, res) => {
   res.sendFile(path.join(clientDist, 'index.html'));
+});
+
+// ─── Signaling WebSocket Proxy ───────────────────────────────────────────────
+// The Napster signaling server rejects browser WebSocket connections (returns 400).
+// We proxy signaling through our server (no Origin header from Node.js).
+// Client path: /signaling-proxy/ws/connections/{id}/signaling
+//           → wss://avatar-signaling.touchcastmaas.com/ws/connections/{id}/signaling
+
+const signalingWss = new WebSocketServer({ noServer: true });
+
+httpServer.on('upgrade', (req, socket, head) => {
+  if (!req.url?.startsWith('/signaling-proxy/')) return;
+
+  signalingWss.handleUpgrade(req, socket, head, (clientWs) => {
+    const targetPath = req.url!.replace('/signaling-proxy/', '');
+    const targetUrl = `wss://avatar-signaling.touchcastmaas.com/${targetPath}`;
+    console.log(`  [SignalingProxy] → ${targetUrl}`);
+
+    const upstream = new WS(targetUrl);
+
+    upstream.on('open', () => {
+      console.log(`  [SignalingProxy] Upstream connected`);
+      // Relay messages bidirectionally, preserving binary/text type
+      clientWs.on('message', (data, isBinary) => {
+        if (upstream.readyState === WS.OPEN) upstream.send(data, { binary: isBinary });
+      });
+      upstream.on('message', (data, isBinary) => {
+        if (clientWs.readyState === WS.OPEN) clientWs.send(data, { binary: isBinary });
+      });
+    });
+
+    clientWs.on('close', () => upstream.close());
+    upstream.on('close', () => { if (clientWs.readyState <= WS.OPEN) clientWs.close(); });
+    clientWs.on('error', () => upstream.close());
+    upstream.on('error', (err) => {
+      console.warn(`  [SignalingProxy] Upstream error:`, (err as Error).message);
+      if (clientWs.readyState <= WS.OPEN) clientWs.close();
+    });
+  });
 });
 
 // ─── Socket.io ──────────────────────────────────────────────────────────────

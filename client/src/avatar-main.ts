@@ -1,10 +1,31 @@
+// ─── Signaling Proxy ──────────────────────────────────────────────────────────
+// The Napster signaling server rejects browser WebSocket connections (400).
+// Intercept the SDK's WebSocket creation and route through our server proxy.
+const OriginalWebSocket = window.WebSocket;
+(window as any).WebSocket = class ProxiedWebSocket extends OriginalWebSocket {
+  constructor(url: string | URL, protocols?: string | string[]) {
+    const urlStr = url.toString();
+    if (urlStr.includes('avatar-signaling.touchcastmaas.com')) {
+      // Rewrite: wss://avatar-signaling.touchcastmaas.com/ws/connections/{id}/signaling
+      //       → wss://{our-host}/signaling-proxy/ws/connections/{id}/signaling
+      const signalingPath = new URL(urlStr).pathname;
+      const proxyUrl = `wss://${window.location.host}/signaling-proxy${signalingPath}`;
+      console.log('[Avatar] Proxying signaling:', proxyUrl);
+      super(proxyUrl, protocols);
+    } else {
+      super(url, protocols);
+    }
+  }
+};
+
+// ─── SDK Initialization ──────────────────────────────────────────────────────
 import '@touchcastllc/napster-companion-api/styles';
 
 let instance: any = null;
 
 window.addEventListener('message', async (e) => {
   if (e.data?.type !== 'init-avatar' || !e.data.token) return;
-  if (instance) return; // Already initialized
+  if (instance) return;
 
   try {
     const { NapsterCompanionApiSdk } = await import('@touchcastllc/napster-companion-api');
