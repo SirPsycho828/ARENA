@@ -7,6 +7,7 @@ import { ChaosQueue } from './chaos-queue.js';
 import { db } from '../db/index.js';
 import type {
   AgentConfig,
+  ConsensusState,
   DebateSession,
   TranscriptMessage,
   VoteTallies,
@@ -181,6 +182,9 @@ export class SessionManager {
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
   private turnAudioDone = false;
+  // Consensus meter
+  private consensusState: ConsensusState | null = null;
+  private poleVoterRecord: Set<string> = new Set();
 
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
@@ -336,6 +340,9 @@ export class SessionManager {
 
     // Start the turn cycle
     this.turnManager.start(this.session.agentIds);
+
+    // Initialize consensus meter for first topic
+    this.initConsensus(this.session.topic);
 
     // Start topic rotation (every 5 minutes)
     this.topicRotationTimer = setInterval(() => {
@@ -580,7 +587,123 @@ export class SessionManager {
       voteTallies: this.voteTallies,
       activeRules: this.chaosQueue?.getActiveRules().map(r => r.text) || [],
       recentTranscripts: this.recentTranscripts.slice(-20),
+      consensus: this.consensusState,
     };
+  }
+
+  // ─── Consensus Meter ──────────────────────────────────────────────────
+
+  private initConsensus(topic: string) {
+    const poles = this.generatePoles(topic);
+    const agentStances: Record<string, number> = {};
+
+    // Assign each agent a spread-out initial stance so the meter has visual tension
+    const directions = [-0.25, 0.05, 0.25];
+    const shuffled = directions.sort(() => Math.random() - 0.5);
+    this.session?.agentIds.forEach((id, i) => {
+      agentStances[id] = shuffled[i % shuffled.length] + (Math.random() - 0.5) * 0.1;
+    });
+
+    this.consensusState = {
+      leftPole: poles.left,
+      rightPole: poles.right,
+      needlePosition: 0,
+      agentStances,
+      viewerVotes: { left: 0, right: 0 },
+    };
+    this.poleVoterRecord.clear();
+    this.updateNeedlePosition();
+    (this.io as any).emit('consensus_update', this.consensusState);
+  }
+
+  private generatePoles(topic: string): { left: string; right: string } {
+    const t = topic.toLowerCase().replace(/[?.!]+$/, '').trim();
+
+    // Try to extract subject for topic-aware labels
+    let subject = '';
+    const m = t.match(/^(?:should|can|could|will|would|do|does|is|are)\s+(?:we\s+)?(.+)/);
+    if (m) subject = m[1];
+    else subject = t;
+    const keyWord = subject.split(/\s+/).filter(w => !['the','a','an','be','to','of','in','for','and','or','it','is','we'].includes(w))[0] || '';
+
+    // Topic-specific pairs that use the extracted keyword
+    const specificPairs = keyWord.length > 2 ? [
+      { left: `PRO-${keyWord.toUpperCase()}`, right: `ANTI-${keyWord.toUpperCase()}` },
+      { left: `${keyWord.toUpperCase()} GANG`, right: `NO ${keyWord.toUpperCase()} EVER` },
+      { left: `TEAM ${keyWord.toUpperCase()}`, right: `${keyWord.toUpperCase()} IS OVER` },
+    ] : [];
+
+    // Generic witty pole pairs that work for any topic
+    const genericPairs = [
+      { left: 'ABSOLUTELY BASED', right: 'COMPLETELY UNHINGED' },
+      { left: 'PEAK CIVILIZATION', right: 'THIS IS THE END' },
+      { left: 'SIGN ME UP', right: 'HARD PASS FOREVER' },
+      { left: 'GALAXY BRAIN', right: 'SMOOTH BRAIN MOMENT' },
+      { left: 'SPITTING FACTS', right: 'OBJECTIVELY WRONG' },
+      { left: 'THE FUTURE IS NOW', right: 'ABSOLUTELY NOT' },
+      { left: 'NO DEBATE NEEDED', right: 'FIGHT ME ON THIS' },
+      { left: 'COMMON SENSE', right: 'TOTAL MADNESS' },
+      { left: 'OBVIOUSLY YES', right: 'OBVIOUSLY NO' },
+      { left: 'ENLIGHTENED TAKE', right: 'DELUSIONAL TAKE' },
+      { left: 'CHEF\'S KISS', right: 'CURSED OPINION' },
+      { left: 'THIS IS THE WAY', right: 'THIS IS NOT THE WAY' },
+    ];
+
+    // 50% topic-specific if available, otherwise generic
+    const pool = specificPairs.length > 0 && Math.random() < 0.5 ? specificPairs : genericPairs;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  private analyzeAgentStance(agentId: string, text: string) {
+    if (!this.consensusState) return;
+
+    const words = text.toLowerCase();
+    let delta = 0;
+
+    // Positive sentiment → lean left (toward "for" pole)
+    const forTokens = ['agree', 'yes', 'absolutely', 'exactly', 'right', 'true', 'correct', 'love', 'brilliant', 'obviously', 'clearly', 'support', 'great', 'perfect'];
+    const againstTokens = ['disagree', 'wrong', 'ridiculous', 'terrible', 'absurd', 'never', 'nonsense', 'awful', 'stupid', 'insane', 'delusional', 'impossible', 'fail'];
+    const nuanceTokens = ['however', 'although', 'nuanced', 'complex', 'depends', 'both'];
+
+    forTokens.forEach(w => { if (words.includes(w)) delta -= 0.07; });
+    againstTokens.forEach(w => { if (words.includes(w)) delta += 0.07; });
+    nuanceTokens.forEach(w => { if (words.includes(w)) delta *= 0.6; });
+
+    // Random perturbation for dynamism
+    delta += (Math.random() - 0.5) * 0.12;
+
+    // Exponential moving average with previous stance
+    const prev = this.consensusState.agentStances[agentId] || 0;
+    this.consensusState.agentStances[agentId] = Math.max(-1, Math.min(1, prev * 0.7 + delta + (Math.random() - 0.5) * 0.06));
+
+    this.updateNeedlePosition();
+    (this.io as any).emit('consensus_update', this.consensusState);
+  }
+
+  handlePoleVote(viewerId: string, side: 'left' | 'right') {
+    if (!this.consensusState) return;
+    if (this.poleVoterRecord.has(viewerId)) return;
+
+    this.poleVoterRecord.add(viewerId);
+    this.consensusState.viewerVotes[side]++;
+
+    this.updateNeedlePosition();
+    (this.io as any).emit('consensus_update', this.consensusState);
+  }
+
+  private updateNeedlePosition() {
+    if (!this.consensusState) return;
+
+    // Agent average (60% weight)
+    const stances = Object.values(this.consensusState.agentStances);
+    const agentAvg = stances.length > 0 ? stances.reduce((a, b) => a + b, 0) / stances.length : 0;
+
+    // Viewer vote ratio (40% weight)
+    const { left, right } = this.consensusState.viewerVotes;
+    const totalVotes = left + right;
+    const viewerRatio = totalVotes > 0 ? (right - left) / totalVotes : 0;
+
+    this.consensusState.needlePosition = Math.max(-1, Math.min(1, agentAvg * 0.6 + viewerRatio * 0.4));
   }
 
   // ─── Private: Debug ──────────────────────────────────────────────────
@@ -641,6 +764,9 @@ export class SessionManager {
       }
       this.voterRecord.clear();
       this.io.emit('vote_update', this.voteTallies);
+
+      // Reset consensus meter for new topic
+      this.initConsensus(newTopic);
 
       // Notify all agents
       for (const agentId of this.session.agentIds) {
@@ -814,6 +940,9 @@ export class SessionManager {
       (this.io as any).emit('transcript_done', msg);
 
       this.emitDebug('speech_end', agentId, data.agentName, `${data.text.length} chars`);
+
+      // Update consensus meter with agent's stance from this turn
+      this.analyzeAgentStance(agentId, cleanText);
 
       this.turnTextComplete = true;
       this.maybeAdvanceTurn(agentId);

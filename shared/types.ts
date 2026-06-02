@@ -74,6 +74,16 @@ export interface VoteTallies {
   [agentId: string]: number;
 }
 
+// ─── Consensus Meter ─────────────────────────────────────────────────────
+
+export interface ConsensusState {
+  leftPole: string;            // witty "for" label
+  rightPole: string;           // witty "against" label
+  needlePosition: number;      // -1.0 (full left) to 1.0 (full right)
+  agentStances: Record<string, number>;  // agentId → stance (-1 to 1)
+  viewerVotes: { left: number; right: number };
+}
+
 // ─── Socket Events (Server → Client) ───────────────────────────────────────
 
 export interface ServerEvents {
@@ -91,6 +101,7 @@ export interface ServerEvents {
   agent_video_frame: (data: { agentId: string; frame: string }) => void;
   agent_video_tokens: (data: { tokens: Record<string, string> }) => void;
   session_ended: (data: { reason: string; results?: { winner: { id: string; name: string; color: string; votes: number } | null; voteTallies: Record<string, number>; totalMessages: number; duration: number } }) => void;
+  consensus_update: (state: ConsensusState) => void;
 }
 
 // ─── Socket Events (Client → Server) ───────────────────────────────────────
@@ -103,6 +114,7 @@ export interface ClientEvents {
   challenge_start: (data: { agentId: string }) => void;
   challenge_audio: (data: { agentId: string; text: string }) => void;
   challenge_end: (data?: Record<string, never>) => void;
+  pole_vote: (data: { side: 'left' | 'right' }) => void;
 }
 
 
@@ -121,6 +133,7 @@ export interface SessionState {
   voteTallies: VoteTallies;
   activeRules: string[];
   recentTranscripts: TranscriptMessage[];
+  consensus: ConsensusState | null;
 }
 
 // ─── Omniagent API Events ───────────────────────────────────────────────────

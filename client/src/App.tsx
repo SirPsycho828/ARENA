@@ -17,6 +17,7 @@ import { JudgePanel } from './components/JudgePanel';
 import { ToolEffects } from './components/ToolEffects';
 import { TopicReveal } from './components/TopicReveal';
 import { sounds } from './lib/sounds';
+import { ConsensusNeedle } from './components/ConsensusNeedle';
 import { Zap, X } from 'lucide-react';
 
 type Phase = 'splash' | 'entrance' | 'arena';
@@ -173,6 +174,7 @@ function App() {
                   ))}
                 </div>
 
+                <ConsensusNeedle />
                 <ChaosStatusBar />
 
                 {/* Transcript feed — min-height ensures it's usable on mobile */}

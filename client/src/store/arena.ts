@@ -118,6 +118,10 @@ interface ArenaState {
   pendingTopic: string | null;
   dismissTopic: () => void;
 
+  // Consensus Meter
+  consensus: { leftPole: string; rightPole: string; needlePosition: number; agentStances: Record<string, number>; viewerVotes: { left: number; right: number } } | null;
+  hasVotedPole: boolean;
+
   // Credits
   credits: number | null;
   creditsLoading: boolean;
@@ -127,6 +131,7 @@ interface ArenaState {
   connect: () => void;
   disconnect: () => void;
   vote: (agentId: string) => void;
+  votePole: (side: 'left' | 'right') => void;
   injectChaos: (text: string, type?: 'rule' | 'topic_change', duration?: number, token?: string) => void;
   changeTopic: (topic: string, token?: string) => void;
   quickChaos: (preset: string, token?: string) => void;
@@ -267,6 +272,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   activeToolEffect: null,
   pendingTopic: null,
   dismissTopic: () => set({ pendingTopic: null }),
+  consensus: null,
+  hasVotedPole: false,
   credits: null,
   creditsLoading: false,
   lastRejectionReason: null,
@@ -308,6 +315,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         voteTallies: state.voteTallies,
         activeRules: state.activeRules,
         transcripts: state.recentTranscripts || [],
+        consensus: (state as any).consensus || null,
         victoryData: null, // Clear victory screen when new session arrives
       });
 
@@ -407,8 +415,13 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set((s) => ({
         session: s.session ? { ...s.session, topic } : null,
         hasVoted: false,
+        hasVotedPole: false,
         pendingTopic: topic,
       }));
+    });
+
+    (socket as any).on('consensus_update', (state: any) => {
+      set({ consensus: state });
     });
 
     // New event listeners
@@ -459,6 +472,12 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     if (get().hasVoted) return;
     get().socket?.emit('vote', { agentId });
     set({ hasVoted: true });
+  },
+
+  votePole: (side) => {
+    if (get().hasVotedPole) return;
+    (get().socket as any)?.emit('pole_vote', { side });
+    set({ hasVotedPole: true });
   },
 
   injectChaos: (text, type = 'rule', duration = 3, token) => {

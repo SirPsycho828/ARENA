@@ -90,6 +90,10 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
       sessionManager.handleVote(socket.id, data.agentId);
     });
 
+    (socket as any).on('pole_vote', (data: { side: 'left' | 'right' }) => {
+      sessionManager.handlePoleVote(socket.id, data.side);
+    });
+
     socket.on('topic_change', async (data) => {
       const token = (data as any).token;
       const user = await verifyToken(token);
