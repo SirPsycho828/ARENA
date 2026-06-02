@@ -3,7 +3,7 @@ import { Server } from 'socket.io';
 import { OmniagentManager, type AgentInstance } from '../omniagent/manager.js';
 import { TurnManager } from '../orchestration/turn-manager.js';
 import { TranscriptRelay } from '../orchestration/transcript-relay.js';
-import { InjectionQueue } from './injection-queue.js';
+import { ChaosQueue } from './chaos-queue.js';
 import { db } from '../db/index.js';
 import type {
   AgentConfig,
@@ -138,7 +138,7 @@ export class SessionManager {
   private session: DebateSession | null = null;
   private turnManager: TurnManager | null = null;
   private relay: TranscriptRelay | null = null;
-  private injectionQueue: InjectionQueue | null = null;
+  private chaosQueue: ChaosQueue | null = null;
   private voteTallies: VoteTallies = {};
   private activeRules: string[] = [];
   private videoTokens: Record<string, string> = {};
@@ -288,12 +288,7 @@ export class SessionManager {
     // Initialize orchestration
     this.turnManager = new TurnManager({ mode: 'round_robin' });
     this.relay = new TranscriptRelay(this.omniagent);
-    this.injectionQueue = new InjectionQueue((text) => {
-      this.relay!.injectSystem(text);
-      this.activeRules.push(text);
-      if (this.activeRules.length > 3) this.activeRules.shift();
-      this.io.emit('injection_active', { text, timestamp: Date.now() });
-    });
+    this.chaosQueue = new ChaosQueue();
 
     this.wireTurnManagerEvents();
 
@@ -326,7 +321,7 @@ export class SessionManager {
     this.session.endedAt = Date.now();
 
     this.turnManager?.stop();
-    this.injectionQueue?.stop();
+    this.chaosQueue?.stop();
     this.omniagent.disconnectAll();
 
     db.prepare('UPDATE sessions SET status = ?, ended_at = ? WHERE id = ?')
@@ -352,7 +347,7 @@ export class SessionManager {
 
     this.turnManager = null;
     this.relay = null;
-    this.injectionQueue = null;
+    this.chaosQueue = null;
 
     if (reason !== 'shutdown') {
       setTimeout(async () => {
@@ -371,16 +366,51 @@ export class SessionManager {
 
   // ─── Audience Actions ───────────────────────────────────────────────────
 
-  handleChaosInject(viewerId: string, text: string, type: 'rule' | 'topic_change') {
-    if (!this.session || !this.injectionQueue) return { ok: false, reason: 'No active session' };
+  handleChaosInject(viewerId: string, viewerName: string | null, text: string, type: 'rule' | 'topic_change', duration = 3) {
+    if (!this.session || !this.chaosQueue) return { ok: false, reason: 'No active session' };
 
-    const result = this.injectionQueue.enqueue(viewerId, text, type);
+    if (type === 'topic_change') {
+      const result = this.chaosQueue.enqueueTopic(viewerId, text);
+      if (result.ok) {
+        this.io.emit('injection_queued', { text, position: result.position! });
+        this.emitDebug('injection', undefined, undefined, `topic: ${text}`);
+        db.prepare('INSERT INTO injections (session_id, text, type, viewer_id) VALUES (?, ?, ?, ?)')
+          .run(this.session.id, text, type, viewerId);
+      }
+      return result;
+    }
+
+    const result = this.chaosQueue.enqueueRule(viewerId, viewerName, text, duration);
     if (result.ok) {
       this.io.emit('injection_queued', { text, position: result.position! });
-      this.emitDebug('injection', undefined, undefined, `${type}: ${text}`);
-
+      this.emitDebug('injection', undefined, undefined, `rule (${duration}t): ${text}`);
       db.prepare('INSERT INTO injections (session_id, text, type, viewer_id) VALUES (?, ?, ?, ?)')
         .run(this.session.id, text, type, viewerId);
+    }
+    return result;
+  }
+
+  handleQuickChaos(viewerId: string, viewerName: string | null, presetKey: string) {
+    if (!this.session || !this.chaosQueue) return { ok: false, reason: 'No active session' };
+
+    const QUICK_CHAOS_PRESETS: Record<string, { label: string; text: string; duration: number }> = {
+      rhyme_time:   { label: 'Rhyme Time',     text: 'All debaters must speak entirely in rhymes.',                    duration: 3 },
+      pirate_mode:  { label: 'Pirate Mode',    text: 'Everyone must argue like pirates. Arrr!',                        duration: 3 },
+      opposite_day: { label: 'Opposite Day',   text: 'Each debater must argue the OPPOSITE of their position.',        duration: 3 },
+      shakespeare:  { label: 'Shakespeare',    text: 'All arguments must be in Shakespearean English.',                 duration: 3 },
+      eli5:         { label: 'ELI5',           text: 'Explain your position as if talking to a 5-year-old.',            duration: 3 },
+      roast_battle: { label: 'Roast Battle',   text: 'Forget the topic. Roast the person who spoke before you.',       duration: 3 },
+      hot_takes:    { label: 'Hot Takes Only', text: 'Only the most controversial, spicy hot takes allowed.',           duration: 3 },
+      one_sentence: { label: 'One Sentence',   text: 'Each debater gets only ONE sentence for their entire argument.', duration: 3 },
+    };
+
+    const preset = QUICK_CHAOS_PRESETS[presetKey];
+    if (!preset) return { ok: false, reason: 'unknown_preset' };
+
+    const result = this.chaosQueue.enqueueQuickChaos(viewerId, viewerName, preset.text, preset.duration);
+    if (result.ok) {
+      this.io.emit('injection_queued', { text: preset.text, position: result.position! });
+      this.emitDebug('injection', undefined, undefined, `quick_chaos: ${preset.label}`);
     }
     return result;
   }
@@ -394,12 +424,13 @@ export class SessionManager {
 
   // ─── Voice Challenger ─────────────────────────────────────────────────
 
-  private activeChallenger: { viewerId: string; agentId: string } | null = null;
+  private activeChallenger: { viewerId: string; agentId: string; viewerName: string } | null = null;
 
-  handleChallengerStart(viewerId: string, agentId: string) {
+  handleChallengerStart(viewerId: string, agentId: string, viewerName?: string) {
     if (!this.session) return;
 
-    this.activeChallenger = { viewerId, agentId };
+    const name = viewerName || 'Challenger';
+    this.activeChallenger = { viewerId, agentId, viewerName: name };
 
     // Pause turn manager during challenge
     this.turnManager?.pause();
@@ -408,7 +439,7 @@ export class SessionManager {
     const agentName = this.agentConfigs.get(agentId)?.name || 'Agent';
     this.omniagent.sendMessage(
       agentId, 'system',
-      `A LIVE HUMAN CHALLENGER has entered the arena to debate you directly! The audience is watching. Be entertaining, engage with them, and don't hold back. You have 60 seconds.`,
+      `A LIVE HUMAN CHALLENGER named "${name}" has entered the arena to debate you directly! Address them by name. The audience is watching. Be entertaining, engage with them, and don't hold back. You have 60 seconds.`,
       false
     );
 
@@ -417,14 +448,14 @@ export class SessionManager {
       if (otherId !== agentId) {
         this.omniagent.sendMessage(
           otherId, 'system',
-          `A human challenger has entered the arena to take on ${agentName}! Watch and react. You may get a chance to comment.`,
+          `A human challenger named "${name}" has entered the arena to take on ${agentName}! Watch and react. You may get a chance to comment.`,
           false
         );
       }
     }
 
-    this.emitDebug('challenger', agentId, agentName, 'Challenger entered');
-    console.log(`  CHALLENGER ACTIVE: ${viewerId} → ${agentName}`);
+    this.emitDebug('challenger', agentId, agentName, `Challenger "${name}" entered`);
+    console.log(`  CHALLENGER ACTIVE: ${viewerId} (${name}) → ${agentName}`);
   }
 
   handleChallengerAudio(agentId: string, text: string) {
@@ -434,9 +465,10 @@ export class SessionManager {
     this.omniagent.sendMessage(agentId, 'user', `[HUMAN CHALLENGER said]: "${text}"`, true);
 
     // Also broadcast as a transcript for viewers
+    const viewerName = this.activeChallenger.viewerName || 'Challenger';
     const msg: TranscriptMessage = {
       agentId: 'challenger',
-      agentName: 'Challenger',
+      agentName: viewerName,
       text,
       timestamp: Date.now(),
     };
@@ -493,7 +525,7 @@ export class SessionManager {
       }) || [],
       currentSpeaker: this.turnManager?.getCurrentSpeaker() || null,
       voteTallies: this.voteTallies,
-      activeRules: this.activeRules,
+      activeRules: this.chaosQueue?.getActiveRules().map(r => r.text) || [],
       recentTranscripts: this.recentTranscripts.slice(-20),
     };
   }
@@ -537,8 +569,17 @@ export class SessionManager {
     if (!this.session || this.session.status !== 'active') return;
 
     try {
-      const { getNextTopic } = await import('./auto-start.js');
-      const newTopic = getNextTopic();
+      // Check viewer-submitted topic queue first
+      const viewerTopic = this.chaosQueue?.popNextTopic();
+      let newTopic: string;
+
+      if (viewerTopic) {
+        newTopic = viewerTopic;
+      } else {
+        const { getNextTopic } = await import('./auto-start.js');
+        newTopic = getNextTopic();
+      }
+
       this.session.topic = newTopic;
 
       // Notify all agents
@@ -794,6 +835,29 @@ export class SessionManager {
       this.emitDebug('turn_start', agentId, turnAgentName, 'Turn started');
       console.log(`  [Turn] ${turnAgentName}'s turn`);
 
+      // Process chaos queue at turn start
+      let chaosPrompt = '';
+      if (this.chaosQueue) {
+        const chaosUpdate = this.chaosQueue.onTurnStart();
+
+        // Broadcast chaos status to all viewers
+        (this.io as any).emit('chaos_status', {
+          active: chaosUpdate.active.map(r => ({
+            id: r.id,
+            text: r.text,
+            turnsRemaining: r.turnsRemaining,
+            maxTurns: r.maxTurns,
+            source: r.source,
+            viewerName: r.viewerName,
+            targetAgentId: r.targetAgentId,
+          })),
+          justActivated: chaosUpdate.activated.map(r => r.id),
+          justExpired: chaosUpdate.expired.map(r => r.id),
+        });
+
+        chaosPrompt = this.chaosQueue.getActiveRulesPrompt(agentId);
+      }
+
       // Safety net: if agent doesn't produce any text within 15s, skip them.
       // This handles agent disconnections, API errors, or unresponsive agents.
       this.turnTimeoutTimer = setTimeout(() => {
@@ -810,9 +874,11 @@ export class SessionManager {
         const turnNum = this.recentTranscripts.length;
         const useName = turnNum % 5 === 0;
         const attr = useName ? `[${lastMsg.agentName} said]` : '[The previous debater said]';
-        this.omniagent.sendMessage(agentId, 'user', `${attr}: "${lastMsg.text}"\n\nRespond to this. Make your argument. Do NOT start with "Audience" — just talk.`, true);
+        const chaosInstruction = chaosPrompt ? `${chaosPrompt}\n` : '';
+        this.omniagent.sendMessage(agentId, 'user', `${chaosInstruction}${attr}: "${lastMsg.text}"\n\nRespond to this.${chaosPrompt ? ' Follow all active chaos rules.' : ''} Do NOT start with "Audience" — just talk.`, true);
       } else {
-        this.omniagent.sendMessage(agentId, 'user', `The debate topic is: "${topic}". Give your opening argument. Be bold and entertaining.`, true);
+        const chaosInstruction = chaosPrompt ? `${chaosPrompt}\n` : '';
+        this.omniagent.sendMessage(agentId, 'user', `${chaosInstruction}The debate topic is: "${topic}". Give your opening argument. Be bold and entertaining.`, true);
       }
     });
 

@@ -61,15 +61,26 @@ export function TranscriptFeed() {
                 transition={{ duration: 0.2 }}
                 className={`flex gap-2 py-1.5 rounded-md px-2 transition-colors ${
                   isActive ? 'bg-arena-elevated/50' : 'hover:bg-arena-elevated/30'
-                } ${isChallenger ? 'border-l-2 border-arena-magenta' : isActive ? 'border-l-2' : ''}`}
+                } ${isChallenger ? 'border-l-2 border-arena-magenta bg-arena-magenta/5' : isActive ? 'border-l-2' : ''}`}
                 style={isActive && !isChallenger ? { borderColor: color } : undefined}
               >
-                <span
-                  className="font-mono text-xs font-semibold shrink-0 mt-0.5"
-                  style={{ color }}
-                >
-                  {isChallenger ? 'CHALLENGER' : msg.agentName}
-                </span>
+                {isChallenger ? (
+                  <span className="flex items-center gap-1 shrink-0 mt-0.5">
+                    <span className="px-1 py-0.5 rounded text-[9px] font-bold uppercase bg-arena-magenta/20 text-arena-magenta">
+                      VOICE
+                    </span>
+                    <span className="font-mono text-xs font-semibold text-arena-magenta">
+                      {msg.agentName}
+                    </span>
+                  </span>
+                ) : (
+                  <span
+                    className="font-mono text-xs font-semibold shrink-0 mt-0.5"
+                    style={{ color }}
+                  >
+                    {msg.agentName}
+                  </span>
+                )}
                 <span className="font-mono text-xs text-arena-text-secondary leading-relaxed break-words overflow-hidden">
                   {msg.text}
                 </span>

@@ -1,6 +1,7 @@
 import { LiveBadge } from './LiveBadge';
 import { SoundToggle } from './SoundToggle';
 import { ShareButton } from './ShareButton';
+import { UserBadge } from './UserBadge';
 import { useArenaStore } from '../store/arena';
 import { Wifi, WifiOff, Terminal } from 'lucide-react';
 
@@ -55,6 +56,7 @@ export function TopicBanner({ judgeMode, onToggleJudge }: TopicBannerProps) {
             <Terminal size={14} />
           </button>
         )}
+        <UserBadge />
         <ShareButton />
         <SoundToggle />
         {connected ? (

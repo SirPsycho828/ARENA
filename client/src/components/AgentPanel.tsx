@@ -19,6 +19,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
   const vote = useArenaStore((s) => s.vote);
   const challengerActive = useArenaStore((s) => s.challengerActive);
   const challengerAgentId = useArenaStore((s) => s.challengerAgentId);
+  const challengerViewerName = useArenaStore((s) => s.challengerViewerName);
   const isSpeaking = currentSpeaker === id;
   const isChallenged = challengerActive && challengerAgentId === id;
   const votes = voteTallies[id] || 0;
@@ -118,7 +119,7 @@ export function AgentPanel({ id, name, personality, color }: Props) {
             className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-arena-magenta text-white animate-challenger-badge"
           >
             <Mic size={10} />
-            LIVE CHALLENGER
+            {challengerViewerName ? `${challengerViewerName} CHALLENGING` : 'LIVE CHALLENGER'}
           </motion.span>
         )}
         {momentum === 'dominating' && (

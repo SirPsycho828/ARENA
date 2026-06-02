@@ -2,18 +2,18 @@ import { Sparkles } from 'lucide-react';
 import { useArenaStore } from '../store/arena';
 
 const PRESETS = [
-  { label: 'Rhyme Time', text: 'All debaters must now speak in rhymes for the next 3 responses.' },
-  { label: 'Pirate Mode', text: 'Everyone must argue like pirates. Arrr, matey!' },
-  { label: 'Opposite Day', text: 'Each debater must now argue the OPPOSITE of their current position.' },
-  { label: 'Shakespeare', text: 'All arguments must be delivered in Shakespearean English.' },
-  { label: 'ELI5', text: 'Explain your position as if talking to a 5-year-old.' },
-  { label: 'Roast Battle', text: 'Forget the topic. Each debater must roast the person who spoke before them.' },
-  { label: 'Hot Takes Only', text: 'Only the most controversial, spicy hot takes allowed. No mild opinions.' },
-  { label: 'One Word', text: 'Each debater gets only ONE sentence to make their entire argument.' },
+  { key: 'rhyme_time', label: 'Rhyme Time' },
+  { key: 'pirate_mode', label: 'Pirate Mode' },
+  { key: 'opposite_day', label: 'Opposite Day' },
+  { key: 'shakespeare', label: 'Shakespeare' },
+  { key: 'eli5', label: 'ELI5' },
+  { key: 'roast_battle', label: 'Roast Battle' },
+  { key: 'hot_takes', label: 'Hot Takes Only' },
+  { key: 'one_sentence', label: 'One Word' },
 ];
 
 export function QuickInjects() {
-  const injectChaos = useArenaStore((s) => s.injectChaos);
+  const quickChaos = useArenaStore((s) => s.quickChaos);
   const session = useArenaStore((s) => s.session);
   const isActive = session?.status === 'active';
 
@@ -26,8 +26,8 @@ export function QuickInjects() {
       <div className="flex flex-wrap gap-1.5">
         {PRESETS.map((preset) => (
           <button
-            key={preset.label}
-            onClick={() => injectChaos(preset.text, 'rule')}
+            key={preset.key}
+            onClick={() => quickChaos(preset.key)}
             disabled={!isActive}
             className="px-2.5 py-1 rounded-full text-xs font-medium bg-arena-surface border border-arena-border-subtle text-arena-text-secondary hover:text-arena-cyan hover:border-arena-cyan/40 hover:bg-arena-cyan/5 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           >

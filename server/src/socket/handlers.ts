@@ -30,7 +30,18 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
 
     socket.on('chaos_inject', (data) => {
       const type = data.type || 'rule';
-      const result = sessionManager.handleChaosInject(socket.id, data.text, type);
+      const duration = (data as any).duration || 3;
+      const result = sessionManager.handleChaosInject(socket.id, null, data.text, type, duration);
+      if (!result.ok) {
+        socket.emit('injection_rejected', {
+          reason: result.reason || 'unknown',
+          remainingMs: (result as any).remainingMs || 0,
+        });
+      }
+    });
+
+    socket.on('quick_chaos' as any, (data: { preset: string }) => {
+      const result = sessionManager.handleQuickChaos(socket.id, null, data.preset);
       if (!result.ok) {
         socket.emit('injection_rejected', {
           reason: result.reason || 'unknown',
@@ -44,7 +55,7 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
     });
 
     socket.on('topic_change', (data) => {
-      const result = sessionManager.handleChaosInject(socket.id, data.topic, 'topic_change');
+      const result = sessionManager.handleChaosInject(socket.id, null, data.topic, 'topic_change');
       if (!result.ok) {
         socket.emit('injection_rejected', {
           reason: result.reason || 'unknown',
@@ -67,17 +78,19 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
     // ─── Voice Challenger ───────────────────────────────────────────────────
 
     socket.on('challenge_start', (data) => {
-      console.log(`  CHALLENGER APPROACHING! ${socket.id} → ${data.agentId}`);
+      const viewerName = (data as any).viewerName || null;
+      console.log(`  CHALLENGER APPROACHING! ${socket.id} (${viewerName || 'anon'}) → ${data.agentId}`);
 
       // Notify all viewers about the live challenger
       io.emit('challenger_active' as any, {
         viewerId: socket.id,
         agentId: data.agentId,
+        viewerName,
         startedAt: Date.now(),
       });
 
       // Send a system prompt to the target agent about the challenger
-      sessionManager.handleChallengerStart(socket.id, data.agentId);
+      sessionManager.handleChallengerStart(socket.id, data.agentId, viewerName);
     });
 
     socket.on('challenge_audio', ((data: { agentId: string; text: string }) => {

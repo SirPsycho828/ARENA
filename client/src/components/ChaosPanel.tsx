@@ -6,6 +6,7 @@ import { QuickInjects } from './QuickInjects';
 export function ChaosPanel() {
   const [text, setText] = useState('');
   const [mode, setMode] = useState<'rule' | 'topic_change'>('rule');
+  const [duration, setDuration] = useState(3);
   const injectChaos = useArenaStore((s) => s.injectChaos);
   const changeTopic = useArenaStore((s) => s.changeTopic);
   const activeRules = useArenaStore((s) => s.activeRules);
@@ -18,7 +19,7 @@ export function ChaosPanel() {
     if (mode === 'topic_change') {
       changeTopic(text.trim());
     } else {
-      injectChaos(text.trim(), 'rule');
+      injectChaos(text.trim(), 'rule', duration);
     }
     setText('');
   };
@@ -61,6 +62,29 @@ export function ChaosPanel() {
             New Topic
           </button>
         </div>
+
+        {/* Duration selector (rule mode only) */}
+        {mode === 'rule' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-arena-text-muted">Duration:</span>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setDuration(t)}
+                  className={`w-7 h-7 rounded text-xs font-bold transition-colors ${
+                    duration === t
+                      ? 'bg-arena-cyan text-arena-base'
+                      : 'bg-arena-surface text-arena-text-muted hover:text-arena-text border border-arena-border-subtle'
+                  }`}
+                >
+                  {t}t
+                </button>
+              ))}
+            </div>
+            <span className="text-[10px] text-arena-text-muted">turns</span>
+          </div>
+        )}
 
         {/* Input */}
         <form onSubmit={handleSubmit} className="flex gap-2">

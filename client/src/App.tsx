@@ -8,6 +8,7 @@ import { SpectatorBar } from './components/SpectatorBar';
 import { AgentPanel } from './components/AgentPanel';
 import { TranscriptFeed } from './components/TranscriptFeed';
 import { ChaosPanel } from './components/ChaosPanel';
+import { ChaosStatusBar } from './components/ChaosStatusBar';
 import { ReactionOverlay } from './components/ReactionOverlay';
 import { VoiceChallenger } from './components/VoiceChallenger';
 import { VictoryScreen } from './components/VictoryScreen';
@@ -143,6 +144,8 @@ function App() {
                     />
                   ))}
                 </div>
+
+                <ChaosStatusBar />
 
                 {/* Transcript feed */}
                 <div className="flex-1 min-h-0 bg-arena-surface rounded-xl border border-arena-border-subtle overflow-hidden">

@@ -1,15 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, ChevronDown, ChevronUp } from 'lucide-react';
+import { Mic, MicOff, ChevronDown, ChevronUp, Lock } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { AuthModal } from './AuthModal';
 
 interface VoiceChallengerProps {
   agents: Array<{ id: string; name: string; color: string }>;
   isActive: boolean;
-  onStart: (agentId: string, stream: MediaStream) => void;
+  onStart: (agentId: string, stream: MediaStream, viewerName?: string) => void;
   onEnd: () => void;
 }
 
 export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChallengerProps) {
+  const { user, displayName } = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -73,7 +77,7 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
 
       setRecording(true);
       setTimeLeft(60);
-      onStart(selectedAgent, stream);
+      onStart(selectedAgent, stream, displayName || user?.email?.split('@')[0] || 'Challenger');
       updateBars();
     } catch (err) {
       console.error('Microphone access denied:', err);
@@ -118,7 +122,23 @@ export function VoiceChallenger({ agents, isActive, onStart, onEnd }: VoiceChall
             className="overflow-hidden"
           >
             <div className="px-4 pb-4 space-y-3">
-              {!recording ? (
+              {!user ? (
+                <>
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <Lock size={20} className="text-arena-text-muted" />
+                    <p className="text-xs text-arena-text-muted text-center">
+                      Sign in to challenge agents directly
+                    </p>
+                    <button
+                      onClick={() => setShowAuth(true)}
+                      className="px-4 py-2 rounded-lg bg-arena-magenta text-white font-semibold text-sm hover:brightness-110 transition-all"
+                    >
+                      Sign In to Challenge
+                    </button>
+                  </div>
+                  <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
+                </>
+              ) : !recording ? (
                 <>
                   {/* Agent selector */}
                   <p className="text-xs text-arena-text-muted">Select an agent to challenge:</p>

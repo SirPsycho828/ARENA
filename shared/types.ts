@@ -90,7 +90,7 @@ export interface ServerEvents {
   agent_disconnected: (data: { agentId: string; reason: string }) => void;
   agent_video_frame: (data: { agentId: string; frame: string }) => void;
   agent_video_tokens: (data: { tokens: Record<string, string> }) => void;
-  session_ended: (data: { reason: string }) => void;
+  session_ended: (data: { reason: string; results?: { winner: { id: string; name: string; color: string; votes: number } | null; voteTallies: Record<string, number>; totalMessages: number; duration: number } }) => void;
 }
 
 // ─── Socket Events (Client → Server) ───────────────────────────────────────

@@ -50,6 +50,16 @@ interface StreamingTranscript {
   text: string;
 }
 
+interface ChaosRuleStatus {
+  id: string;
+  text: string;
+  turnsRemaining: number;
+  maxTurns: number;
+  source: 'rule' | 'quick_chaos' | 'voice_challenge';
+  viewerName: string | null;
+  targetAgentId: string | null;
+}
+
 interface ArenaState {
   // Connection
   connected: boolean;
@@ -65,6 +75,7 @@ interface ArenaState {
   streamingTranscript: StreamingTranscript | null;
   voteTallies: VoteTallies;
   activeRules: string[];
+  chaosStatus: ChaosRuleStatus[];
   spectatorCount: number;
 
   // Audience
@@ -77,6 +88,7 @@ interface ArenaState {
   // Voice Challenger
   challengerActive: boolean;
   challengerAgentId: string | null;
+  challengerViewerName: string | null;
 
   // Sound
   soundMuted: boolean;
@@ -93,10 +105,11 @@ interface ArenaState {
   connect: () => void;
   disconnect: () => void;
   vote: (agentId: string) => void;
-  injectChaos: (text: string, type?: 'rule' | 'topic_change') => void;
+  injectChaos: (text: string, type?: 'rule' | 'topic_change', duration?: number) => void;
   changeTopic: (topic: string) => void;
+  quickChaos: (preset: string) => void;
   sendReaction: (emoji: string) => void;
-  startChallenge: (agentId: string, stream: MediaStream) => void;
+  startChallenge: (agentId: string, stream: MediaStream, viewerName?: string) => void;
   endChallenge: () => void;
   sendChallengerText: (agentId: string, text: string) => void;
 }
@@ -212,12 +225,14 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   streamingTranscript: null,
   voteTallies: {},
   activeRules: [],
+  chaosStatus: [],
   spectatorCount: 1,
   injectionCooldown: 0,
   injectionQueue: [],
   incomingReactions: [],
   challengerActive: false,
   challengerAgentId: null,
+  challengerViewerName: null,
   soundMuted: false,
   toggleSound: () => set((s) => ({ soundMuted: !s.soundMuted })),
   victoryData: null,
@@ -376,12 +391,16 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       }, 2000);
     });
 
-    (socket as any).on('challenger_active', ({ agentId }: { agentId: string }) => {
-      set({ challengerActive: true, challengerAgentId: agentId });
+    (socket as any).on('challenger_active', ({ agentId, viewerName }: { agentId: string; viewerName?: string }) => {
+      set({ challengerActive: true, challengerAgentId: agentId, challengerViewerName: viewerName || null });
     });
 
     (socket as any).on('challenger_ended', () => {
-      set({ challengerActive: false, challengerAgentId: null });
+      set({ challengerActive: false, challengerAgentId: null, challengerViewerName: null });
+    });
+
+    (socket as any).on('chaos_status', (data: { active: ChaosRuleStatus[]; justActivated: string[]; justExpired: string[] }) => {
+      set({ chaosStatus: data.active });
     });
 
     set({ socket });
@@ -397,8 +416,12 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     get().socket?.emit('vote', { agentId });
   },
 
-  injectChaos: (text, type = 'rule') => {
-    get().socket?.emit('chaos_inject', { text, type });
+  injectChaos: (text, type = 'rule', duration = 3) => {
+    get().socket?.emit('chaos_inject', { text, type, duration });
+  },
+
+  quickChaos: (preset) => {
+    (get().socket as any)?.emit('quick_chaos', { preset });
   },
 
   changeTopic: (topic) => {
@@ -409,18 +432,18 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     get().socket?.emit('reaction', { emoji });
   },
 
-  startChallenge: (agentId, _stream) => {
+  startChallenge: (agentId, _stream, viewerName) => {
     const socket = get().socket;
     if (!socket) return;
-    socket.emit('challenge_start', { agentId });
-    set({ challengerActive: true, challengerAgentId: agentId });
+    socket.emit('challenge_start', { agentId, viewerName });
+    set({ challengerActive: true, challengerAgentId: agentId, challengerViewerName: viewerName || null });
   },
 
   endChallenge: () => {
     const socket = get().socket;
     if (!socket) return;
     socket.emit('challenge_end', {});
-    set({ challengerActive: false, challengerAgentId: null });
+    set({ challengerActive: false, challengerAgentId: null, challengerViewerName: null });
   },
 
   sendChallengerText: (agentId, text) => {
