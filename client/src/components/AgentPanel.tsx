@@ -30,21 +30,21 @@ export function AgentPanel({ id, name, personality, color }: Props) {
   const momentum = votePercent > 70 ? 'dominating' : votePercent > 50 ? 'favorite' : votePercent > 30 ? 'rising' : 'normal';
   const isLeading = momentum !== 'normal' && votes > 0;
 
-  const borderClass = isChallenged
-    ? 'border-primary animate-challenger-glow'
+  const ringClass = isChallenged
+    ? 'ring-2 ring-primary animate-challenger-glow'
     : isSpeaking
-    ? 'border-accent animate-speaker-glow'
+    ? 'ring-2 ring-accent animate-speaker-glow'
     : momentum === 'dominating'
-    ? 'border-warning animate-momentum-dominating'
+    ? 'ring-2 ring-warning animate-momentum-dominating'
     : momentum === 'favorite'
-    ? 'border-warning/70 animate-momentum-favorite'
+    ? 'ring-2 ring-warning/70 animate-momentum-favorite'
     : momentum === 'rising'
-    ? 'border-warning/40 animate-momentum-rising'
-    : 'border-border hover:border-muted-foreground/30';
+    ? 'ring-1 ring-warning/40 animate-momentum-rising'
+    : '';
 
   return (
     <motion.div
-      className={`relative rounded-lg border-2 overflow-hidden transition-all duration-300 ${borderClass}`}
+      className={`relative rounded-lg overflow-hidden transition-all duration-300 ${ringClass}`}
       style={{ '--agent-color': color } as React.CSSProperties}
       layout
       initial={{ opacity: 0, scale: 0.9 }}
