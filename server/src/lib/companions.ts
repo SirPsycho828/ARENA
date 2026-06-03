@@ -170,7 +170,7 @@ async function waitForReady(
     const companion = await napsterGet(`/public/companions/${companionId}`, apiKey);
     const status = companion.status;
 
-    if (status === 'readyToUse' || status === 'generationCompleted') {
+    if (status === 'readyToUse' || status === 'generationCompleted' || status === 'completed') {
       return status;
     }
     if (status === 'failed' || status === 'blocked') {
@@ -223,7 +223,8 @@ export async function ensureCustomCompanions(
 
     if (found) {
       result[role] = found.id;
-      if (found.status === 'readyToUse') {
+      const ready = found.status === 'readyToUse' || found.status === 'generationCompleted' || found.status === 'completed';
+      if (ready) {
         console.log(`  ${def.firstName} ${def.lastName}: ready (${found.id})`);
       } else {
         console.log(`  ${def.firstName} ${def.lastName}: ${found.status} (${found.id})`);
