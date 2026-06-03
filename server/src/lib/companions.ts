@@ -170,7 +170,7 @@ async function waitForReady(
     const companion = await napsterGet(`/public/companions/${companionId}`, apiKey);
     const status = companion.status;
 
-    if (status === 'readyToUse') {
+    if (status === 'readyToUse' || status === 'generationCompleted') {
       return status;
     }
     if (status === 'failed' || status === 'blocked') {
@@ -246,12 +246,14 @@ export async function ensureCustomCompanions(
   if (pendingCompanions.length > 0) {
     console.log(`  Waiting for ${pendingCompanions.length} companion(s) to finish generating...`);
     await Promise.allSettled(
-      pendingCompanions.map(async ({ id, name }) => {
+      pendingCompanions.map(async ({ role, id, name }) => {
         try {
-          await waitForReady(apiKey, id, name);
-          console.log(`  ${name}: ready!`);
+          const status = await waitForReady(apiKey, id, name);
+          console.log(`  ${name}: ready! (${status})`);
         } catch (err) {
-          console.warn(`  ${name}: ${(err as Error).message} — will use anyway`);
+          // Companion not ready — remove from map so stock companions are used instead
+          console.warn(`  ${name}: ${(err as Error).message} — removing, will fall back to stock`);
+          delete result[role];
         }
       }),
     );
