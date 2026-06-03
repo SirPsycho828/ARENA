@@ -769,7 +769,7 @@ export class SessionManager {
   private parsePoleResponse(text: string) {
     if (!this.consensusState) return;
 
-    const clean = (s: string) => s.trim().replace(/['"*_`]+/g, '').replace(/\s+/g, ' ').toUpperCase().slice(0, 30);
+    const clean = (s: string) => s.trim().replace(/['"*_`]+/g, '').replace(/\s+/g, ' ').toUpperCase().slice(0, 40);
 
     // Try "LEFT: xxx | RIGHT: yyy"
     let match = text.match(/LEFT:\s*(.+?)\s*\|\s*RIGHT:\s*(.+)/i);
