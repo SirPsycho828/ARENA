@@ -16,8 +16,9 @@ import type {
   ClientEvents,
 } from '../../../shared/types.js';
 import { getNapsterResources } from '../lib/napster-resources.js';
+import { getCustomCompanions } from '../lib/companions.js';
 
-// Stock companions to use for agents (populated on first session)
+// Agent personality presets (companions loaded separately)
 const AGENT_PRESETS: (Omit<AgentConfig, 'id' | 'companionId' | 'externalClientId'> & { role: string })[] = [
   {
     name: 'Rico Martinez',
@@ -175,7 +176,7 @@ export class SessionManager {
   private videoTokens: Record<string, string> = {};
   private recentTranscripts: TranscriptMessage[] = [];
   private agentConfigs: Map<string, AgentConfig> = new Map();
-  private companionIds: string[] = [];
+  private companionMap: Record<string, string> = {}; // role -> companionId
   private topicRotationTimer: ReturnType<typeof setInterval> | null = null;
   private audioTracker: Map<string, { firstChunkTime: number; totalB64Chars: number }> = new Map();
   // Track both conditions for turn advance — advance when BOTH are true.
@@ -197,6 +198,15 @@ export class SessionManager {
   // ─── Public API ─────────────────────────────────────────────────────────
 
   async loadCompanions() {
+    // Load custom companions (created during startup)
+    const custom = getCustomCompanions();
+    if (custom && Object.keys(custom).length > 0) {
+      this.companionMap = custom;
+      console.log(`  Using ${Object.keys(custom).length} custom companions`);
+      return;
+    }
+
+    // Fall back to stock companions
     try {
       const API_KEY = process.env.OMNIAGENT_API_KEY;
       if (!API_KEY) return;
@@ -206,8 +216,13 @@ export class SessionManager {
       });
       if (res.ok) {
         const data = await res.json() as { items: Array<{ id: string }> };
-        this.companionIds = data.items.map((c) => c.id);
-        console.log(`  Loaded ${this.companionIds.length} stock companions`);
+        const stockIds = data.items.map((c) => c.id);
+        // Map stock companions to roles by index
+        const roles = AGENT_PRESETS.map((p) => p.role);
+        roles.forEach((role, i) => {
+          if (stockIds[i]) this.companionMap[role] = stockIds[i];
+        });
+        console.log(`  Fallback: loaded ${stockIds.length} stock companions`);
       }
     } catch (err) {
       console.warn('  Could not load companions:', (err as Error).message);
@@ -220,29 +235,35 @@ export class SessionManager {
     }
 
     // Load companions if not already loaded (skip in mock mode)
-    if (this.companionIds.length === 0 && process.env.USE_MOCK !== 'true') {
+    if (Object.keys(this.companionMap).length === 0 && process.env.USE_MOCK !== 'true') {
       await this.loadCompanions();
     }
 
     // In mock mode, generate fake companion IDs
-    if (process.env.USE_MOCK === 'true' && this.companionIds.length === 0) {
-      this.companionIds = AGENT_PRESETS.map((_, i) => `mock_companion_${i}`);
+    if (process.env.USE_MOCK === 'true' && Object.keys(this.companionMap).length === 0) {
+      AGENT_PRESETS.forEach((p) => { this.companionMap[p.role] = `mock_companion_${p.role}`; });
     }
 
     const sessionId = uuid();
-    const count = Math.min(agentCount, AGENT_PRESETS.length, this.companionIds.length);
+    const count = Math.min(agentCount, AGENT_PRESETS.length);
 
-    console.log(`\n  Creating session "${topic}" with ${count} agents (${this.companionIds.length} companions)...`);
+    console.log(`\n  Creating session "${topic}" with ${count} agents (${Object.keys(this.companionMap).length} companions)...`);
 
     // Create agents
     const agentIds: string[] = [];
     const errors: string[] = [];
     for (let i = 0; i < count; i++) {
       const preset = AGENT_PRESETS[i];
+      const companionId = this.companionMap[preset.role];
+      if (!companionId) {
+        errors.push(`${preset.name}: no companion for role "${preset.role}"`);
+        console.error(`  No companion for ${preset.name} (role: ${preset.role})`);
+        continue;
+      }
       const config: AgentConfig & { role: string } = {
         ...preset,
         id: '', // Will be set after API creation
-        companionId: this.companionIds[i],
+        companionId,
         systemPrompt: preset.systemPrompt + '\n\n' + COMMON_RULES,
         externalClientId: `arena_${preset.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}`.slice(0, 32),
         role: preset.role,

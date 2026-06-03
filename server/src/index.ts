@@ -15,6 +15,7 @@ import Stripe from 'stripe';
 import { adminAuth } from './lib/firebase-admin.js';
 import { CreditService } from './lib/credits.js';
 import { initNapsterResources } from './lib/napster-resources.js';
+import { ensureCustomCompanions } from './lib/companions.js';
 import { createToolRoutes } from './routes/tools.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -297,11 +298,14 @@ httpServer.listen(PORT, () => {
 
   setTimeout(async () => {
     try {
-      // Initialize Napster resources (KBs, FAQs, Functions) before first session
+      // Initialize Napster resources (Companions, KBs, FAQs, Functions) before first session
       const serverUrl = process.env.RAILWAY_PUBLIC_DOMAIN
         ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
         : `http://localhost:${PORT}`;
-      await initNapsterResources(serverUrl);
+      await Promise.all([
+        ensureCustomCompanions(serverUrl),
+        initNapsterResources(serverUrl),
+      ]);
 
       const topic = getNextTopic();
       await sessionManager.createSession(topic, 3);

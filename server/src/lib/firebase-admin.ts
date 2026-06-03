@@ -26,5 +26,5 @@ function initAdmin() {
 
 initAdmin();
 
-export const adminAuth = admin.auth();
-export const adminDb = admin.firestore();
+export const adminAuth = admin.apps.length ? admin.auth() : (null as unknown as admin.auth.Auth);
+export const adminDb = admin.apps.length ? admin.firestore() : (null as unknown as admin.firestore.Firestore);
