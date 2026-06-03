@@ -654,7 +654,7 @@ export class SessionManager {
         }
       }, 8000);
 
-      const prompt = `Quick task, not a debate question. The topic is: "${topic}". Give me two short witty labels (max 4 words each) for the FOR side and AGAINST side. Reply ONLY in this format: LEFT: [for label] | RIGHT: [against label]`;
+      const prompt = `Quick task, not a debate question. The topic is: "${topic}". Give me two short vote-button labels (max 4 words each) for the FOR and AGAINST sides. Each label must make it CRYSTAL CLEAR what position the voter is taking — a viewer should instantly know what they're voting for without reading the topic. Be direct, not clever. Good examples: "SCREEN TIME IS FINE" vs "SCREENS HURT KIDS", "HOMEWORK MATTERS" vs "BAN HOMEWORK". Bad examples: "PIXEL PERIL" vs "DIGITAL BOON" (too vague). Reply ONLY in this format: LEFT: [for label] | RIGHT: [against label]`;
 
       this.omniagent.sendMessage(poleAgentId, 'user', prompt, true);
       console.log(`  [Consensus] Requesting AI poles from ${this.agentConfigs.get(poleAgentId)?.name || poleAgentId}`);
