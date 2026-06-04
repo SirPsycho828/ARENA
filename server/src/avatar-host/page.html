@@ -96,6 +96,24 @@
       }
       console.log(`[Host] ${readyCount}/${config.agents.length} avatars ready. Capturing streams...`);
 
+      // Helper: wait for video element to be truly playable
+      async function waitForVideo(iframe, agentId, timeoutMs) {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          const v = iframe.contentDocument?.querySelector('video');
+          if (v && v.readyState >= 2 && v.videoWidth > 0) {
+            console.log(`[Host] Video ready for ${agentId}: readyState=${v.readyState} size=${v.videoWidth}x${v.videoHeight} paused=${v.paused}`);
+            return v;
+          }
+          const state = v ? `readyState=${v.readyState} size=${v.videoWidth}x${v.videoHeight}` : 'no element';
+          console.log(`[Host] Waiting for video ${agentId}: ${state} (${Math.round((Date.now() - start) / 1000)}s)`);
+          await new Promise(r => setTimeout(r, 2000));
+        }
+        const v = iframe.contentDocument?.querySelector('video');
+        console.warn(`[Host] Video wait timed out for ${agentId}: readyState=${v?.readyState ?? 'none'} size=${v?.videoWidth ?? 0}x${v?.videoHeight ?? 0}`);
+        return v;
+      }
+
       // Capture + publish per agent (each agent = separate LiveKit participant)
       const livekitUrl = config.livekit?.url;
       let totalPublished = 0;
@@ -103,19 +121,31 @@
         if (!avatarFrames[agent.id]?.ready) continue;
 
         const iframe = avatarFrames[agent.id].iframe;
-        const video = iframe.contentDocument?.querySelector('video');
+        const video = await waitForVideo(iframe, agent.id, 20000);
         if (!video) {
-          console.error(`[Host] No <video> in iframe for ${agent.id}`);
+          console.error(`[Host] No <video> element for ${agent.id} — skipping`);
           continue;
         }
-        if (video.readyState < 2) {
-          await new Promise(r => { video.onloadeddata = r; setTimeout(r, 5000); });
+
+        // Force play if paused (needed for captureStream to produce frames)
+        if (video.paused) {
+          try { await video.play(); } catch(e) { console.warn(`[Host] play() failed for ${agent.id}: ${e.message}`); }
         }
 
-        const stream = video.captureStream();
-        const vt = stream.getVideoTracks()[0];
-        const at = stream.getAudioTracks()[0];
-        console.log(`[Host] Captured ${agent.id}: video=${!!vt} audio=${!!at}`);
+        let stream = video.captureStream();
+        let vt = stream.getVideoTracks()[0];
+        let at = stream.getAudioTracks()[0];
+        console.log(`[Host] Captured ${agent.id}: video=${!!vt}(${vt?.readyState ?? 'none'}) audio=${!!at}(${at?.readyState ?? 'none'})`);
+
+        // Retry if no video track (captureStream can miss tracks if video just started)
+        if (!vt && video.readyState >= 2) {
+          console.warn(`[Host] No video track for ${agent.id} — waiting 3s and retrying captureStream...`);
+          await new Promise(r => setTimeout(r, 3000));
+          stream = video.captureStream();
+          vt = stream.getVideoTracks()[0];
+          at = at || stream.getAudioTracks()[0];
+          console.log(`[Host] Retry captured ${agent.id}: video=${!!vt}(${vt?.readyState ?? 'none'}) audio=${!!at}(${at?.readyState ?? 'none'})`);
+        }
 
         if (!livekitUrl || !agent.livekitToken) {
           console.warn(`[Host] No LiveKit config for ${agent.id} — skipping publish`);
@@ -134,6 +164,8 @@
             );
             totalPublished++;
             console.log(`[Host] Published video for ${agent.id}`);
+          } else {
+            console.error(`[Host] NO video track to publish for ${agent.id}`);
           }
           if (at) {
             await room.localParticipant.publishTrack(
