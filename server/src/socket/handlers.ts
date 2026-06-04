@@ -29,18 +29,17 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
     socket.emit('session_state', sessionManager.getSessionState());
     broadcastSpectatorCount();
 
-    // Send LiveKit viewer token only if AvatarHost is already ready.
-    // Viewers who connect before AvatarHost is ready will get tokens
-    // from the broadcast in manager.ts when AvatarHost becomes ready.
+    // Send per-viewer WebRTC tokens so the client renders Napster avatars directly.
+    // Each viewer gets their own WebRTC connection tokens (tokens are single-use).
     const session = sessionManager.getActiveSession();
-    if (session?.status === 'active' && sessionManager.isAvatarHostReady()) {
-      sessionManager.createLiveKitViewerToken(socket.id).then((lk) => {
-        if (lk) {
-          console.log(`  Sent livekit_token to ${socket.id}`);
-          (socket as any).emit('livekit_token', lk);
+    if (session?.status === 'active') {
+      sessionManager.createVideoTokensForViewer(socket.id).then((tokens) => {
+        if (Object.keys(tokens).length > 0) {
+          console.log(`  Sent avatar_tokens to ${socket.id}: ${Object.keys(tokens).length} agents`);
+          (socket as any).emit('avatar_tokens', { tokens });
         }
       }).catch((err) => {
-        console.warn(`  LiveKit token failed for ${socket.id}:`, (err as Error).message);
+        console.warn(`  Avatar token creation failed for ${socket.id}:`, (err as Error).message);
       });
     }
 

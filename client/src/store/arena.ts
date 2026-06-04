@@ -110,6 +110,9 @@ interface ArenaState {
   // LiveKit
   livekitTracks: TrackMap;
 
+  // Per-viewer Napster WebRTC tokens (agentId → token)
+  avatarTokens: Record<string, string>;
+
   // Tool Effects
   activeToolEffect: ToolEffect | null;
 
@@ -267,6 +270,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   toggleSound: () => set((s) => ({ soundMuted: !s.soundMuted })),
   victoryData: null,
   livekitTracks: {},
+  avatarTokens: {},
   activeToolEffect: null,
   pendingTopic: null,
   dismissTopic: () => set({ pendingTopic: null }),
@@ -329,7 +333,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       transcriptPacer.markDone(msg);
     });
 
-    // Connect to LiveKit room for video/audio
+    // Connect to LiveKit room for audio
     (socket as any).on('livekit_token', ({ token, url }: { token: string; url: string }) => {
       console.log(`[LiveKit] Received token, connecting to ${url}...`);
       connectLiveKit(url, token, (tracks) => {
@@ -337,6 +341,12 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         console.log(`[LiveKit] Tracks updated: ${count} total`, Object.keys(tracks));
         set({ livekitTracks: tracks });
       }).catch((err) => console.error('[LiveKit] Connect failed:', err));
+    });
+
+    // Per-viewer Napster avatar tokens — client renders avatars directly in iframes
+    (socket as any).on('avatar_tokens', ({ tokens }: { tokens: Record<string, string> }) => {
+      console.log(`[Avatars] Received ${Object.keys(tokens).length} WebRTC tokens`);
+      set({ avatarTokens: tokens });
     });
 
     socket.on('speaker_change', ({ agentId }) => {

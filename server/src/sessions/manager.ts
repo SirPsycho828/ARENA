@@ -356,25 +356,19 @@ export class SessionManager {
       this.session.agentIds = connectedAgentIds;
       console.log(`  ${connectedAgentIds.length}/${totalCreated} agents connected (mock)`);
     } else {
-      // Real mode: launch AvatarHost in background (don't block debate start)
-      if (!isLiveKitConfigured()) {
-        throw new Error('Real mode requires LiveKit — set LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL');
-      }
-      // Fire and forget — AvatarHost will emit livekit_token to viewers when ready
-      this.launchAvatarHost().then(async () => {
-        console.log(`  AvatarHost ready — sending LiveKit tokens to ${(await this.io.fetchSockets()).length} viewers`);
-        const sockets = await this.io.fetchSockets();
-        for (const s of sockets) {
-          try {
-            const token = await createViewerToken(this.session!.id, s.id);
-            (s as any).emit('livekit_token', { token, url: getLiveKitUrl() });
-          } catch (err) {
-            console.warn(`  LiveKit token failed for ${s.id}:`, (err as Error).message);
-          }
-        }
-      }).catch(err => {
-        console.error('  AvatarHost launch failed:', (err as Error).message);
+      // Real mode: send per-viewer WebRTC tokens so clients render avatars directly
+      this.sendAvatarTokensToAll().catch(err => {
+        console.error('  Avatar token broadcast failed:', (err as Error).message);
       });
+
+      // Launch AvatarHost for debate logic (text events, turn management)
+      if (isLiveKitConfigured()) {
+        this.launchAvatarHost().catch(err => {
+          console.error('  AvatarHost launch failed:', (err as Error).message);
+        });
+      } else {
+        console.log('  LiveKit not configured — AvatarHost skipped (client renders avatars directly)');
+      }
     }
 
     // Initialize orchestration
@@ -1175,6 +1169,21 @@ export class SessionManager {
 
   isAvatarHostReady(): boolean {
     return this.avatarHost?.isReady() ?? false;
+  }
+
+  private async sendAvatarTokensToAll(): Promise<void> {
+    const sockets = await this.io.fetchSockets();
+    console.log(`  Sending avatar tokens to ${sockets.length} connected viewers...`);
+    for (const s of sockets) {
+      try {
+        const tokens = await this.createVideoTokensForViewer(s.id);
+        if (Object.keys(tokens).length > 0) {
+          (s as any).emit('avatar_tokens', { tokens });
+        }
+      } catch (err) {
+        console.warn(`  Avatar tokens failed for ${s.id}:`, (err as Error).message);
+      }
+    }
   }
 
   async createLiveKitViewerToken(viewerId: string): Promise<{ token: string; url: string } | null> {

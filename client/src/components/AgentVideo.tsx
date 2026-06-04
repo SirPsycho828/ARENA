@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useArenaStore } from '../store/arena';
 
 interface AgentVideoProps {
@@ -8,25 +8,50 @@ interface AgentVideoProps {
 }
 
 export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const videoTrack = useArenaStore((s) => s.livekitTracks[agentId]?.video);
+  const initedRef = useRef(false);
+  const token = useArenaStore((s) => s.avatarTokens[agentId]);
   const audioTrack = useArenaStore((s) => s.livekitTracks[agentId]?.audio);
   const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
   const soundMuted = useArenaStore((s) => s.soundMuted);
   const isSpeaking = currentSpeaker === agentId;
-  const hasVideo = !!videoTrack;
+  const hasAvatar = !!token;
 
-  // Attach video track
+  // Listen for iframe messages (frame-ready, avatar-ready)
+  const handleMessage = useCallback((e: MessageEvent) => {
+    if (e.source !== iframeRef.current?.contentWindow) return;
+
+    if (e.data?.type === 'frame-ready' && token && !initedRef.current) {
+      initedRef.current = true;
+      iframeRef.current?.contentWindow?.postMessage({
+        type: 'init-avatar',
+        token,
+        agentId,
+      }, '*');
+    }
+
+    if (e.data?.type === 'avatar-ready' && e.data.agentId === agentId) {
+      console.log(`[Avatar] ${agentName} ready in viewer iframe`);
+    }
+
+    if (e.data?.type === 'avatar-error' && e.data.agentId === agentId) {
+      console.error(`[Avatar] ${agentName} error:`, e.data.error);
+    }
+  }, [token, agentId, agentName]);
+
+  // Set up message listener
   useEffect(() => {
-    const el = videoRef.current;
-    if (!el || !videoTrack) return;
-    el.srcObject = new MediaStream([videoTrack]);
-    el.play().catch(() => {});
-    return () => { el.srcObject = null; };
-  }, [videoTrack]);
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [handleMessage]);
 
-  // Attach audio track (only for current speaker)
+  // Reset init flag when token changes
+  useEffect(() => {
+    initedRef.current = false;
+  }, [token]);
+
+  // Attach LiveKit audio track (only for current speaker)
   useEffect(() => {
     const el = audioRef.current;
     if (!el || !audioTrack) return;
@@ -41,16 +66,15 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
   return (
     <div className={`w-full h-full relative ${isSpeaking ? 'ring-2 ring-offset-2 ring-offset-gray-900' : ''}`}
       style={isSpeaking ? { ringColor: color } : undefined}>
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className="absolute inset-0 w-full h-full object-cover"
-        style={{ display: hasVideo ? 'block' : 'none' }}
-      />
-      <audio ref={audioRef} autoPlay />
-      {!hasVideo && (
+      {hasAvatar ? (
+        <iframe
+          ref={iframeRef}
+          src="/avatar-host/avatar-frame.html?viewer=1"
+          allow="autoplay; camera; microphone"
+          className="absolute inset-0 w-full h-full border-none"
+          style={{ background: 'transparent' }}
+        />
+      ) : (
         <div className="w-full h-full flex items-center justify-center absolute inset-0 z-0">
           <div
             className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold"
@@ -60,6 +84,7 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
           </div>
         </div>
       )}
+      <audio ref={audioRef} autoPlay />
     </div>
   );
 }
