@@ -126,16 +126,16 @@
         canvas.height = h;
         const ctx = canvas.getContext('2d');
 
-        // Render loop: copy video pixels to canvas
+        // Render loop: copy video pixels to canvas.
+        // Uses setInterval (NOT requestAnimationFrame) because rAF doesn't fire
+        // in Xvfb/background Chrome — it's tied to display vsync/visibility.
         let frameCount = 0;
-        function drawFrame() {
+        setInterval(() => {
           if (video.readyState >= 2 && video.videoWidth > 0) {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             frameCount++;
           }
-          requestAnimationFrame(drawFrame);
-        }
-        drawFrame();
+        }, 66); // ~15fps
 
         // Canvas captureStream always produces a video track
         const canvasStream = canvas.captureStream(15); // 15fps
