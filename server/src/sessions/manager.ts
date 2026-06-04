@@ -17,6 +17,8 @@ import type {
 } from '../../../shared/types.js';
 import { getNapsterResources } from '../lib/napster-resources.js';
 import { getCustomCompanions } from '../lib/companions.js';
+import { AvatarHost } from '../avatar-host/puppeteer.js';
+import { createPublisherToken, createViewerToken, getLiveKitUrl, isLiveKitConfigured } from '../lib/livekit.js';
 
 // Agent personality presets (companions loaded separately)
 const AGENT_PRESETS: (Omit<AgentConfig, 'id' | 'companionId' | 'externalClientId'> & { role: string })[] = [
@@ -173,12 +175,11 @@ export class SessionManager {
   private voteTallies: VoteTallies = {};
   private voterRecord: Set<string> = new Set(); // tracks "viewerId:agentId" per topic
   private activeRules: string[] = [];
-  private videoTokens: Record<string, string> = {};
   private recentTranscripts: TranscriptMessage[] = [];
   private agentConfigs: Map<string, AgentConfig> = new Map();
   private companionMap: Record<string, string> = {}; // role -> companionId
   private topicRotationTimer: ReturnType<typeof setInterval> | null = null;
-  private audioTracker: Map<string, { firstChunkTime: number; totalB64Chars: number }> = new Map();
+  private avatarHost: AvatarHost | null = null;
   // Track both conditions for turn advance — advance when BOTH are true.
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
@@ -333,28 +334,37 @@ export class SessionManager {
 
     console.log(`\n  Starting debate: "${this.session.topic}"`);
 
-    // Connect all agents via WebSocket
-    const connectedAgentIds: string[] = [];
-    for (const agentId of this.session.agentIds) {
-      const config = this.agentConfigs.get(agentId)!;
+    const USE_MOCK = process.env.USE_MOCK === 'true';
+
+    if (USE_MOCK) {
+      // Mock mode: connect agents directly
+      const connectedAgentIds: string[] = [];
+      for (const agentId of this.session.agentIds) {
+        const config = this.agentConfigs.get(agentId)!;
+        try {
+          const agent = await this.omniagent.createAndConnect(config);
+          if (agent) {
+            this.wireAgentEvents(agent, agentId);
+            connectedAgentIds.push(agentId);
+            console.log(`  Connected: ${config.name}`);
+          }
+        } catch (err) {
+          console.error(`  Failed to connect ${config.name}:`, (err as Error).message);
+        }
+      }
+      const totalCreated = this.session.agentIds.length;
+      this.session.agentIds = connectedAgentIds;
+      console.log(`  ${connectedAgentIds.length}/${totalCreated} agents connected (mock)`);
+    } else {
+      // Real mode: launch AvatarHost (Puppeteer + LiveKit)
       try {
-        const agent = await this.omniagent.createAndConnect(config);
-        this.wireAgentEvents(agent, agentId);
-        connectedAgentIds.push(agentId);
-        console.log(`  Connected: ${config.name}`);
+        await this.launchAvatarHost();
+        console.log(`  AvatarHost launched with ${this.session.agentIds.length} agents`);
       } catch (err) {
-        console.error(`  Failed to connect ${config.name}:`, (err as Error).message);
-        this.io.emit('agent_disconnected', { agentId, reason: (err as Error).message });
+        console.error('  AvatarHost launch failed:', (err as Error).message);
+        throw err;
       }
     }
-
-    // Update session to only include connected agents
-    const totalCreated = this.session.agentIds.length;
-    this.session.agentIds = connectedAgentIds;
-    console.log(`  ${connectedAgentIds.length}/${totalCreated} agents connected`);
-
-    // Create WebRTC connections for client-side video avatars
-    this.createVideoTokens(connectedAgentIds);
 
     // Initialize orchestration
     this.turnManager = new TurnManager({ mode: 'dynamic' });
@@ -385,16 +395,17 @@ export class SessionManager {
     // Notify viewers
     this.io.emit('session_state', this.getSessionState());
 
-    // Send video tokens to all already-connected viewers
-    const sockets = await this.io.fetchSockets();
-    for (const s of sockets) {
-      this.createVideoTokensForViewer(s.id).then((tokens) => {
-        if (Object.keys(tokens).length > 0) {
-          s.emit('agent_video_tokens' as any, { tokens });
+    // Send LiveKit viewer tokens to all connected viewers
+    if (!USE_MOCK && isLiveKitConfigured()) {
+      const sockets = await this.io.fetchSockets();
+      for (const s of sockets) {
+        try {
+          const token = await createViewerToken(this.session!.id, s.id);
+          (s as any).emit('livekit_token', { token, url: getLiveKitUrl() });
+        } catch (err) {
+          console.warn(`  LiveKit token failed for ${s.id}:`, (err as Error).message);
         }
-      }).catch((err) => {
-        console.warn(`  Video tokens failed for ${s.id}:`, (err as Error).message);
-      });
+      }
     }
 
     // Resume watchdog for new session
@@ -415,6 +426,12 @@ export class SessionManager {
     this.turnManager?.stop();
     this.chaosQueue?.stop();
     this.omniagent.disconnectAll();
+
+    // Shutdown AvatarHost (Puppeteer)
+    if (this.avatarHost) {
+      await this.avatarHost.shutdown();
+      this.avatarHost = null;
+    }
 
     db.prepare('UPDATE sessions SET status = ?, ended_at = ? WHERE id = ?')
       .run('ended', this.session.endedAt, this.session.id);
@@ -640,10 +657,6 @@ export class SessionManager {
 
   getActiveSession(): DebateSession | null {
     return this.session;
-  }
-
-  getVideoTokens(): Record<string, string> {
-    return this.videoTokens;
   }
 
   getSessionState(): SessionState {
@@ -976,10 +989,6 @@ export class SessionManager {
     return tokens;
   }
 
-  private async createVideoTokens(agentIds: string[]) {
-    // No longer broadcast shared tokens — each viewer gets their own via createVideoTokensForViewer
-    console.log('  Video tokens: per-viewer (created on connect)');
-  }
 
   // ─── Private: Agent Creation ────────────────────────────────────────────
 
@@ -1047,175 +1056,177 @@ export class SessionManager {
     return data.id;
   }
 
+  // ─── Event Handlers (shared by mock events + Puppeteer callbacks) ──
+
+  private stripEmDashes(s: string): string {
+    return s.replace(/\u2014/g, ', ').replace(/ ,/g, ',');
+  }
+
+  private getAgentName(agentId: string): string {
+    return this.agentConfigs.get(agentId)?.name || 'Unknown';
+  }
+
+  handleResponseDelta(agentId: string, content: string) {
+    if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+    const cleaned = this.stripEmDashes(content);
+    (this.io as any).emit('transcript_delta', { agentId, agentName: this.getAgentName(agentId), content: cleaned });
+  }
+
+  handleSpeechEnd(agentId: string, text: string) {
+    // Intercept pole generation responses
+    if (this.pendingPoleGeneration === agentId) {
+      this.pendingPoleGeneration = null;
+      if (this.poleGenerationTimeout) { clearTimeout(this.poleGenerationTimeout); this.poleGenerationTimeout = null; }
+      this.parsePoleResponse(text);
+      return;
+    }
+
+    if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+    if (this.turnTextComplete) return;
+
+    const cleanText = this.stripEmDashes(text);
+    const msg: TranscriptMessage = {
+      agentId, agentName: this.getAgentName(agentId), text: cleanText, timestamp: Date.now(),
+    };
+
+    this.recentTranscripts.push(msg);
+    if (this.recentTranscripts.length > 50) this.recentTranscripts.shift();
+
+    if (this.session) {
+      db.prepare('INSERT INTO transcripts (session_id, agent_id, text, timestamp) VALUES (?, ?, ?, ?)')
+        .run(this.session.id, agentId, cleanText, Date.now());
+    }
+
+    (this.io as any).emit('transcript_done', msg);
+    this.emitDebug('speech_end', agentId, this.getAgentName(agentId), `${text.length} chars`);
+    this.analyzeAgentStance(agentId, cleanText);
+
+    this.turnTextComplete = true;
+    this.maybeAdvanceTurn(agentId);
+  }
+
+  handleTalkState(agentId: string, state: string) {
+    if (state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
+      setTimeout(() => {
+        if (this.turnManager?.getCurrentSpeaker() === agentId) {
+          this.turnAudioDone = true;
+          this.maybeAdvanceTurn(agentId);
+        }
+      }, 1500);
+    }
+  }
+
+  handleResponseStart(agentId: string) {
+    this.turnManager?.onResponseStarted(agentId);
+  }
+
+  handleToolEffect(agentId: string, toolName: string, argsJson: string, callId: string) {
+    const args = JSON.parse(argsJson);
+    (this.io as any).emit('tool_effect', {
+      agentId, agentName: this.getAgentName(agentId), tool: toolName, args,
+    });
+    this.emitDebug('tool_call', agentId, this.getAgentName(agentId), `${toolName}(${argsJson})`);
+  }
+
+  // ─── AvatarHost Launch ────────────────────────────────────────────────
+
+  private async launchAvatarHost(): Promise<void> {
+    if (!this.session || !isLiveKitConfigured()) {
+      console.warn('[AvatarHost] LiveKit not configured — skipping avatar host');
+      return;
+    }
+
+    // Create WebRTC tokens for the headless browser (one per agent)
+    const hostTokens = await this.createVideoTokensForViewer('avatarhost');
+    const agents = this.session.agentIds
+      .filter(id => hostTokens[id])
+      .map(id => ({
+        id,
+        name: this.getAgentName(id),
+        token: hostTokens[id],
+      }));
+
+    if (agents.length === 0) {
+      console.error('[AvatarHost] No WebRTC tokens created — cannot launch');
+      return;
+    }
+
+    // Create LiveKit publisher token
+    const livekitToken = await createPublisherToken(this.session.id);
+    const livekitUrl = getLiveKitUrl();
+    const port = parseInt(process.env.PORT || '3001', 10);
+
+    // Launch Puppeteer
+    this.avatarHost = new AvatarHost();
+    this.omniagent.setAvatarHost(this.avatarHost);
+
+    await this.avatarHost.launch(agents, livekitUrl, livekitToken, port, {
+      onSpeechDelta: (agentId, text) => this.handleResponseDelta(agentId, text),
+      onSpeechEnd: (agentId, fullText) => this.handleSpeechEnd(agentId, fullText),
+      onTalkState: (agentId, state) => this.handleTalkState(agentId, state),
+      onResponseStart: (agentId) => this.handleResponseStart(agentId),
+      onToolEffect: (agentId, toolName, argsJson, callId) => this.handleToolEffect(agentId, toolName, argsJson, callId),
+      onHostReady: () => { /* resolved inside AvatarHost */ },
+    });
+  }
+
+  async createLiveKitViewerToken(viewerId: string): Promise<{ token: string; url: string } | null> {
+    if (!this.session || !isLiveKitConfigured()) return null;
+    const token = await createViewerToken(this.session.id, viewerId);
+    return { token, url: getLiveKitUrl() };
+  }
+
   // ─── Private: Event Wiring ──────────────────────────────────────────────
 
   private wireAgentEvents(agent: AgentInstance, agentId: string) {
-    const agentName = () => this.agentConfigs.get(agentId)?.name || 'Unknown';
-
-    // Strip em dashes server-side — LLMs ignore the "no em dashes" instruction
-    const stripEmDashes = (s: string) => s.replace(/\u2014/g, ', ').replace(/ ,/g, ',');
-
-    // Stream text deltas to client for word-by-word transcript display.
     agent.on('response_delta', (data: { itemId: string; content: string }) => {
-      if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
-      const cleaned = stripEmDashes(data.content);
-      (this.io as any).emit('transcript_delta', { agentId, agentName: agentName(), content: cleaned });
+      this.handleResponseDelta(agentId, data.content);
     });
 
-    // Text response completed — save transcript, mark turn text as done
-    agent.on('speech_end', (data: { agentId: string; agentName: string; text: string; timestamp: number }) => {
-      // Intercept pole generation responses before any other processing
-      if (this.pendingPoleGeneration === agentId) {
-        this.pendingPoleGeneration = null;
-        if (this.poleGenerationTimeout) { clearTimeout(this.poleGenerationTimeout); this.poleGenerationTimeout = null; }
-        this.parsePoleResponse(data.text);
-        return;
-      }
-
-      // Only process transcripts from the current speaker (ignore auto-responses)
-      if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
-      // Napster API can fire multiple completed events per turn — only process the first
-      if (this.turnTextComplete) return;
-
-      const cleanText = stripEmDashes(data.text);
-      const msg: TranscriptMessage = {
-        agentId: data.agentId,
-        agentName: data.agentName,
-        text: cleanText,
-        timestamp: data.timestamp,
-      };
-
-      this.recentTranscripts.push(msg);
-      if (this.recentTranscripts.length > 50) this.recentTranscripts.shift();
-
-      if (this.session) {
-        db.prepare('INSERT INTO transcripts (session_id, agent_id, text, timestamp) VALUES (?, ?, ?, ?)')
-          .run(this.session.id, agentId, cleanText, data.timestamp);
-      }
-
-      // Signal client that streaming transcript is complete
-      (this.io as any).emit('transcript_done', msg);
-
-      this.emitDebug('speech_end', agentId, data.agentName, `${data.text.length} chars`);
-
-      // Update consensus meter with agent's stance from this turn
-      this.analyzeAgentStance(agentId, cleanText);
-
-      this.turnTextComplete = true;
-      this.maybeAdvanceTurn(agentId);
+    agent.on('speech_end', (data: { agentId: string; text: string }) => {
+      this.handleSpeechEnd(agentId, data.text);
     });
 
     agent.on('response_start', () => {
-      this.turnManager?.onResponseStarted(agentId);
+      this.handleResponseStart(agentId);
     });
 
-    // Audio finished being sent by Napster — delay to let trailing chunks arrive
     agent.on('talk_state', (data: any) => {
-      if (data?.state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
-        setTimeout(() => {
-          if (this.turnManager?.getCurrentSpeaker() === agentId) {
-            this.turnAudioDone = true;
-            this.maybeAdvanceTurn(agentId);
-          }
-        }, 1500);
-      }
-    });
-
-    agent.on('audio', (data: { agentId: string; audio: string }) => {
-      if (this.turnManager?.getCurrentSpeaker() === agentId) {
-        if (!this.audioTracker.has(agentId)) {
-          this.audioTracker.set(agentId, { firstChunkTime: Date.now(), totalB64Chars: 0 });
-        }
-        this.audioTracker.get(agentId)!.totalB64Chars += data.audio.length;
-        (this.io as any).emit('agent_audio', data);
-      }
-    });
-
-    agent.on('video_frame', (data: { agentId: string; frame: string }) => {
-      if (this.turnManager?.getCurrentSpeaker() === agentId) {
-        (this.io as any).emit('agent_video_frame', data);
-      }
+      if (data?.state) this.handleTalkState(agentId, data.state);
     });
 
     agent.on('tool_effect', (data: { agentId: string; agentName: string; toolName: string; args: any; callId: string }) => {
-      // Forward to all connected viewers for visual effects
-      (this.io as any).emit('tool_effect', {
-        agentId: data.agentId,
-        agentName: data.agentName,
-        tool: data.toolName,
-        args: data.args,
-      });
-      this.emitDebug('tool_call', data.agentId, data.agentName, `${data.toolName}(${JSON.stringify(data.args)})`);
+      this.handleToolEffect(agentId, data.toolName, JSON.stringify(data.args || {}), data.callId);
     });
 
     agent.on('disconnected', () => {
-      console.log(`  Agent disconnected: ${this.agentConfigs.get(agentId)?.name}`);
+      console.log(`  Agent disconnected: ${this.getAgentName(agentId)}`);
       this.io.emit('agent_disconnected', { agentId, reason: 'connection_lost' });
     });
   }
 
-  private turnAdvanceTimer: ReturnType<typeof setTimeout> | null = null;
   private turnTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-  private turnGeneration = 0;
 
   private maybeAdvanceTurn(agentId: string) {
     if (!this.turnTextComplete || !this.turnAudioDone) return;
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
 
-    this.turnGeneration++;
-    const gen = this.turnGeneration;
-    const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
+    const name = this.getAgentName(agentId);
+    console.log(`  [${name}] text+audio done — advancing turn`);
 
-    // Estimate playback time from audio data we relayed
-    const audioInfo = this.audioTracker.get(agentId);
-    const estimatedSeconds = this.estimatePlaybackSeconds(audioInfo?.totalB64Chars || 0);
-
-    console.log(`  [${name}] text+audio done — server advance in ${estimatedSeconds.toFixed(1)}s (gen=${gen})`);
-
-    // Tell client no more audio chunks are coming
-    (this.io as any).emit('turn_audio_complete', { agentId, gen });
-
-    // Cancel the no-response timeout — agent DID respond
+    // Cancel the no-response timeout
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
 
-    // Server-driven advance: schedule based on estimated playback duration
-    if (this.turnAdvanceTimer) clearTimeout(this.turnAdvanceTimer);
-    this.turnAdvanceTimer = setTimeout(() => {
-      if (this.turnGeneration === gen) {
-        console.log(`  [${name}] server-driven advance (${estimatedSeconds.toFixed(1)}s)`);
-        this.doAdvanceTurn(agentId);
-      }
-    }, estimatedSeconds * 1000);
-  }
-
-  /** Called when client signals playback finished. Generation counter prevents stale signals. */
-  advanceFromPlayback(gen?: number) {
-    if (gen !== undefined && gen !== this.turnGeneration) {
-      console.log(`  Ignoring stale playback_done (got gen=${gen}, current=${this.turnGeneration})`);
-      return;
-    }
-    const currentId = this.turnManager?.getCurrentSpeaker();
-    if (currentId) this.doAdvanceTurn(currentId);
-  }
-
-  /** Estimate audio playback duration from the total base64 chars relayed */
-  private estimatePlaybackSeconds(totalBase64Chars: number): number {
-    if (totalBase64Chars === 0) return 3; // minimum
-    const rawBytes = totalBase64Chars * 0.75;
-    const samples = rawBytes / 2;        // 16-bit PCM
-    const seconds = samples / 16000;     // 16kHz sample rate
-    return Math.max(3, seconds + 2);     // +2s buffer, minimum 3s
+    this.doAdvanceTurn(agentId);
   }
 
   private doAdvanceTurn(agentId: string) {
-    if (this.turnAdvanceTimer) { clearTimeout(this.turnAdvanceTimer); this.turnAdvanceTimer = null; }
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
     this.lastTurnAdvanceTime = Date.now();
-    const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
+    const name = this.getAgentName(agentId);
     console.log(`  [${name}] advancing turn`);
     this.completedTurns++;
 
-    // After 3 turns (one full round), generate poles based on actual debate content
     if (this.completedTurns === 3 && !this.polesGenerated) {
       this.generatePolesFromTranscript();
     }
@@ -1269,9 +1280,7 @@ export class SessionManager {
       // Reset turn state for new speaker
       this.turnTextComplete = false;
       this.turnAudioDone = false;
-      if (this.turnAdvanceTimer) { clearTimeout(this.turnAdvanceTimer); this.turnAdvanceTimer = null; }
       if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
-      this.audioTracker.delete(agentId);
 
       this.io.emit('speaker_change', { agentId });
       const turnAgentName = this.agentConfigs.get(agentId)?.name || 'Unknown';

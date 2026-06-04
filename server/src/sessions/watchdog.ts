@@ -116,7 +116,7 @@ export class DebateWatchdog {
           if (config) {
             const newAgent = await this.omniagent.createAndConnect(config);
             // Re-wire events — SessionManager needs to know about the new agent instance
-            this.sessionManager.rewireAgentEvents(newAgent, agentId);
+            if (newAgent) this.sessionManager.rewireAgentEvents(newAgent, agentId);
             console.log(`[Watchdog] ${agentName} reconnected successfully`);
             this.reconnectCounts.set(agentId, 0);
           }
