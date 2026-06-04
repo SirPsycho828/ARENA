@@ -11,10 +11,9 @@
 <body>
   <div id="frames"></div>
 
-  <script type="module">
-    // LiveKit SDK loaded via ESM CDN
-    const LK = await import('https://esm.sh/livekit-client@2');
-    const { Room, RoomEvent, Track } = LK;
+  <script src="https://unpkg.com/livekit-client@1.15.13/dist/livekit-client.umd.js"></script>
+  <script>
+    const { Room, RoomEvent, Track, LocalVideoTrack, LocalAudioTrack } = LivekitClient;
 
     const avatarFrames = {}; // agentId -> { iframe, ready: boolean }
     let livekitRoom = null;
@@ -115,11 +114,22 @@
         console.log('[Host] Connected to LiveKit room');
 
         for (const { agentId, track, kind } of tracks) {
-          await livekitRoom.localParticipant.publishTrack(track, {
-            name: `${agentId}_${kind}`,
-            source: kind === 'video' ? Track.Source.Camera : Track.Source.Microphone,
-          });
-          console.log(`[Host] Published ${kind} for ${agentId}`);
+          try {
+            // Wrap raw MediaStreamTrack in LocalTrack — tracks from iframe's
+            // captureStream() are in a different JS realm, so `instanceof
+            // MediaStreamTrack` fails inside the SDK (cross-realm instanceof).
+            const localTrack = kind === 'video'
+              ? new LocalVideoTrack(track, undefined, false)
+              : new LocalAudioTrack(track, undefined, false);
+            await livekitRoom.localParticipant.publishTrack(localTrack, {
+              name: `${agentId}_${kind}`,
+              source: kind === 'video' ? Track.Source.Camera : Track.Source.Microphone,
+            });
+            console.log(`[Host] Published ${kind} for ${agentId}`);
+          } catch (err) {
+            console.error(`[Host] Failed to publish ${kind} for ${agentId}:`, err.message);
+            console.error(`[Host] Track state: kind=${track.kind} readyState=${track.readyState} enabled=${track.enabled}`);
+          }
         }
       } else {
         console.warn('[Host] LiveKit not configured — streams not published');
