@@ -1,4 +1,5 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer';
+import { spawn } from 'child_process';
 
 interface HostAgent {
   id: string;
@@ -28,8 +29,20 @@ export class AvatarHost {
     serverPort: number,
     callbacks: AvatarHostCallbacks,
   ): Promise<void> {
-    // Use headed mode when DISPLAY is set (Xvfb in Docker) — gives a real
-    // compositor so captureStream() produces video frames. Headless locally.
+    // Start Xvfb if no display exists (Docker) — provides a real compositor
+    // so captureStream() produces video frames. Skipped on local dev (has display or not needed).
+    if (!process.env.DISPLAY && process.env.PUPPETEER_EXECUTABLE_PATH) {
+      console.log('[AvatarHost] No DISPLAY — starting Xvfb...');
+      const xvfb = spawn('Xvfb', [':99', '-screen', '0', '1280x720x24', '-ac'], {
+        stdio: 'ignore',
+        detached: true,
+      });
+      xvfb.unref();
+      process.env.DISPLAY = ':99';
+      await new Promise(r => setTimeout(r, 2000));
+      console.log('[AvatarHost] Xvfb started on display :99');
+    }
+
     const hasDisplay = !!process.env.DISPLAY;
     console.log(`[AvatarHost] Launching Chrome (headed=${hasDisplay}, DISPLAY=${process.env.DISPLAY || 'none'})...`);
 
