@@ -66,7 +66,7 @@ export class MockOmniagentConnection extends EventEmitter {
           accumulated += chunk;
           this.emit('response_delta', { itemId, content: chunk });
 
-          // Emit speech_end on last word
+          // Emit speech_end on last word, then talk_state ended
           if (i === words.length - 1) {
             this.emit('speech_end', {
               agentId: this.config.id,
@@ -74,6 +74,10 @@ export class MockOmniagentConnection extends EventEmitter {
               text: accumulated,
               timestamp: Date.now(),
             });
+            // Simulate talk_state ended (triggers turnAudioDone in SessionManager)
+            setTimeout(() => {
+              this.emit('talk_state', { state: 'ended' });
+            }, 100);
           }
         }, (i + 1) * 50);
       });
