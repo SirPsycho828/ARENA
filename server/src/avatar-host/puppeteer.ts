@@ -43,11 +43,14 @@ export class AvatarHost {
 
     this.page = await this.browser.newPage();
 
-    // Log browser console to server console
+    // Log ALL browser console to server console (don't filter — we need LiveKit errors)
     this.page.on('console', (msg) => {
       const text = msg.text();
-      if (text.startsWith('[Host]') || text.startsWith('[Frame]')) {
-        console.log(`  ${text}`);
+      const level = msg.type(); // 'log', 'warn', 'error', etc.
+      if (level === 'error') {
+        console.error(`  [Chrome] ${text}`);
+      } else {
+        console.log(`  [Chrome] ${text}`);
       }
     });
 

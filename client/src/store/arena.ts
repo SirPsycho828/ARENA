@@ -331,7 +331,10 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     // Connect to LiveKit room for video/audio
     (socket as any).on('livekit_token', ({ token, url }: { token: string; url: string }) => {
+      console.log(`[LiveKit] Received token, connecting to ${url}...`);
       connectLiveKit(url, token, (tracks) => {
+        const count = Object.values(tracks).reduce((n, t) => n + (t.video ? 1 : 0) + (t.audio ? 1 : 0), 0);
+        console.log(`[LiveKit] Tracks updated: ${count} total`, Object.keys(tracks));
         set({ livekitTracks: tracks });
       }).catch((err) => console.error('[LiveKit] Connect failed:', err));
     });

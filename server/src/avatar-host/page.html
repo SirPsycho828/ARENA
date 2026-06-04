@@ -121,27 +121,33 @@
 
       // Connect to LiveKit and publish tracks
       if (config.livekit?.url && config.livekit?.token) {
-        livekitRoom = new Room();
-        await livekitRoom.connect(config.livekit.url, config.livekit.token);
-        console.log('[Host] Connected to LiveKit room');
+        try {
+          livekitRoom = new Room();
+          console.log(`[Host] Connecting to LiveKit: ${config.livekit.url}`);
+          await livekitRoom.connect(config.livekit.url, config.livekit.token);
+          console.log(`[Host] Connected to LiveKit room: ${livekitRoom.name}`);
 
-        for (const { agentId, track, kind } of tracks) {
-          try {
-            // Wrap raw MediaStreamTrack in LocalTrack — tracks from iframe's
-            // captureStream() are in a different JS realm, so `instanceof
-            // MediaStreamTrack` fails inside the SDK (cross-realm instanceof).
-            const localTrack = kind === 'video'
-              ? new LocalVideoTrack(track, undefined, false)
-              : new LocalAudioTrack(track, undefined, false);
-            await livekitRoom.localParticipant.publishTrack(localTrack, {
-              name: `${agentId}_${kind}`,
-              source: kind === 'video' ? Track.Source.Camera : Track.Source.Microphone,
-            });
-            console.log(`[Host] Published ${kind} for ${agentId}`);
-          } catch (err) {
-            console.error(`[Host] Failed to publish ${kind} for ${agentId}:`, err.message);
-            console.error(`[Host] Track state: kind=${track.kind} readyState=${track.readyState} enabled=${track.enabled}`);
+          let published = 0;
+          for (const { agentId, track, kind } of tracks) {
+            try {
+              const localTrack = kind === 'video'
+                ? new LocalVideoTrack(track, undefined, false)
+                : new LocalAudioTrack(track, undefined, false);
+              await livekitRoom.localParticipant.publishTrack(localTrack, {
+                name: `${agentId}_${kind}`,
+                source: kind === 'video' ? Track.Source.Camera : Track.Source.Microphone,
+              });
+              published++;
+              console.log(`[Host] Published ${kind} for ${agentId}`);
+            } catch (err) {
+              console.error(`[Host] Failed to publish ${kind} for ${agentId}: ${err.message}`);
+              console.error(`[Host] Track state: kind=${track.kind} readyState=${track.readyState} enabled=${track.enabled}`);
+            }
           }
+          console.log(`[Host] LiveKit: ${published}/${tracks.length} tracks published`);
+        } catch (err) {
+          console.error(`[Host] LiveKit connection FAILED: ${err.message}`);
+          console.error(`[Host] LiveKit URL was: ${config.livekit.url}`);
         }
       } else {
         console.warn('[Host] LiveKit not configured — streams not published');
