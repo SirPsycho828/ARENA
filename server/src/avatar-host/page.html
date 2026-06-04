@@ -135,7 +135,6 @@
                 : new LocalAudioTrack(track, undefined, false);
               await livekitRoom.localParticipant.publishTrack(localTrack, {
                 name: `${agentId}_${kind}`,
-                source: kind === 'video' ? Track.Source.Camera : Track.Source.Microphone,
               });
               published++;
               console.log(`[Host] Published ${kind} for ${agentId}`);
