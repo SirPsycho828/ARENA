@@ -188,6 +188,8 @@ export class SessionManager {
   private poleVoterRecord: Set<string> = new Set();
   private pendingPoleGeneration: string | null = null; // agentId awaiting pole response
   private poleGenerationTimeout: ReturnType<typeof setTimeout> | null = null;
+  private completedTurns = 0;
+  private polesGenerated = false;
 
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
@@ -617,8 +619,6 @@ export class SessionManager {
   // ─── Consensus Meter ──────────────────────────────────────────────────
 
   private initConsensus(topic: string) {
-    // Start with template fallback poles
-    const fallback = this.generatePoles(topic);
     const agentStances: Record<string, number> = {};
 
     // Assign each agent a spread-out initial stance so the meter has visual tension
@@ -628,37 +628,20 @@ export class SessionManager {
       agentStances[id] = shuffled[i % shuffled.length] + (Math.random() - 0.5) * 0.1;
     });
 
+    // Start with empty poles — will be generated after 3 turns based on actual debate
     this.consensusState = {
-      leftPole: fallback.left,
-      rightPole: fallback.right,
+      leftPole: '',
+      rightPole: '',
       needlePosition: 0,
       agentStances,
       viewerVotes: { left: 0, right: 0 },
     };
     this.poleVoterRecord.clear();
+    this.completedTurns = 0;
+    this.polesGenerated = false;
     this.updateNeedlePosition();
     (this.io as any).emit('consensus_update', this.consensusState);
-
-    // Ask a non-speaking agent to generate better AI poles
-    if (this.session && this.session.agentIds.length > 0) {
-      const currentSpeaker = this.turnManager?.getCurrentSpeaker();
-      const poleAgentId = this.session.agentIds.find(id => id !== currentSpeaker)
-        || this.session.agentIds[this.session.agentIds.length - 1];
-
-      this.pendingPoleGeneration = poleAgentId;
-      if (this.poleGenerationTimeout) clearTimeout(this.poleGenerationTimeout);
-      this.poleGenerationTimeout = setTimeout(() => {
-        if (this.pendingPoleGeneration) {
-          console.log('  [Consensus] Pole generation timed out — keeping fallback labels');
-          this.pendingPoleGeneration = null;
-        }
-      }, 8000);
-
-      const prompt = `Quick task, not a debate question. The topic is: "${topic}". Give me two short vote-button labels (max 4 words each) for the FOR and AGAINST sides. Each label must make it CRYSTAL CLEAR what position the voter is taking — a viewer should instantly know what they're voting for without reading the topic. Be direct, not clever. Good examples: "SCREEN TIME IS FINE" vs "SCREENS HURT KIDS", "HOMEWORK MATTERS" vs "BAN HOMEWORK". Bad examples: "PIXEL PERIL" vs "DIGITAL BOON" (too vague). Reply ONLY in this format: LEFT: [for label] | RIGHT: [against label]`;
-
-      this.omniagent.sendMessage(poleAgentId, 'user', prompt, true);
-      console.log(`  [Consensus] Requesting AI poles from ${this.agentConfigs.get(poleAgentId)?.name || poleAgentId}`);
-    }
+    console.log(`  [Consensus] Opinion meter active — poles will form after 3 turns`);
   }
 
   private generatePoles(topic: string): { left: string; right: string } {
@@ -1147,7 +1130,53 @@ export class SessionManager {
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
     const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
     console.log(`  [${name}] advancing turn`);
+    this.completedTurns++;
+
+    // After 3 turns (one full round), generate poles based on actual debate content
+    if (this.completedTurns === 3 && !this.polesGenerated) {
+      this.generatePolesFromTranscript();
+    }
+
     this.turnManager?.onSpeechEnd(agentId, '');
+  }
+
+  /** After hearing from all 3 agents, ask one to identify the two main positions */
+  private generatePolesFromTranscript() {
+    if (!this.session || this.session.agentIds.length === 0) return;
+    this.polesGenerated = true;
+
+    // Build transcript summary from the first round
+    const transcript = this.recentTranscripts
+      .slice(-6) // last 3-6 messages covers the first round
+      .map(m => `${m.agentName}: ${m.text}`)
+      .join('\n');
+
+    // Pick a non-speaking agent
+    const currentSpeaker = this.turnManager?.getCurrentSpeaker();
+    const poleAgentId = this.session.agentIds.find(id => id !== currentSpeaker)
+      || this.session.agentIds[this.session.agentIds.length - 1];
+
+    this.pendingPoleGeneration = poleAgentId;
+    if (this.poleGenerationTimeout) clearTimeout(this.poleGenerationTimeout);
+    this.poleGenerationTimeout = setTimeout(() => {
+      if (this.pendingPoleGeneration) {
+        console.log('  [Consensus] Pole generation timed out — using fallback');
+        this.pendingPoleGeneration = null;
+        // Fall back to template-based poles
+        if (this.consensusState && this.session) {
+          const fallback = this.generatePoles(this.session.topic);
+          this.consensusState.leftPole = fallback.left;
+          this.consensusState.rightPole = fallback.right;
+          (this.io as any).emit('consensus_update', this.consensusState);
+        }
+      }
+    }, 10000);
+
+    const topic = this.session.topic;
+    const prompt = `Quick task, not a debate question. You just heard this debate:\n\n${transcript}\n\nTopic: "${topic}"\n\nWhat are the TWO main opposing positions that emerged? Create two short vote-button labels (max 5 words each) so a viewer can pick a side. The labels must reflect the ACTUAL positions argued, not generic for/against. Each label should be a clear stance a viewer would want to rally behind. Reply ONLY in this format: LEFT: [position 1] | RIGHT: [position 2]`;
+
+    this.omniagent.sendMessage(poleAgentId, 'user', prompt, true);
+    console.log(`  [Consensus] Generating poles from transcript via ${this.agentConfigs.get(poleAgentId)?.name || poleAgentId}`);
   }
 
   private wireTurnManagerEvents() {

@@ -20,6 +20,7 @@ export function ConsensusNeedle() {
   // Convert -1..1 to 0..100 percentage
   const needlePct = ((consensus.needlePosition + 1) / 2) * 100;
   const totalVotes = consensus.viewerVotes.left + consensus.viewerVotes.right;
+  const polesReady = consensus.leftPole.length > 0 && consensus.rightPole.length > 0;
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -66,34 +67,43 @@ export function ConsensusNeedle() {
         </div>
 
         {/* Vote buttons */}
-        <div className="flex gap-3">
-          <button
-            onClick={() => votePole('left')}
-            disabled={hasVotedPole}
-            className={`flex-1 py-1.5 rounded-sm text-[11px] font-display tracking-wider transition-all cursor-pointer ${
-              hasVotedPole
-                ? 'bg-muted text-muted-foreground/50'
-                : 'bg-accent/15 text-accent hover:bg-accent/25 active:scale-[0.97]'
-            }`}
-          >
-            {consensus.leftPole}
-          </button>
-          <button
-            onClick={() => votePole('right')}
-            disabled={hasVotedPole}
-            className={`flex-1 py-1.5 rounded-sm text-[11px] font-display tracking-wider transition-all cursor-pointer ${
-              hasVotedPole
-                ? 'bg-muted text-muted-foreground/50'
-                : 'bg-primary/15 text-primary hover:bg-primary/25 active:scale-[0.97]'
-            }`}
-          >
-            {consensus.rightPole}
-          </button>
-        </div>
+        {polesReady ? (
+          <div className="flex gap-3 animate-in fade-in duration-500">
+            <button
+              onClick={() => votePole('left')}
+              disabled={hasVotedPole}
+              className={`flex-1 py-1.5 rounded-sm text-[11px] font-display tracking-wider transition-all cursor-pointer ${
+                hasVotedPole
+                  ? 'bg-muted text-muted-foreground/50'
+                  : 'bg-accent/15 text-accent hover:bg-accent/25 active:scale-[0.97]'
+              }`}
+            >
+              {consensus.leftPole}
+            </button>
+            <button
+              onClick={() => votePole('right')}
+              disabled={hasVotedPole}
+              className={`flex-1 py-1.5 rounded-sm text-[11px] font-display tracking-wider transition-all cursor-pointer ${
+                hasVotedPole
+                  ? 'bg-muted text-muted-foreground/50'
+                  : 'bg-primary/15 text-primary hover:bg-primary/25 active:scale-[0.97]'
+              }`}
+            >
+              {consensus.rightPole}
+            </button>
+          </div>
+        ) : (
+          <div className="text-center py-1.5 text-[11px] font-display tracking-wider text-muted-foreground/50 animate-pulse">
+            LISTENING TO THE DEBATE...
+          </div>
+        )}
 
         {/* Subtitle */}
         <p className="text-center text-[9px] text-muted-foreground/60 font-mono tracking-wider">
-          BASED ON AI ARGUMENTS & VIEWER VOTES{totalVotes > 0 ? ` (${totalVotes})` : ''}
+          {polesReady
+            ? <>BASED ON AI ARGUMENTS & VIEWER VOTES{totalVotes > 0 ? ` (${totalVotes})` : ''}</>
+            : 'VOTE BUTTONS WILL APPEAR AFTER THE FIRST ROUND'
+          }
         </p>
       </div>
     </div>
