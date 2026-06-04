@@ -36,6 +36,7 @@ export class AvatarHost {
         '--disable-setuid-sandbox',
         '--autoplay-policy=no-user-gesture-required',
         '--use-fake-ui-for-media-stream',
+        '--use-fake-device-for-media-stream',
         '--disable-features=PreloadMediaEngagementData,MediaEngagementBypassAutoplayPolicies',
       ],
       protocolTimeout: 180000,
