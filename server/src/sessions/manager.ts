@@ -191,6 +191,8 @@ export class SessionManager {
   private completedTurns = 0;
   private polesGenerated = false;
   private lastTurnAdvanceTime: number = Date.now();
+  private restartRetryCount = 0;
+  private isRestarting = false;
 
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
@@ -430,18 +432,56 @@ export class SessionManager {
     this.chaosQueue = null;
 
     if (reason !== 'shutdown') {
-      setTimeout(async () => {
-        try {
-          const { getNextTopic } = await import('./auto-start.js');
-          const topic = getNextTopic();
-          await this.createSession(topic, 3);
-          await this.startDebate();
-          console.log('  Auto-restarted with:', topic);
-        } catch (err) {
-          console.error('  Auto-restart failed:', (err as Error).message);
-        }
-      }, 5000); // 5s gap between debates
+      this.restartWithRetry();
     }
+  }
+
+  /** Restart the debate with exponential backoff. Retries indefinitely until success. */
+  async restartWithRetry(): Promise<void> {
+    if (this.isRestarting) {
+      console.log('[Watchdog] Restart already in progress — skipping');
+      return;
+    }
+    this.isRestarting = true;
+
+    const delays = [5000, 15000, 45000, 90000, 120000];
+
+    while (this.isRestarting) {
+      const delay = delays[Math.min(this.restartRetryCount, delays.length - 1)];
+      console.log(`[Watchdog] Restart attempt ${this.restartRetryCount + 1} in ${delay / 1000}s`);
+
+      await new Promise(r => setTimeout(r, delay));
+
+      // Check if something else already restarted successfully
+      if (this.session?.status === 'active') {
+        console.log('[Watchdog] Session already active — aborting restart');
+        this.isRestarting = false;
+        this.restartRetryCount = 0;
+        return;
+      }
+
+      try {
+        this.omniagent.disconnectAll();
+
+        const { getNextTopic } = await import('./auto-start.js');
+        const topic = getNextTopic();
+        await this.createSession(topic, 3);
+        await this.startDebate();
+
+        this.restartRetryCount = 0;
+        this.isRestarting = false;
+        console.log(`[Watchdog] Restart succeeded: "${topic}"`);
+        return;
+      } catch (err) {
+        this.restartRetryCount++;
+        console.error(`[Watchdog] Restart failed (attempt ${this.restartRetryCount}):`, (err as Error).message);
+      }
+    }
+  }
+
+  /** Cancel an in-progress restart (for graceful shutdown) */
+  cancelRestart() {
+    this.isRestarting = false;
   }
 
   // ─── Audience Actions ───────────────────────────────────────────────────
