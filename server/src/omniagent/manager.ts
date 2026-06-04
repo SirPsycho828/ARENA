@@ -70,6 +70,23 @@ export class OmniagentManager {
       this.agents.delete(agentId);
     }
   }
+
+  getAgentHealth(): Record<string, { alive: boolean; lastActivity: number; reconnectAttempts: number }> {
+    const health: Record<string, { alive: boolean; lastActivity: number; reconnectAttempts: number }> = {};
+    for (const [id, agent] of this.agents) {
+      if ('isAlive' in agent && typeof agent.isAlive === 'function') {
+        health[id] = {
+          alive: agent.isAlive(),
+          lastActivity: (agent as any).lastActivityAt || 0,
+          reconnectAttempts: (agent as any).reconnectAttempts || 0,
+        };
+      } else {
+        // Mock connections are always "alive"
+        health[id] = { alive: true, lastActivity: Date.now(), reconnectAttempts: 0 };
+      }
+    }
+    return health;
+  }
 }
 
 export const omniagentManager = new OmniagentManager();
