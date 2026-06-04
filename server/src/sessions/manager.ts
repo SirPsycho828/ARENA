@@ -357,17 +357,25 @@ export class SessionManager {
       this.session.agentIds = connectedAgentIds;
       console.log(`  ${connectedAgentIds.length}/${totalCreated} agents connected (mock)`);
     } else {
-      // Real mode: launch AvatarHost (Puppeteer + LiveKit)
+      // Real mode: launch AvatarHost in background (don't block debate start)
       if (!isLiveKitConfigured()) {
         throw new Error('Real mode requires LiveKit — set LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL');
       }
-      try {
-        await this.launchAvatarHost();
-        console.log(`  AvatarHost launched with ${this.session.agentIds.length} agents`);
-      } catch (err) {
+      // Fire and forget — AvatarHost will emit livekit_token to viewers when ready
+      this.launchAvatarHost().then(async () => {
+        console.log(`  AvatarHost ready — sending LiveKit tokens to ${(await this.io.fetchSockets()).length} viewers`);
+        const sockets = await this.io.fetchSockets();
+        for (const s of sockets) {
+          try {
+            const token = await createViewerToken(this.session!.id, s.id);
+            (s as any).emit('livekit_token', { token, url: getLiveKitUrl() });
+          } catch (err) {
+            console.warn(`  LiveKit token failed for ${s.id}:`, (err as Error).message);
+          }
+        }
+      }).catch(err => {
         console.error('  AvatarHost launch failed:', (err as Error).message);
-        throw err;
-      }
+      });
     }
 
     // Initialize orchestration
@@ -399,18 +407,8 @@ export class SessionManager {
     // Notify viewers
     this.io.emit('session_state', this.getSessionState());
 
-    // Send LiveKit viewer tokens to all connected viewers
-    if (!USE_MOCK && isLiveKitConfigured()) {
-      const sockets = await this.io.fetchSockets();
-      for (const s of sockets) {
-        try {
-          const token = await createViewerToken(this.session!.id, s.id);
-          (s as any).emit('livekit_token', { token, url: getLiveKitUrl() });
-        } catch (err) {
-          console.warn(`  LiveKit token failed for ${s.id}:`, (err as Error).message);
-        }
-      }
-    }
+    // LiveKit tokens are sent after AvatarHost is ready (see background launch above)
+    // For viewers that connect AFTER AvatarHost is ready, handlers.ts sends tokens on connect
 
     // Resume watchdog for new session
     this.watchdog?.resume();
