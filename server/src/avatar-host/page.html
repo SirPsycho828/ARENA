@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ARENA Avatar Host</title>
+  <style>
+    body { margin: 0; background: #000; display: flex; gap: 4px; }
+    iframe { width: 420px; height: 420px; border: none; }
+  </style>
+</head>
+<body>
+  <div id="frames"></div>
+
+  <script type="module">
+    // LiveKit SDK loaded via ESM CDN
+    const LK = await import('https://esm.sh/livekit-client@2');
+    const { Room, RoomEvent, Track } = LK;
+
+    const avatarFrames = {}; // agentId -> { iframe, ready: boolean }
+    let livekitRoom = null;
+    window.__hostReady = false;
+
+    // ─── initHost: called by Puppeteer after exposeFunction setup ─────
+    window.initHost = async function(config) {
+      console.log('[Host] initHost called with', config.agents.length, 'agents');
+      const framesDiv = document.getElementById('frames');
+
+      // Create iframes and wait for all avatars to be ready
+      const readyPromises = config.agents.map((agent) => {
+        return new Promise((resolve, reject) => {
+          const iframe = document.createElement('iframe');
+          iframe.src = '/avatar-host/avatar-frame.html';
+          iframe.style.cssText = 'width:420px;height:420px;border:none;';
+          iframe.allow = 'autoplay; camera; microphone';
+          framesDiv.appendChild(iframe);
+
+          avatarFrames[agent.id] = { iframe, ready: false };
+
+          const timeout = setTimeout(() => reject(new Error(`Avatar ${agent.id} timeout`)), 120000);
+
+          window.addEventListener('message', function handler(e) {
+            if (e.source !== iframe.contentWindow) return;
+
+            if (e.data?.type === 'frame-ready') {
+              iframe.contentWindow.postMessage({
+                type: 'init-avatar',
+                token: agent.token,
+                agentId: agent.id,
+              }, '*');
+            }
+
+            if (e.data?.type === 'avatar-ready' && e.data.agentId === agent.id) {
+              avatarFrames[agent.id].ready = true;
+              clearTimeout(timeout);
+              console.log(`[Host] Avatar ready: ${agent.id} (${agent.name})`);
+              resolve();
+            }
+
+            if (e.data?.type === 'avatar-error' && e.data.agentId === agent.id) {
+              clearTimeout(timeout);
+              reject(new Error(e.data.error));
+            }
+
+            // Relay SDK events to server via Puppeteer-exposed functions
+            if (e.data?.type === 'speech-delta' && e.data.agentId) {
+              window.__onSpeechDelta(e.data.agentId, e.data.text);
+            }
+            if (e.data?.type === 'speech-end' && e.data.agentId) {
+              window.__onSpeechEnd(e.data.agentId, e.data.fullText);
+            }
+            if (e.data?.type === 'talk-state' && e.data.agentId) {
+              window.__onTalkState(e.data.agentId, e.data.state);
+            }
+            if (e.data?.type === 'response-start' && e.data.agentId) {
+              window.__onResponseStart(e.data.agentId);
+            }
+            if (e.data?.type === 'tool-effect' && e.data.agentId) {
+              window.__onToolEffect(e.data.agentId, e.data.toolName, JSON.stringify(e.data.args || {}), e.data.callId);
+            }
+          });
+        });
+      });
+
+      console.log('[Host] Waiting for all avatars...');
+      await Promise.all(readyPromises);
+      console.log('[Host] All avatars ready! Capturing streams...');
+
+      // Capture MediaStream from each avatar's video element
+      const tracks = [];
+      for (const agent of config.agents) {
+        const iframe = avatarFrames[agent.id].iframe;
+        const video = iframe.contentDocument?.querySelector('video');
+        if (!video) {
+          console.error(`[Host] No <video> in iframe for ${agent.id} — trying fallback`);
+          continue;
+        }
+
+        // Wait a moment for the video to start playing
+        if (video.readyState < 2) {
+          await new Promise(r => { video.onloadeddata = r; setTimeout(r, 5000); });
+        }
+
+        const stream = video.captureStream();
+        const vt = stream.getVideoTracks()[0];
+        const at = stream.getAudioTracks()[0];
+        if (vt) tracks.push({ agentId: agent.id, track: vt, kind: 'video' });
+        if (at) tracks.push({ agentId: agent.id, track: at, kind: 'audio' });
+        console.log(`[Host] Captured ${agent.id}: video=${!!vt} audio=${!!at}`);
+      }
+
+      // Connect to LiveKit and publish tracks
+      if (config.livekit?.url && config.livekit?.token) {
+        livekitRoom = new Room();
+        await livekitRoom.connect(config.livekit.url, config.livekit.token);
+        console.log('[Host] Connected to LiveKit room');
+
+        for (const { agentId, track, kind } of tracks) {
+          await livekitRoom.localParticipant.publishTrack(track, {
+            name: `${agentId}_${kind}`,
+            source: kind === 'video' ? Track.Source.Camera : Track.Source.Microphone,
+          });
+          console.log(`[Host] Published ${kind} for ${agentId}`);
+        }
+      } else {
+        console.warn('[Host] LiveKit not configured — streams not published');
+      }
+
+      window.__hostReady = true;
+      window.__onHostReady();
+      console.log('[Host] All streams published. Host ready!');
+    };
+
+    // ─── sendToAvatar: called by Puppeteer to send debate prompts ─────
+    window.sendToAvatar = function(agentId, role, text, triggerResponse) {
+      const frame = avatarFrames[agentId];
+      if (!frame?.ready || !frame.iframe.contentWindow) return;
+      frame.iframe.contentWindow.postMessage({
+        type: 'send-message', agentId, role, text, triggerResponse,
+      }, '*');
+    };
+
+    // ─── stopAvatar: called by Puppeteer to stop speech ───────────────
+    window.stopAvatar = function(agentId) {
+      const frame = avatarFrames[agentId];
+      if (!frame?.ready || !frame.iframe.contentWindow) return;
+      frame.iframe.contentWindow.postMessage({ type: 'stop-speaking', agentId }, '*');
+    };
+  </script>
+</body>
+</html>
