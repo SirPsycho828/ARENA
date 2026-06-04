@@ -96,17 +96,18 @@
       }
       console.log(`[Host] ${readyCount}/${config.agents.length} avatars ready. Capturing streams...`);
 
-      // Capture MediaStream from each avatar's video element
-      const tracks = [];
+      // Capture + publish per agent (each agent = separate LiveKit participant)
+      const livekitUrl = config.livekit?.url;
+      let totalPublished = 0;
       for (const agent of config.agents) {
+        if (!avatarFrames[agent.id]?.ready) continue;
+
         const iframe = avatarFrames[agent.id].iframe;
         const video = iframe.contentDocument?.querySelector('video');
         if (!video) {
-          console.error(`[Host] No <video> in iframe for ${agent.id} — trying fallback`);
+          console.error(`[Host] No <video> in iframe for ${agent.id}`);
           continue;
         }
-
-        // Wait a moment for the video to start playing
         if (video.readyState < 2) {
           await new Promise(r => { video.onloadeddata = r; setTimeout(r, 5000); });
         }
@@ -114,43 +115,39 @@
         const stream = video.captureStream();
         const vt = stream.getVideoTracks()[0];
         const at = stream.getAudioTracks()[0];
-        if (vt) tracks.push({ agentId: agent.id, track: vt, kind: 'video' });
-        if (at) tracks.push({ agentId: agent.id, track: at, kind: 'audio' });
         console.log(`[Host] Captured ${agent.id}: video=${!!vt} audio=${!!at}`);
-      }
 
-      // Connect to LiveKit and publish tracks
-      if (config.livekit?.url && config.livekit?.token) {
-        try {
-          livekitRoom = new Room();
-          console.log(`[Host] Connecting to LiveKit: ${config.livekit.url}`);
-          await livekitRoom.connect(config.livekit.url, config.livekit.token);
-          console.log(`[Host] Connected to LiveKit room: ${livekitRoom.name}`);
-
-          let published = 0;
-          for (const { agentId, track, kind } of tracks) {
-            try {
-              const localTrack = kind === 'video'
-                ? new LocalVideoTrack(track, undefined, false)
-                : new LocalAudioTrack(track, undefined, false);
-              await livekitRoom.localParticipant.publishTrack(localTrack, {
-                name: `${agentId}_${kind}`,
-              });
-              published++;
-              console.log(`[Host] Published ${kind} for ${agentId}`);
-            } catch (err) {
-              console.error(`[Host] Failed to publish ${kind} for ${agentId}: ${err.message}`);
-              console.error(`[Host] Track state: kind=${track.kind} readyState=${track.readyState} enabled=${track.enabled}`);
-            }
-          }
-          console.log(`[Host] LiveKit: ${published}/${tracks.length} tracks published`);
-        } catch (err) {
-          console.error(`[Host] LiveKit connection FAILED: ${err.message}`);
-          console.error(`[Host] LiveKit URL was: ${config.livekit.url}`);
+        if (!livekitUrl || !agent.livekitToken) {
+          console.warn(`[Host] No LiveKit config for ${agent.id} — skipping publish`);
+          continue;
         }
-      } else {
-        console.warn('[Host] LiveKit not configured — streams not published');
+
+        try {
+          const room = new Room();
+          await room.connect(livekitUrl, agent.livekitToken);
+          console.log(`[Host] ${agent.name} connected to LiveKit as host-${agent.id}`);
+
+          if (vt) {
+            await room.localParticipant.publishTrack(
+              new LocalVideoTrack(vt, undefined, false),
+              { name: `${agent.id}_video` },
+            );
+            totalPublished++;
+            console.log(`[Host] Published video for ${agent.id}`);
+          }
+          if (at) {
+            await room.localParticipant.publishTrack(
+              new LocalAudioTrack(at, undefined, false),
+              { name: `${agent.id}_audio` },
+            );
+            totalPublished++;
+            console.log(`[Host] Published audio for ${agent.id}`);
+          }
+        } catch (err) {
+          console.error(`[Host] LiveKit publish failed for ${agent.id}: ${err.message}`);
+        }
       }
+      console.log(`[Host] LiveKit: ${totalPublished} tracks published across ${config.agents.length} agents`);
 
       window.__hostReady = true;
       window.__onHostReady();

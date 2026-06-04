@@ -18,7 +18,7 @@ import type {
 import { getNapsterResources } from '../lib/napster-resources.js';
 import { getCustomCompanions } from '../lib/companions.js';
 import { AvatarHost } from '../avatar-host/puppeteer.js';
-import { createPublisherToken, createViewerToken, getLiveKitUrl, isLiveKitConfigured } from '../lib/livekit.js';
+import { createAgentPublisherToken, createViewerToken, getLiveKitUrl, isLiveKitConfigured } from '../lib/livekit.js';
 
 // Agent personality presets (companions loaded separately)
 const AGENT_PRESETS: (Omit<AgentConfig, 'id' | 'companionId' | 'externalClientId'> & { role: string })[] = [
@@ -1152,16 +1152,18 @@ export class SessionManager {
       return;
     }
 
-    // Create LiveKit publisher token
-    const livekitToken = await createPublisherToken(this.session.id);
+    // Create per-agent LiveKit publisher tokens (each agent = separate participant)
     const livekitUrl = getLiveKitUrl();
+    for (const agent of agents) {
+      (agent as any).livekitToken = await createAgentPublisherToken(this.session.id, agent.id);
+    }
     const port = parseInt(process.env.PORT || '3001', 10);
 
     // Launch Puppeteer
     this.avatarHost = new AvatarHost();
     this.omniagent.setAvatarHost(this.avatarHost);
 
-    await this.avatarHost.launch(agents, livekitUrl, livekitToken, port, {
+    await this.avatarHost.launch(agents, livekitUrl, '', port, {
       onSpeechDelta: (agentId, text) => this.handleResponseDelta(agentId, text),
       onSpeechEnd: (agentId, fullText) => this.handleSpeechEnd(agentId, fullText),
       onTalkState: (agentId, state) => this.handleTalkState(agentId, state),

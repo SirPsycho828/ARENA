@@ -4,6 +4,7 @@ interface HostAgent {
   id: string;
   name: string;
   token: string; // Napster WebRTC token
+  livekitToken?: string; // Per-agent LiveKit publisher token
 }
 
 interface AvatarHostCallbacks {
@@ -82,10 +83,10 @@ export class AvatarHost {
     // Wait for the ES module to load (defines window.initHost)
     await this.page.waitForFunction('typeof window.initHost === "function"', { timeout: 30000 });
 
-    // Initialize with agent tokens and LiveKit config
+    // Initialize with agent tokens and LiveKit config (per-agent LiveKit tokens)
     const config = {
-      agents: agents.map(a => ({ id: a.id, name: a.name, token: a.token })),
-      livekit: { url: livekitUrl, token: livekitToken },
+      agents: agents.map(a => ({ id: a.id, name: a.name, token: a.token, livekitToken: a.livekitToken })),
+      livekit: { url: livekitUrl },
     };
 
     console.log('[AvatarHost] Calling initHost...');
