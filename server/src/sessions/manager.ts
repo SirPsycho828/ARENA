@@ -672,6 +672,12 @@ export class SessionManager {
     return this.agentConfigs;
   }
 
+  /** Re-wire events after watchdog reconnects an agent */
+  rewireAgentEvents(agent: AgentInstance, agentId: string) {
+    this.wireAgentEvents(agent, agentId);
+    console.log(`[Watchdog] Re-wired events for ${this.agentConfigs.get(agentId)?.name || agentId}`);
+  }
+
   // ─── Consensus Meter ──────────────────────────────────────────────────
 
   private initConsensus(topic: string) {
