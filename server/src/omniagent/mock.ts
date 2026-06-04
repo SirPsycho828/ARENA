@@ -14,6 +14,7 @@ export class MockOmniagentConnection extends EventEmitter {
   private config: AgentConfig;
   private connected = false;
   private responseDelay: number;
+  public lastActivityAt: number = Date.now();
 
   constructor(config: AgentConfig, responseDelay = 300) {
     super();
@@ -24,16 +25,26 @@ export class MockOmniagentConnection extends EventEmitter {
   get id() { return this.config.id; }
   get name() { return this.config.name; }
 
+  isAlive(): boolean {
+    return this.connected;
+  }
+
+  resetReconnectCounter() {
+    // no-op for mock
+  }
+
   async connect(): Promise<void> {
     // Simulate connection delay
     await new Promise((r) => setTimeout(r, 500));
     this.connected = true;
+    this.lastActivityAt = Date.now();
     console.log(`  [MOCK ${this.config.name}] Connected`);
     this.emit('avatar_state', { state: 'ready' });
   }
 
   sendMessage(role: 'user' | 'system', text: string, triggerResponse = true) {
     if (!this.connected) return;
+    this.lastActivityAt = Date.now();
 
     console.log(`  [MOCK ${this.config.name}] Received (${role}): ${text.substring(0, 60)}...`);
 
