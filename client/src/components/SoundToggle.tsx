@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Volume2, Volume1, VolumeX } from 'lucide-react';
 import { useArenaStore } from '../store/arena';
 import { sounds } from '../lib/sounds';
-import { agentAudio } from '../lib/agent-audio';
 
 export function SoundToggle() {
   const soundMuted = useArenaStore((s) => s.soundMuted);
@@ -13,18 +12,15 @@ export function SoundToggle() {
     toggleSound();
     const newMuted = !soundMuted;
     sounds.muted = newMuted;
-    agentAudio.muted = newMuted;
   };
 
   const handleVolume = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = parseFloat(e.target.value);
     setVolume(v);
-    agentAudio.volume = v;
     sounds.volume = v;
     if (soundMuted && v > 0) {
       toggleSound();
       sounds.muted = false;
-      agentAudio.muted = false;
     }
   };
 
