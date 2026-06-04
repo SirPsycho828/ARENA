@@ -35,7 +35,7 @@
 
           avatarFrames[agent.id] = { iframe, ready: false };
 
-          const timeout = setTimeout(() => reject(new Error(`Avatar ${agent.id} timeout`)), 120000);
+          const timeout = setTimeout(() => reject(new Error(`Avatar ${agent.id} timeout`)), 45000);
 
           window.addEventListener('message', function handler(e) {
             if (e.source !== iframe.contentWindow) return;
@@ -80,9 +80,21 @@
         });
       });
 
-      console.log('[Host] Waiting for all avatars...');
-      await Promise.all(readyPromises);
-      console.log('[Host] All avatars ready! Capturing streams...');
+      console.log('[Host] Waiting for avatars (45s timeout each)...');
+      const results = await Promise.allSettled(readyPromises);
+      const readyCount = results.filter(r => r.status === 'fulfilled').length;
+      const failedCount = results.filter(r => r.status === 'rejected').length;
+      if (failedCount > 0) {
+        results.forEach((r, i) => {
+          if (r.status === 'rejected') console.warn(`[Host] Avatar ${config.agents[i].id} failed: ${r.reason}`);
+        });
+      }
+      if (readyCount === 0) {
+        console.error('[Host] No avatars connected — aborting');
+        window.__onHostReady();
+        return;
+      }
+      console.log(`[Host] ${readyCount}/${config.agents.length} avatars ready. Capturing streams...`);
 
       // Capture MediaStream from each avatar's video element
       const tracks = [];

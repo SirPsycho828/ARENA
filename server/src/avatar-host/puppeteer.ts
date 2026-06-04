@@ -87,9 +87,17 @@ export class AvatarHost {
     console.log('[AvatarHost] Calling initHost...');
     await this.page.evaluate((cfg) => (window as any).initHost(cfg), config);
 
-    // Wait for all avatars to be ready and streams published
-    await readyPromise;
-    console.log('[AvatarHost] Host is ready!');
+    // Wait for avatars to be ready (90s max — page.html uses 45s per avatar)
+    const timeout = new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error('AvatarHost readyPromise timed out after 90s')), 90000),
+    );
+    try {
+      await Promise.race([readyPromise, timeout]);
+      console.log('[AvatarHost] Host is ready!');
+    } catch (err) {
+      console.error('[AvatarHost]', (err as Error).message, '— proceeding anyway');
+      this.ready = true;
+    }
   }
 
   async sendMessage(agentId: string, role: string, text: string, triggerResponse: boolean): Promise<void> {
