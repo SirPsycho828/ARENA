@@ -21,6 +21,4 @@ COPY client/dist/ ./client/dist/
 
 ENV NODE_ENV=production
 
-# xvfb-run provides a virtual display so Chromium renders video frames
-# (headless Chrome's captureStream() produces no video without a compositor)
-CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1280x720x24", "npx", "--prefix", "server", "tsx", "server/src/index.ts"]
+CMD ["npx", "--prefix", "server", "tsx", "server/src/index.ts"]
