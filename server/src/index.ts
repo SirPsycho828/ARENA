@@ -18,6 +18,7 @@ import { CreditService } from './lib/credits.js';
 import { initNapsterResources } from './lib/napster-resources.js';
 import { ensureCustomCompanions } from './lib/companions.js';
 import { createToolRoutes } from './routes/tools.js';
+import { logLiveKitStatus } from './lib/livekit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -299,6 +300,7 @@ httpServer.listen(PORT, () => {
   console.log(`  Health: http://localhost:${PORT}/health`);
   console.log(`  Socket.io: ws://localhost:${PORT}`);
   console.log(`  Mock mode: ${process.env.USE_MOCK === 'true' ? 'ON' : 'OFF'}`);
+  logLiveKitStatus();
   console.log(`  API: POST /api/sessions, POST /api/sessions/start, POST /api/sessions/end\n`);
 
   setTimeout(async () => {

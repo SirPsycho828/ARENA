@@ -358,6 +358,9 @@ export class SessionManager {
       console.log(`  ${connectedAgentIds.length}/${totalCreated} agents connected (mock)`);
     } else {
       // Real mode: launch AvatarHost (Puppeteer + LiveKit)
+      if (!isLiveKitConfigured()) {
+        throw new Error('Real mode requires LiveKit — set LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL');
+      }
       try {
         await this.launchAvatarHost();
         console.log(`  AvatarHost launched with ${this.session.agentIds.length} agents`);

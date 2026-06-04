@@ -11,6 +11,22 @@ export function isLiveKitConfigured(): boolean {
   return !!(process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET && process.env.LIVEKIT_URL);
 }
 
+export function logLiveKitStatus(): void {
+  const key = !!process.env.LIVEKIT_API_KEY;
+  const secret = !!process.env.LIVEKIT_API_SECRET;
+  const url = !!process.env.LIVEKIT_URL;
+  if (key && secret && url) {
+    console.log(`  LiveKit: configured (${process.env.LIVEKIT_URL})`);
+  } else {
+    const missing = [
+      !key && 'LIVEKIT_API_KEY',
+      !secret && 'LIVEKIT_API_SECRET',
+      !url && 'LIVEKIT_URL',
+    ].filter(Boolean);
+    console.error(`  LiveKit: NOT configured — missing: ${missing.join(', ')}`);
+  }
+}
+
 export async function createPublisherToken(roomName: string): Promise<string> {
   const at = new AccessToken(API_KEY(), API_SECRET(), {
     identity: 'arena-host',
