@@ -16,8 +16,12 @@ function parseTrackName(name: string): { agentId: string; kind: 'video' | 'audio
 }
 
 function updateTrack(track: RemoteTrack, publication: RemoteTrackPublication, subscribed: boolean) {
+  console.log(`[LiveKit] Track ${subscribed ? 'subscribed' : 'unsubscribed'}: name="${publication.trackName}" kind=${track.kind} sid=${publication.trackSid}`);
   const parsed = parseTrackName(publication.trackName);
-  if (!parsed) return;
+  if (!parsed) {
+    console.warn(`[LiveKit] Could not parse track name: "${publication.trackName}"`);
+    return;
+  }
 
   if (!trackMap[parsed.agentId]) trackMap[parsed.agentId] = {};
 
