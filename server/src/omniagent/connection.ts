@@ -21,8 +21,9 @@ export class OmniagentConnection extends EventEmitter {
   private audioChunkCount = 0;
   private frameStats = { json: 0, binary: 0, audioJson: 0, total: 0 };
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 10;
+  private maxReconnectAttempts = 3;
   private shouldReconnect = true;
+  public lastActivityAt: number = Date.now();
 
   constructor(config: AgentConfig) {
     super();
@@ -32,7 +33,17 @@ export class OmniagentConnection extends EventEmitter {
   get id() { return this.config.id; }
   get name() { return this.config.name; }
 
+  isAlive(): boolean {
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  resetReconnectCounter() {
+    this.reconnectAttempts = 0;
+    this.shouldReconnect = true;
+  }
+
   async connect(): Promise<void> {
+    this.lastActivityAt = Date.now();
     // Reset state for fresh/reconnected connection
     this.audioChunkCount = 0;
     this.frameStats = { json: 0, binary: 0, audioJson: 0, total: 0 };
@@ -91,6 +102,7 @@ export class OmniagentConnection extends EventEmitter {
       });
 
       this.ws!.on('message', (raw, isBinary) => {
+        this.lastActivityAt = Date.now();
         this.frameStats.total++;
         const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as any);
 
@@ -102,8 +114,8 @@ export class OmniagentConnection extends EventEmitter {
           console.log(`  [${this.config.name}] FRAME #${this.frameStats.total} (isBinary=${isBinary}): ${preview}`);
         }
 
-        // Log stats every 50 frames
-        if (this.frameStats.total % 50 === 0) {
+        // Log stats every 500 frames
+        if (this.frameStats.total % 500 === 0) {
           console.log(`  [${this.config.name}] FRAME STATS: ${JSON.stringify(this.frameStats)}`);
         }
 
@@ -148,6 +160,7 @@ export class OmniagentConnection extends EventEmitter {
     if (!this.shouldReconnect || this.reconnectAttempts >= this.maxReconnectAttempts) {
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
         console.error(`  [${this.config.name}] Max reconnect attempts (${this.maxReconnectAttempts}) reached — agent is dead`);
+        this.emit('permanently_dead', { agentId: this.config.id, name: this.config.name });
       }
       return;
     }
