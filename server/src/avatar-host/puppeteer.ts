@@ -30,8 +30,11 @@ export class AvatarHost {
   ): Promise<void> {
     console.log('[AvatarHost] Launching headless Chrome...');
 
+    // Use headed mode with Xvfb (virtual display) in Docker — headless Chrome
+    // doesn't produce video frames for captureStream() (no compositor).
+    const inDocker = process.env.PUPPETEER_EXECUTABLE_PATH != null;
     this.browser = await puppeteer.launch({
-      headless: true,
+      headless: !inDocker, // headed in Docker (Xvfb), headless locally
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
