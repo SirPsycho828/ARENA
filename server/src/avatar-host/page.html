@@ -114,6 +114,47 @@
         return v;
       }
 
+      // Canvas-based video capture: draws video frames to a canvas, then captures
+      // the canvas stream. This BYPASSES Chrome's compositor — which is why direct
+      // captureStream() on WebRTC <video> elements fails in Docker (Chrome optimizes
+      // WebRTC video decode to skip compositor rendering).
+      function createCanvasCapture(video, agentId) {
+        const w = video.videoWidth || 420;
+        const h = video.videoHeight || 420;
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+
+        // Render loop: copy video pixels to canvas
+        let frameCount = 0;
+        function drawFrame() {
+          if (video.readyState >= 2 && video.videoWidth > 0) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            frameCount++;
+          }
+          requestAnimationFrame(drawFrame);
+        }
+        drawFrame();
+
+        // Canvas captureStream always produces a video track
+        const canvasStream = canvas.captureStream(15); // 15fps
+        const videoTrack = canvasStream.getVideoTracks()[0];
+
+        // Audio still comes from the video's captureStream (audio is unaffected)
+        const audioStream = video.captureStream();
+        const audioTrack = audioStream.getAudioTracks()[0];
+
+        console.log(`[Host] Canvas capture for ${agentId}: ${w}x${h} video=${!!videoTrack} audio=${!!audioTrack}`);
+
+        // Log frame count after 3s to verify rendering
+        setTimeout(() => {
+          console.log(`[Host] Canvas ${agentId}: ${frameCount} frames rendered in 3s`);
+        }, 3000);
+
+        return { videoTrack, audioTrack };
+      }
+
       // Capture + publish per agent (each agent = separate LiveKit participant)
       const livekitUrl = config.livekit?.url;
       let totalPublished = 0;
@@ -127,25 +168,13 @@
           continue;
         }
 
-        // Force play if paused (needed for captureStream to produce frames)
+        // Force play if paused
         if (video.paused) {
           try { await video.play(); } catch(e) { console.warn(`[Host] play() failed for ${agent.id}: ${e.message}`); }
         }
 
-        let stream = video.captureStream();
-        let vt = stream.getVideoTracks()[0];
-        let at = stream.getAudioTracks()[0];
-        console.log(`[Host] Captured ${agent.id}: video=${!!vt}(${vt?.readyState ?? 'none'}) audio=${!!at}(${at?.readyState ?? 'none'})`);
-
-        // Retry if no video track (captureStream can miss tracks if video just started)
-        if (!vt && video.readyState >= 2) {
-          console.warn(`[Host] No video track for ${agent.id} — waiting 3s and retrying captureStream...`);
-          await new Promise(r => setTimeout(r, 3000));
-          stream = video.captureStream();
-          vt = stream.getVideoTracks()[0];
-          at = at || stream.getAudioTracks()[0];
-          console.log(`[Host] Retry captured ${agent.id}: video=${!!vt}(${vt?.readyState ?? 'none'}) audio=${!!at}(${at?.readyState ?? 'none'})`);
-        }
+        // Use canvas-based capture (bypasses compositor)
+        const { videoTrack: vt, audioTrack: at } = createCanvasCapture(video, agent.id);
 
         if (!livekitUrl || !agent.livekitToken) {
           console.warn(`[Host] No LiveKit config for ${agent.id} — skipping publish`);

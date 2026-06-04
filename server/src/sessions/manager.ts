@@ -1113,7 +1113,7 @@ export class SessionManager {
           this.turnAudioDone = true;
           this.maybeAdvanceTurn(agentId);
         }
-      }, 1500);
+      }, 3000);
     }
   }
 

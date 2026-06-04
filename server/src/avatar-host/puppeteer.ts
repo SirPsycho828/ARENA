@@ -58,6 +58,7 @@ export class AvatarHost {
         '--use-gl=swiftshader',
         '--enable-gpu',
         '--ignore-gpu-blocklist',
+        '--disable-accelerated-video-decode',
       ],
       protocolTimeout: 180000,
     });
