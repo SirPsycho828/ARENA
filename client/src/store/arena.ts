@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { io, Socket } from 'socket.io-client';
 import { doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { agentAudio } from '../lib/agent-audio';
+import { connectLiveKit, disconnectLiveKit, type TrackMap } from '../lib/livekit-room';
 
 interface AgentInfo {
   id: string;
@@ -107,9 +107,8 @@ interface ArenaState {
   // Victory
   victoryData: VictoryData | null;
 
-  // Video
-  videoFrames: Record<string, string>; // agentId -> latest base64 JPEG frame (server-pushed)
-  videoTokens: Record<string, string>; // agentId -> WebRTC token (for client-side video)
+  // LiveKit
+  livekitTracks: TrackMap;
 
   // Tool Effects
   activeToolEffect: ToolEffect | null;
@@ -267,8 +266,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   soundMuted: false,
   toggleSound: () => set((s) => ({ soundMuted: !s.soundMuted })),
   victoryData: null,
-  videoFrames: {},
-  videoTokens: {},
+  livekitTracks: {},
   activeToolEffect: null,
   pendingTopic: null,
   dismissTopic: () => set({ pendingTopic: null }),
@@ -331,37 +329,16 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       transcriptPacer.markDone(msg);
     });
 
-    // Play Napster native audio chunks (base64 PCM 16-bit 16kHz mono)
-    socket.on('agent_audio', (data: { agentId: string; audio: string }) => {
-      if (data.audio) {
-        agentAudio.playChunk(data.audio);
-      }
-    });
-
-    // Receive video frames from server (JPEG base64, only current speaker)
-    (socket as any).on('agent_video_frame', (data: { agentId: string; frame: string }) => {
-      set((s) => ({
-        videoFrames: { ...s.videoFrames, [data.agentId]: data.frame },
-      }));
-    });
-
-    // Receive WebRTC video tokens for client-side video rendering
-    (socket as any).on('agent_video_tokens', (data: { tokens: Record<string, string> }) => {
-      set({ videoTokens: data.tokens });
-    });
-
-    // Server says no more audio chunks for this turn — play remaining buffered audio,
-    // then signal server to advance. Generation counter prevents stale signals.
-    (socket as any).on('turn_audio_complete', ({ gen }: { gen: number }) => {
-      agentAudio.markComplete(() => {
-        socket.emit('playback_done' as any, { gen });
-      });
+    // Connect to LiveKit room for video/audio
+    (socket as any).on('livekit_token', ({ token, url }: { token: string; url: string }) => {
+      connectLiveKit(url, token, (tracks) => {
+        set({ livekitTracks: tracks });
+      }).catch((err) => console.error('[LiveKit] Connect failed:', err));
     });
 
     socket.on('speaker_change', ({ agentId }) => {
       transcriptPacer.flush(set);
-      set({ currentSpeaker: agentId, videoFrames: {} });
-      agentAudio.reset();
+      set({ currentSpeaker: agentId });
     });
 
     socket.on('vote_update', (tallies) => {
@@ -465,7 +442,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   disconnect: () => {
     const { socket } = get();
     socket?.disconnect();
-    set({ socket: null, connected: false });
+    disconnectLiveKit();
+    set({ socket: null, connected: false, livekitTracks: {} });
   },
 
   vote: (agentId) => {
