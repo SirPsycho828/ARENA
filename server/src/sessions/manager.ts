@@ -190,6 +190,7 @@ export class SessionManager {
   private poleGenerationTimeout: ReturnType<typeof setTimeout> | null = null;
   private completedTurns = 0;
   private polesGenerated = false;
+  private lastTurnAdvanceTime: number = Date.now();
 
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
@@ -614,6 +615,21 @@ export class SessionManager {
       recentTranscripts: this.recentTranscripts.slice(-20),
       consensus: this.consensusState,
     };
+  }
+
+  /** Watchdog reads this to detect stuck turns */
+  getLastTurnAdvanceTime(): number {
+    return this.lastTurnAdvanceTime;
+  }
+
+  /** Watchdog reads this to force-advance stuck turns */
+  getTurnManager(): TurnManager | null {
+    return this.turnManager;
+  }
+
+  /** Watchdog reads this to check agent configs */
+  getAgentConfigs(): Map<string, AgentConfig> {
+    return this.agentConfigs;
   }
 
   // ─── Consensus Meter ──────────────────────────────────────────────────
@@ -1086,9 +1102,6 @@ export class SessionManager {
   private turnTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private turnGeneration = 0;
 
-  // Called when BOTH text and audio are done from Napster.
-  // Client-driven: the client knows exactly when audio finishes playing and
-  // sends playback_done with a generation counter to prevent stale signals.
   private maybeAdvanceTurn(agentId: string) {
     if (!this.turnTextComplete || !this.turnAudioDone) return;
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
@@ -1096,23 +1109,27 @@ export class SessionManager {
     this.turnGeneration++;
     const gen = this.turnGeneration;
     const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
-    console.log(`  [${name}] text+audio done — waiting for client playback_done (gen=${gen})`);
 
-    // Tell client no more audio chunks are coming — include generation for matching
+    // Estimate playback time from audio data we relayed
+    const audioInfo = this.audioTracker.get(agentId);
+    const estimatedSeconds = this.estimatePlaybackSeconds(audioInfo?.totalB64Chars || 0);
+
+    console.log(`  [${name}] text+audio done — server advance in ${estimatedSeconds.toFixed(1)}s (gen=${gen})`);
+
+    // Tell client no more audio chunks are coming
     (this.io as any).emit('turn_audio_complete', { agentId, gen });
 
     // Cancel the no-response timeout — agent DID respond
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
 
-    // Fallback: if client never sends playback_done (backgrounded tab, dead socket),
-    // advance after 30s. This is intentionally long — the client should respond faster.
+    // Server-driven advance: schedule based on estimated playback duration
     if (this.turnAdvanceTimer) clearTimeout(this.turnAdvanceTimer);
     this.turnAdvanceTimer = setTimeout(() => {
       if (this.turnGeneration === gen) {
-        console.log(`  [${name}] playback fallback (30s) — advancing`);
+        console.log(`  [${name}] server-driven advance (${estimatedSeconds.toFixed(1)}s)`);
         this.doAdvanceTurn(agentId);
       }
-    }, 30000);
+    }, estimatedSeconds * 1000);
   }
 
   /** Called when client signals playback finished. Generation counter prevents stale signals. */
@@ -1125,9 +1142,19 @@ export class SessionManager {
     if (currentId) this.doAdvanceTurn(currentId);
   }
 
+  /** Estimate audio playback duration from the total base64 chars relayed */
+  private estimatePlaybackSeconds(totalBase64Chars: number): number {
+    if (totalBase64Chars === 0) return 3; // minimum
+    const rawBytes = totalBase64Chars * 0.75;
+    const samples = rawBytes / 2;        // 16-bit PCM
+    const seconds = samples / 16000;     // 16kHz sample rate
+    return Math.max(3, seconds + 2);     // +2s buffer, minimum 3s
+  }
+
   private doAdvanceTurn(agentId: string) {
     if (this.turnAdvanceTimer) { clearTimeout(this.turnAdvanceTimer); this.turnAdvanceTimer = null; }
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
+    this.lastTurnAdvanceTime = Date.now();
     const name = this.agentConfigs.get(agentId)?.name || 'Unknown';
     console.log(`  [${name}] advancing turn`);
     this.completedTurns++;
