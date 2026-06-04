@@ -29,21 +29,19 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
     socket.emit('session_state', sessionManager.getSessionState());
     broadcastSpectatorCount();
 
-    // Send LiveKit viewer token for video/audio subscription
+    // Send LiveKit viewer token only if AvatarHost is already ready.
+    // Viewers who connect before AvatarHost is ready will get tokens
+    // from the broadcast in manager.ts when AvatarHost becomes ready.
     const session = sessionManager.getActiveSession();
-    if (session?.status === 'active') {
+    if (session?.status === 'active' && sessionManager.isAvatarHostReady()) {
       sessionManager.createLiveKitViewerToken(socket.id).then((lk) => {
         if (lk) {
           console.log(`  Sent livekit_token to ${socket.id}`);
           (socket as any).emit('livekit_token', lk);
-        } else {
-          console.warn(`  No LiveKit token for ${socket.id} (not configured or no session)`);
         }
       }).catch((err) => {
         console.warn(`  LiveKit token failed for ${socket.id}:`, (err as Error).message);
       });
-    } else {
-      console.log(`  No LiveKit token for ${socket.id} (session status: ${session?.status || 'none'})`);
     }
 
     // ─── Audience Events ──────────────────────────────────────────────────

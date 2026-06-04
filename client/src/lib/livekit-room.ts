@@ -35,6 +35,13 @@ function updateTrack(track: RemoteTrack, publication: RemoteTrackPublication, su
 }
 
 export async function connectLiveKit(url: string, token: string, onChange: (tracks: TrackMap) => void): Promise<void> {
+  // Skip reconnection if already connected with tracks — prevents
+  // duplicate livekit_token events from causing disruptive cycling
+  if (room?.state === 'connected' && Object.keys(trackMap).length > 0) {
+    console.log('[LiveKit] Already connected with tracks — skipping reconnection');
+    onTracksChanged = onChange;
+    return;
+  }
   if (room) {
     await room.disconnect();
   }

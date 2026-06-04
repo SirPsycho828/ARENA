@@ -18,7 +18,9 @@ RUN cd server && npm install --omit=dev
 COPY server/ ./server/
 COPY shared/ ./shared/
 COPY client/dist/ ./client/dist/
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 ENV NODE_ENV=production
 
-CMD ["npx", "--prefix", "server", "tsx", "server/src/index.ts"]
+CMD ["./entrypoint.sh"]

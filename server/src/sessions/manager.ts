@@ -1173,6 +1173,10 @@ export class SessionManager {
     });
   }
 
+  isAvatarHostReady(): boolean {
+    return this.avatarHost?.isReady() ?? false;
+  }
+
   async createLiveKitViewerToken(viewerId: string): Promise<{ token: string; url: string } | null> {
     if (!this.session || !isLiveKitConfigured()) return null;
     const token = await createViewerToken(this.session.id, viewerId);
