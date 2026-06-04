@@ -184,6 +184,7 @@ export class SessionManager {
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
   private turnAudioDone = false;
+  private prePromptedAgentId: string | null = null;
   // Consensus meter
   private consensusState: ConsensusState | null = null;
   private poleVoterRecord: Set<string> = new Set();
@@ -1102,7 +1103,47 @@ export class SessionManager {
     this.analyzeAgentStance(agentId, cleanText);
 
     this.turnTextComplete = true;
+    this.prePromptNextSpeaker(agentId);
     this.maybeAdvanceTurn(agentId);
+  }
+
+  /** Pre-prompt the next speaker while the current speaker's audio is still playing. */
+  private prePromptNextSpeaker(currentAgentId: string) {
+    if (!this.turnManager || !this.session) return;
+    const nextId = this.turnManager.peekNextSpeaker();
+    if (!nextId || nextId === currentAgentId) return;
+
+    // Build prompt (same logic as turn_start handler)
+    const topic = this.session.topic;
+    let chaosPrompt = '';
+    if (this.chaosQueue) {
+      chaosPrompt = this.chaosQueue.getActiveRulesPrompt(nextId);
+    }
+    const chaosInstruction = chaosPrompt ? `${chaosPrompt}\n` : '';
+
+    const recentMsgs = this.recentTranscripts
+      .filter(m => m.agentId !== nextId)
+      .slice(-3);
+
+    if (recentMsgs.length > 0) {
+      const context = recentMsgs.map(m => `${m.agentName}: "${m.text}"`).join('\n');
+      const framings = [
+        `Topic: "${topic}"\nRecent conversation:\n${context}\n\nYour turn. Jump in naturally.`,
+        `Topic: "${topic}"\nWhat's been said:\n${context}\n\nGo.`,
+        `Topic: "${topic}"\nThe conversation so far:\n${context}\n\nYour turn.`,
+        `Topic: "${topic}"\nYou just heard:\n${context}\n\nSay what you're thinking.`,
+        `Topic: "${topic}"\nRecent:\n${context}\n\nReact however you want.`,
+      ];
+      const framing = framings[this.recentTranscripts.length % framings.length];
+      this.omniagent.sendMessage(nextId, 'user', `${chaosInstruction}${framing}`, true);
+    } else {
+      this.omniagent.sendMessage(nextId, 'user', `${chaosInstruction}Topic: "${topic}". You're up first. Make it count.`, true);
+    }
+
+    this.prePromptedAgentId = nextId;
+    this.turnManager.forceNext(nextId);
+    const nextName = this.agentConfigs.get(nextId)?.name || nextId;
+    console.log(`  [Pre-prompt] Sent to ${nextName} while audio still playing`);
   }
 
   handleTalkState(agentId: string, state: string) {
@@ -1311,7 +1352,6 @@ export class SessionManager {
       }
 
       // Safety net: if agent doesn't produce any text within 15s, skip them.
-      // This handles agent disconnections, API errors, or unresponsive agents.
       this.turnTimeoutTimer = setTimeout(() => {
         if (this.turnManager?.getCurrentSpeaker() === agentId && !this.turnTextComplete) {
           console.log(`  [${turnAgentName}] no response after 15s — skipping`);
@@ -1319,22 +1359,28 @@ export class SessionManager {
         }
       }, 15000);
 
-      // Build the trigger message — provide conversation context without commanding a direct response
+      // If this agent was pre-prompted (prompt sent during previous speaker's audio),
+      // skip sending another prompt — the AI is already generating.
+      if (this.prePromptedAgentId === agentId) {
+        console.log(`  [Turn] ${turnAgentName} was pre-prompted — skipping duplicate prompt`);
+        this.prePromptedAgentId = null;
+        return;
+      }
+      this.prePromptedAgentId = null;
+
+      // Build the trigger message
       const topic = this.session?.topic || 'the current topic';
       const chaosInstruction = chaosPrompt ? `${chaosPrompt}\n` : '';
 
-      // Get recent context (last 2-3 messages, not just 1)
       const recentMsgs = this.recentTranscripts
         .filter(m => m.agentId !== agentId)
         .slice(-3);
 
       if (recentMsgs.length > 0) {
-        // Build a natural conversation context
         const context = recentMsgs
           .map(m => `${m.agentName}: "${m.text}"`)
           .join('\n');
 
-        // Vary the prompt framing to prevent formulaic responses
         const framings = [
           `Topic: "${topic}"\nRecent conversation:\n${context}\n\nYour turn. Jump in naturally.`,
           `Topic: "${topic}"\nWhat's been said:\n${context}\n\nGo.`,

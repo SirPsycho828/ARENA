@@ -19,6 +19,7 @@ export class TurnManager extends EventEmitter {
   private gapTimer: NodeJS.Timeout | null = null;
   private paused = false;
   private recentSpeakers: string[] = [];
+  private forcedNext: string | null = null;
 
   constructor(config: Partial<TurnManagerConfig> = {}) {
     super();
@@ -88,12 +89,28 @@ export class TurnManager extends EventEmitter {
     }
   }
 
+  /** Peek at who would speak next without advancing state. */
+  peekNextSpeaker(): string | null {
+    if (this.agentIds.length === 0) return null;
+    if (this.interruptQueue.length > 0) return this.interruptQueue[0];
+    if (this.config.mode === 'dynamic') return this.selectDynamic();
+    if (this.config.mode === 'round_robin') return this.agentIds[(this.currentIndex + 1) % this.agentIds.length];
+    const candidates = this.agentIds.filter(id => id !== this.currentSpeaker);
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  /** Force a specific agent as the next speaker (used for pre-prompting). */
+  forceNext(agentId: string) { this.forcedNext = agentId; }
+
   private selectNext() {
     if (this.paused) return;
 
     let nextId: string;
 
-    if (this.interruptQueue.length > 0) {
+    if (this.forcedNext) {
+      nextId = this.forcedNext;
+      this.forcedNext = null;
+    } else if (this.interruptQueue.length > 0) {
       nextId = this.interruptQueue.shift()!;
       this.emit('turn_interrupted', { byAgentId: nextId });
     } else if (this.config.mode === 'dynamic') {
