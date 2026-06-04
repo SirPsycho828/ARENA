@@ -81,6 +81,10 @@ app.use(express.static(clientDist));
 const contentDir = path.resolve(__dirname, 'content');
 app.use('/static', express.static(contentDir));
 
+// Serve avatar host pages for Puppeteer headless browser
+const avatarHostDir = path.resolve(__dirname, 'avatar-host');
+app.use('/avatar-host', express.static(avatarHostDir));
+
 // ─── Health Endpoint ────────────────────────────────────────────────────────
 
 app.get('/health', (_req, res) => {
@@ -155,10 +159,6 @@ app.post('/api/sessions/end', async (_req, res) => {
 
 app.get('/api/topics', (_req, res) => {
   res.json({ topics: getTopicPool() });
-});
-
-app.get('/api/sessions/tokens', (_req, res) => {
-  res.json({ tokens: sessionManager.getVideoTokens() });
 });
 
 // ─── Credit Purchase ──────────────────────────────────────────────────────
@@ -333,6 +333,8 @@ async function shutdown(signal: string) {
   watchdog.stop();
   sessionManager.cancelRestart();
   await sessionManager.endDebate('shutdown').catch(() => {});
+  const host = omniagent.getAvatarHost();
+  if (host) await host.shutdown();
   io.close();
   db.close();
   httpServer.close(() => process.exit(0));

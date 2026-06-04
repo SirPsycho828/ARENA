@@ -29,14 +29,14 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
     socket.emit('session_state', sessionManager.getSessionState());
     broadcastSpectatorCount();
 
-    // Create fresh per-viewer video tokens (single-use for WebRTC signaling)
+    // Send LiveKit viewer token for video/audio subscription
     if (sessionManager.getActiveSession()?.status === 'active') {
-      sessionManager.createVideoTokensForViewer(socket.id).then((tokens) => {
-        if (Object.keys(tokens).length > 0) {
-          socket.emit('agent_video_tokens' as any, { tokens });
+      sessionManager.createLiveKitViewerToken(socket.id).then((lk) => {
+        if (lk) {
+          (socket as any).emit('livekit_token', lk);
         }
       }).catch((err) => {
-        console.warn(`  Video tokens failed for ${socket.id}:`, (err as Error).message);
+        console.warn(`  LiveKit token failed for ${socket.id}:`, (err as Error).message);
       });
     }
 
@@ -162,11 +162,6 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
       console.log(`  Challenge ended by ${socket.id}`);
       io.emit('challenger_ended' as any, { viewerId: socket.id });
       sessionManager.handleChallengerEnd(socket.id);
-    });
-
-    // Client signals audio playback finished — generation counter prevents stale signals
-    socket.on('playback_done' as any, (data: { gen?: number }) => {
-      sessionManager.advanceFromPlayback(data?.gen);
     });
 
     socket.on('disconnect', (reason) => {
