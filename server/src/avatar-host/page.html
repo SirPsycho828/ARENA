@@ -114,40 +114,59 @@
         return v;
       }
 
-      // Canvas-based video capture: draws video frames to a canvas, then captures
-      // the canvas stream. This BYPASSES Chrome's compositor — which is why direct
-      // captureStream() on WebRTC <video> elements fails in Docker (Chrome optimizes
-      // WebRTC video decode to skip compositor rendering).
-      function createCanvasCapture(video, agentId) {
-        const w = video.videoWidth || 420;
-        const h = video.videoHeight || 420;
+      // Mirror an iframe's WebRTC video to a <video> in the PARENT page's DOM.
+      // Chrome only decodes video frames for elements the compositor is actively
+      // painting.  Iframe video elements in Xvfb don't get composited → drawImage
+      // always reads the same (first) frame.  A parent-DOM mirror forces Chrome
+      // to decode and present every frame, so drawImage picks up fresh pixels.
+      async function createMirrorVideo(iframeVideo, agentId) {
+        const mirror = document.createElement('video');
+        mirror.srcObject = iframeVideo.srcObject;   // same MediaStream, new element
+        mirror.autoplay = true;
+        mirror.muted   = true;
+        mirror.playsInline = true;
+        mirror.style.cssText = 'width:420px;height:420px;';
+        document.body.appendChild(mirror);           // visible in Xvfb viewport
+
+        try { await mirror.play(); } catch(e) { console.warn(`[Host] mirror play() failed for ${agentId}: ${e.message}`); }
+
+        // Wait until the mirror has decoded at least one frame
+        const start = Date.now();
+        while (Date.now() - start < 10000) {
+          if (mirror.readyState >= 2 && mirror.videoWidth > 0) break;
+          await new Promise(r => setTimeout(r, 500));
+        }
+        console.log(`[Host] Mirror ready for ${agentId}: readyState=${mirror.readyState} size=${mirror.videoWidth}x${mirror.videoHeight}`);
+        return mirror;
+      }
+
+      // Canvas capture: draws mirror-video frames to a canvas, then captures the
+      // canvas stream for LiveKit.  Uses setInterval (rAF doesn't fire in Xvfb).
+      function createCanvasCapture(mirrorVideo, agentId) {
+        const w = mirrorVideo.videoWidth || 420;
+        const h = mirrorVideo.videoHeight || 420;
         const canvas = document.createElement('canvas');
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
 
-        // Render loop: copy video pixels to canvas.
-        // Uses setInterval (NOT requestAnimationFrame) because rAF doesn't fire
-        // in Xvfb/background Chrome — it's tied to display vsync/visibility.
         let frameCount = 0;
         setInterval(() => {
-          if (video.readyState >= 2 && video.videoWidth > 0) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          if (mirrorVideo.readyState >= 2 && mirrorVideo.videoWidth > 0) {
+            ctx.drawImage(mirrorVideo, 0, 0, canvas.width, canvas.height);
             frameCount++;
           }
         }, 66); // ~15fps
 
-        // Canvas captureStream always produces a video track
-        const canvasStream = canvas.captureStream(15); // 15fps
+        const canvasStream = canvas.captureStream(15);
         const videoTrack = canvasStream.getVideoTracks()[0];
 
-        // Audio still comes from the video's captureStream (audio is unaffected)
-        const audioStream = video.captureStream();
+        // Audio from the mirror (same MediaStream)
+        const audioStream = mirrorVideo.captureStream();
         const audioTrack = audioStream.getAudioTracks()[0];
 
         console.log(`[Host] Canvas capture for ${agentId}: ${w}x${h} video=${!!videoTrack} audio=${!!audioTrack}`);
 
-        // Log frame count after 3s to verify rendering
         setTimeout(() => {
           console.log(`[Host] Canvas ${agentId}: ${frameCount} frames rendered in 3s`);
         }, 3000);
@@ -168,13 +187,11 @@
           continue;
         }
 
-        // Force play if paused
-        if (video.paused) {
-          try { await video.play(); } catch(e) { console.warn(`[Host] play() failed for ${agent.id}: ${e.message}`); }
-        }
+        // Mirror to parent DOM so Chrome's compositor decodes new frames
+        const mirror = await createMirrorVideo(video, agent.id);
 
-        // Use canvas-based capture (bypasses compositor)
-        const { videoTrack: vt, audioTrack: at } = createCanvasCapture(video, agent.id);
+        // Canvas capture from the mirror (not the iframe's video)
+        const { videoTrack: vt, audioTrack: at } = createCanvasCapture(mirror, agent.id);
 
         if (!livekitUrl || !agent.livekitToken) {
           console.warn(`[Host] No LiveKit config for ${agent.id} — skipping publish`);
