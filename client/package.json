@@ -14,6 +14,7 @@
     "@touchcastllc/napster-companion-api": "^1.0.0-alpha.48",
     "firebase": "^12.14.0",
     "framer-motion": "^12.40.0",
+    "livekit-client": "^2.19.1",
     "lucide-react": "^1.17.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
