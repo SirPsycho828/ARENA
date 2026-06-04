@@ -193,11 +193,16 @@ export class SessionManager {
   private lastTurnAdvanceTime: number = Date.now();
   private restartRetryCount = 0;
   private isRestarting = false;
+  private watchdog: { pause(): void; resume(): void } | null = null;
 
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
     this.omniagent = omniagent;
     this.io = io;
+  }
+
+  setWatchdog(watchdog: { pause(): void; resume(): void }) {
+    this.watchdog = watchdog;
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────
@@ -392,11 +397,16 @@ export class SessionManager {
       });
     }
 
+    // Resume watchdog for new session
+    this.watchdog?.resume();
+
     console.log('  Debate is LIVE!\n');
   }
 
   async endDebate(reason = 'manual'): Promise<void> {
     if (!this.session) return;
+
+    this.watchdog?.pause();
 
     console.log(`\n  Ending debate: ${reason}`);
     this.session.status = 'ended';

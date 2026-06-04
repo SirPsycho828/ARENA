@@ -9,6 +9,7 @@ import { setupSocketHandlers } from './socket/handlers.js';
 import { db } from './db/index.js';
 import { OmniagentManager } from './omniagent/manager.js';
 import { SessionManager } from './sessions/manager.js';
+import { DebateWatchdog } from './sessions/watchdog.js';
 import { getNextTopic, getTopicPool } from './sessions/auto-start.js';
 import type { ServerEvents, ClientEvents } from '../../shared/types.js';
 import Stripe from 'stripe';
@@ -35,6 +36,8 @@ const io = new Server<ClientEvents, ServerEvents>(httpServer, {
 
 const omniagent = new OmniagentManager();
 const sessionManager = new SessionManager(omniagent, io);
+const watchdog = new DebateWatchdog(sessionManager, omniagent);
+sessionManager.setWatchdog(watchdog);
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null;
@@ -82,11 +85,13 @@ app.use('/static', express.static(contentDir));
 
 app.get('/health', (_req, res) => {
   const session = sessionManager.getActiveSession();
+  const watchdogStatus = watchdog.getStatus();
   res.json({
     status: 'ok',
     uptime: process.uptime(),
     viewerCount: io.engine.clientsCount,
     activeSession: session ? { id: session.id, topic: session.topic, status: session.status } : null,
+    watchdog: watchdogStatus,
     timestamp: Date.now(),
   });
 });
@@ -298,7 +303,6 @@ httpServer.listen(PORT, () => {
 
   setTimeout(async () => {
     try {
-      // Initialize Napster resources (Companions, KBs, FAQs, Functions) before first session
       const serverUrl = process.env.RAILWAY_PUBLIC_DOMAIN
         ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
         : `http://localhost:${PORT}`;
@@ -313,7 +317,12 @@ httpServer.listen(PORT, () => {
       console.log('  Auto-started debate:', topic);
     } catch (err) {
       console.error('  Auto-start failed:', (err as Error).message);
+      console.log('  Falling back to restartWithRetry()...');
+      sessionManager.restartWithRetry();
     }
+
+    // Start watchdog after first session attempt
+    watchdog.start();
   }, 2000);
 });
 
@@ -321,6 +330,8 @@ httpServer.listen(PORT, () => {
 
 async function shutdown(signal: string) {
   console.log(`${signal} received. Shutting down gracefully...`);
+  watchdog.stop();
+  sessionManager.cancelRestart();
   await sessionManager.endDebate('shutdown').catch(() => {});
   io.close();
   db.close();
@@ -330,4 +341,4 @@ async function shutdown(signal: string) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-export { app, io, httpServer, sessionManager, creditService };
+export { app, io, httpServer, sessionManager, creditService, watchdog };
