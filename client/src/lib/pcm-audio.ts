@@ -11,6 +11,7 @@ export class PcmAudioPlayer {
   private _volume = 1;
   private unlocked = false;
   private chunks = 0;
+  private lastSample = 0; // last output sample for cross-chunk boundary smoothing
 
   constructor() {
     // Use system default rate (usually 48kHz) — browser's high-quality resampler
@@ -80,13 +81,9 @@ export class PcmAudioPlayer {
     if (int16.length === 0) return;
 
     // Resample 16kHz → native rate (typically 48kHz) using linear interpolation.
-    // Why: creating many small 16kHz AudioBuffers forces the browser's sinc resampler
-    // to run independently on each one. At each buffer boundary the filter has no
-    // neighboring samples, producing spectral-leakage artifacts — audible as crackling,
-    // especially on sibilants. By resampling ourselves and creating buffers at the
-    // native rate, the browser plays them directly with zero internal resampling.
-    // Linear interpolation never overshoots (no clipping risk) and gently rolls off
-    // high frequencies, naturally taming harsh sibilants.
+    // Creating buffers at the native rate avoids the browser's per-buffer sinc
+    // resampler entirely. A 2ms crossfade at each chunk boundary eliminates
+    // step discontinuities between consecutive chunks (~10/sec = crackling).
     const outRate = this.ctx.sampleRate;
     const ratio = outRate / 16000;
     const srcLen = int16.length;
@@ -94,24 +91,38 @@ export class PcmAudioPlayer {
     const buffer = this.ctx.createBuffer(1, outLen, outRate);
     const channel = buffer.getChannelData(0);
 
+    // 2ms crossfade ramp (e.g. 96 samples @ 48kHz) to smooth chunk boundaries
+    const rampLen = Math.min(Math.round(outRate * 0.002), outLen);
+
     for (let i = 0; i < outLen; i++) {
       const srcPos = i / ratio;
       const idx = Math.floor(srcPos);
       const frac = srcPos - idx;
       const s0 = idx < srcLen ? int16[idx] / 32768 : int16[srcLen - 1] / 32768;
       const s1 = (idx + 1) < srcLen ? int16[idx + 1] / 32768 : s0;
-      channel[i] = (s0 + (s1 - s0) * frac) * 0.8;
+      let sample = (s0 + (s1 - s0) * frac) * 0.8;
+
+      // Crossfade from previous chunk's last sample to eliminate boundary clicks
+      if (i < rampLen) {
+        const t = i / rampLen;
+        sample = this.lastSample * (1 - t) + sample * t;
+      }
+
+      channel[i] = sample;
     }
+
+    // Save last output sample for next chunk's crossfade
+    this.lastSample = channel[outLen - 1];
 
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(this.gainNode);
 
-    // Schedule with jitter buffer to prevent clicks from network latency
+    // Schedule with jitter buffer — 350ms lookahead also aligns audio start
+    // with avatar API latency (~300-400ms), so lips and sound begin together
     const now = this.ctx.currentTime;
     if (this.nextPlayTime <= now) {
-      // Buffer underrun or first chunk — add 200ms lookahead to absorb jitter
-      this.nextPlayTime = now + 0.2;
+      this.nextPlayTime = now + 0.35;
     }
     source.start(this.nextPlayTime);
     this.nextPlayTime += buffer.duration;
@@ -125,6 +136,7 @@ export class PcmAudioPlayer {
   /** Reset on speaker change — instant cutoff of any remaining audio */
   reset() {
     this.nextPlayTime = 0;
+    this.lastSample = 0;
     // Swap gain node for instant audio cutoff without clicks
     const newGain = this.ctx.createGain();
     newGain.gain.value = this.muted ? 0 : this._volume;
