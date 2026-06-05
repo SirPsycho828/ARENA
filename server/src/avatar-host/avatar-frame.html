@@ -120,6 +120,11 @@
             onAvatarReady: () => {
               instance.muteMic();
               instance.showAvatar();
+              // Mute avatar audio — debate audio comes from server PCM stream
+              document.querySelectorAll('#container video, #container audio').forEach(el => {
+                el.muted = true;
+                el.volume = 0;
+              });
               window.parent.postMessage({ type: 'avatar-ready', agentId }, '*');
             },
             onError: (err) => {

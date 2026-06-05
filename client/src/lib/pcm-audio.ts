@@ -8,11 +8,12 @@ export class PcmAudioPlayer {
   private gainNode: GainNode;
   private nextPlayTime = 0;
   private muted = false;
+  private _volume = 1;
   private unlocked = false;
   private chunks = 0;
 
   constructor() {
-    this.ctx = new AudioContext({ sampleRate: 16000 });
+    this.ctx = new AudioContext({ sampleRate: 24000 });
     this.gainNode = this.ctx.createGain();
     this.gainNode.connect(this.ctx.destination);
 
@@ -42,7 +43,14 @@ export class PcmAudioPlayer {
 
   setMuted(muted: boolean) {
     this.muted = muted;
-    this.gainNode.gain.value = muted ? 0 : 1;
+    this.gainNode.gain.value = muted ? 0 : this._volume;
+  }
+
+  setVolume(v: number) {
+    this._volume = Math.max(0, Math.min(1, v));
+    if (!this.muted) {
+      this.gainNode.gain.value = this._volume;
+    }
   }
 
   playChunk(base64: string) {
@@ -62,12 +70,16 @@ export class PcmAudioPlayer {
 
     // Decode base64 → Int16 PCM
     const raw = atob(base64);
-    const bytes = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    const byteLen = raw.length & ~1; // ensure even byte count for Int16
+    const bytes = new Uint8Array(byteLen);
+    for (let i = 0; i < byteLen; i++) bytes[i] = raw.charCodeAt(i);
     const int16 = new Int16Array(bytes.buffer);
 
+    if (int16.length === 0) return;
+
     // Convert Int16 → Float32 for Web Audio
-    const buffer = this.ctx.createBuffer(1, int16.length, 16000);
+    // Napster uses OpenAI Realtime API under the hood → 24kHz PCM
+    const buffer = this.ctx.createBuffer(1, int16.length, 24000);
     const channel = buffer.getChannelData(0);
     for (let i = 0; i < int16.length; i++) channel[i] = int16[i] / 32768;
 
@@ -92,7 +104,7 @@ export class PcmAudioPlayer {
     this.nextPlayTime = 0;
     // Swap gain node for instant audio cutoff without clicks
     const newGain = this.ctx.createGain();
-    newGain.gain.value = this.muted ? 0 : 1;
+    newGain.gain.value = this.muted ? 0 : this._volume;
     newGain.connect(this.ctx.destination);
     this.gainNode.disconnect();
     this.gainNode = newGain;

@@ -107,6 +107,7 @@ interface ArenaState {
   // Sound
   soundMuted: boolean;
   toggleSound: () => void;
+  setVolume: (v: number) => void;
 
   // Victory
   victoryData: VictoryData | null;
@@ -276,6 +277,9 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     pcmPlayer?.setMuted(newMuted);
     return { soundMuted: newMuted };
   }),
+  setVolume: (v: number) => {
+    pcmPlayer?.setVolume(v);
+  },
   victoryData: null,
   livekitTracks: {},
   avatarTokens: {},

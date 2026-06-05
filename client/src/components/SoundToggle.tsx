@@ -6,6 +6,7 @@ import { sounds } from '../lib/sounds';
 export function SoundToggle() {
   const soundMuted = useArenaStore((s) => s.soundMuted);
   const toggleSound = useArenaStore((s) => s.toggleSound);
+  const setStoreVolume = useArenaStore((s) => s.setVolume);
   const [volume, setVolume] = useState(0.8);
 
   const handleToggle = () => {
@@ -18,6 +19,7 @@ export function SoundToggle() {
     const v = parseFloat(e.target.value);
     setVolume(v);
     sounds.volume = v;
+    setStoreVolume(v);
     if (soundMuted && v > 0) {
       toggleSound();
       sounds.muted = false;
