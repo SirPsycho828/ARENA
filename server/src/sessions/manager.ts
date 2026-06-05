@@ -18,7 +18,7 @@ import type {
 import { getNapsterResources } from '../lib/napster-resources.js';
 import { getCustomCompanions } from '../lib/companions.js';
 import { AvatarHost } from '../avatar-host/puppeteer.js';
-import { createAgentPublisherToken, createViewerToken, getLiveKitUrl, isLiveKitConfigured } from '../lib/livekit.js';
+import { createViewerToken, getLiveKitUrl, isLiveKitConfigured } from '../lib/livekit.js';
 
 // Agent personality presets (companions loaded separately)
 const AGENT_PRESETS: (Omit<AgentConfig, 'id' | 'companionId' | 'externalClientId'> & { role: string })[] = [
@@ -361,13 +361,11 @@ export class SessionManager {
         console.error('  Avatar token broadcast failed:', (err as Error).message);
       });
 
-      // Launch AvatarHost for debate logic (text events, turn management)
-      if (isLiveKitConfigured()) {
-        this.launchAvatarHost().catch(err => {
-          console.error('  AvatarHost launch failed:', (err as Error).message);
-        });
-      } else {
-        console.log('  LiveKit not configured — AvatarHost skipped (client renders avatars directly)');
+      // Launch AvatarHost for debate logic — MUST complete before turns start
+      try {
+        await this.launchAvatarHost();
+      } catch (err) {
+        console.error('  AvatarHost launch failed:', (err as Error).message);
       }
     }
 
@@ -969,7 +967,10 @@ export class SessionManager {
             }),
           }
         );
-        if (!res.ok) throw new Error(`${res.status}`);
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => '');
+          throw new Error(`HTTP ${res.status}: ${errBody.substring(0, 200)}`);
+        }
         const data = await res.json() as { token: string };
         return { agentId, token: data.token };
       })
@@ -978,6 +979,8 @@ export class SessionManager {
     for (const r of results) {
       if (r.status === 'fulfilled') {
         tokens[r.value.agentId] = r.value.token;
+      } else {
+        console.error(`  Token creation failed for ${viewerId}: ${r.reason}`);
       }
     }
 
@@ -1128,10 +1131,7 @@ export class SessionManager {
   // ─── AvatarHost Launch ────────────────────────────────────────────────
 
   private async launchAvatarHost(): Promise<void> {
-    if (!this.session || !isLiveKitConfigured()) {
-      console.warn('[AvatarHost] LiveKit not configured — skipping avatar host');
-      return;
-    }
+    if (!this.session) return;
 
     // Create WebRTC tokens for the headless browser (one per agent)
     const hostTokens = await this.createVideoTokensForViewer('avatarhost');
@@ -1148,18 +1148,13 @@ export class SessionManager {
       return;
     }
 
-    // Create per-agent LiveKit publisher tokens (each agent = separate participant)
-    const livekitUrl = getLiveKitUrl();
-    for (const agent of agents) {
-      (agent as any).livekitToken = await createAgentPublisherToken(this.session.id, agent.id);
-    }
     const port = parseInt(process.env.PORT || '3001', 10);
 
     // Launch Puppeteer
     this.avatarHost = new AvatarHost();
     this.omniagent.setAvatarHost(this.avatarHost);
 
-    await this.avatarHost.launch(agents, livekitUrl, '', port, {
+    await this.avatarHost.launch(agents, '', '', port, {
       onSpeechDelta: (agentId, text) => this.handleResponseDelta(agentId, text),
       onSpeechEnd: (agentId, fullText) => this.handleSpeechEnd(agentId, fullText),
       onTalkState: (agentId, state) => this.handleTalkState(agentId, state),
