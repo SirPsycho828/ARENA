@@ -161,9 +161,18 @@ export class WebSocketAgentConnection extends EventEmitter {
       }
 
       case 'audio_received': {
-        const audioData = data.audio;
+        // Log raw structure of first audio event to diagnose data path
+        if (count === 1) {
+          const keys = Object.keys(data);
+          const sample = data.audio ? `audio(${data.audio.length})` : `no data.audio, keys=[${keys}]`;
+          console.log(`  [WS ${this.agentName}] audio_received structure: ${sample}, raw keys=[${Object.keys(event)}]`);
+        }
+        // Try multiple possible audio data locations
+        const audioData = data.audio || event.audio || data.data?.audio;
         if (audioData) {
           this.emit('audio_data', { audio: audioData });
+        } else if (count === 1) {
+          console.log(`  [WS ${this.agentName}] audio_received has NO audio data! data=${JSON.stringify(data).slice(0, 200)}`);
         }
         break;
       }

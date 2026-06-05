@@ -1271,7 +1271,13 @@ export class SessionManager {
     });
 
     let audioChunksEmitted = 0;
+    let audioDataReceived = 0;
     agent.on('audio_data', (data: { audio: string }) => {
+      audioDataReceived++;
+      if (audioDataReceived === 1) {
+        const speaker = this.turnManager?.getCurrentSpeaker();
+        console.log(`  [Audio] audio_data fired for ${this.getAgentName(agentId)}, speaker=${speaker === agentId ? 'MATCH' : speaker || 'none'}, size=${data.audio?.length || 0}`);
+      }
       // Only forward audio from the current speaker (ignore pole-generation audio, etc.)
       if (this.turnManager?.getCurrentSpeaker() === agentId) {
         (this.io as any).emit('audio_chunk', { agentId, audio: data.audio });
