@@ -16,6 +16,9 @@ export class WebSocketAgentConnection extends EventEmitter {
   private connected = false;
   public lastActivityAt: number = Date.now();
   private responseBuffer: Map<string, string> = new Map();
+  private silenceTimer: ReturnType<typeof setInterval> | null = null;
+  private eventTypeCounts: Map<string, number> = new Map();
+  private loggedEventTypes = false;
 
   constructor(agentId: string, agentName: string, apiKey: string) {
     super();
@@ -64,9 +67,17 @@ export class WebSocketAgentConnection extends EventEmitter {
         this.lastActivityAt = Date.now();
         console.log(`  [WS ${this.agentName}] Connected`);
 
-        // Prime audio channel with 100ms of silence (16kHz, 16-bit mono = 3200 bytes)
-        const silence = Buffer.alloc(3200, 0).toString('base64');
-        this.ws!.send(JSON.stringify({ type: 'send_audio', data: { audio: silence } }));
+        // Continuously send silent audio to keep the audio channel active.
+        // Napster expects ongoing mic input; without it, audio_received events don't flow.
+        // 250ms chunks: 16kHz × 16-bit × mono = 8000 bytes per chunk.
+        const silence = Buffer.alloc(8000, 0).toString('base64');
+        const sendSilence = () => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'send_audio', data: { audio: silence } }));
+          }
+        };
+        sendSilence(); // Immediate prime
+        this.silenceTimer = setInterval(sendSilence, 250);
 
         resolve();
       });
@@ -102,6 +113,15 @@ export class WebSocketAgentConnection extends EventEmitter {
     // Napster uses event.event for the event type (not event.type)
     const eventType = event.event || event.type;
     const data = event.data || {};
+
+    // Diagnostic: track all event types received from Napster
+    const count = (this.eventTypeCounts.get(eventType) || 0) + 1;
+    this.eventTypeCounts.set(eventType, count);
+    // Log summary after accumulating some events
+    if (count === 1 || (count === 50 && eventType === 'audio_received')) {
+      const types = [...this.eventTypeCounts.entries()].map(([t, c]) => `${t}(${c})`).join(', ');
+      console.log(`  [WS ${this.agentName}] Events: ${types}`);
+    }
 
     switch (eventType) {
       case 'message_received': {
@@ -183,6 +203,10 @@ export class WebSocketAgentConnection extends EventEmitter {
 
   disconnect() {
     this.connected = false;
+    if (this.silenceTimer) {
+      clearInterval(this.silenceTimer);
+      this.silenceTimer = null;
+    }
     if (this.ws) {
       try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
