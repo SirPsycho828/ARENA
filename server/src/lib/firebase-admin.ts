@@ -16,8 +16,9 @@ function initAdmin() {
     const serviceAccount = JSON.parse(serviceAccountJson);
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
+      projectId: serviceAccount.project_id,
     });
-    console.log('  Firebase Admin initialized');
+    console.log(`  Firebase Admin initialized (project: ${serviceAccount.project_id})`);
   } catch (err) {
     console.error('  Firebase Admin init failed:', (err as Error).message);
   }
