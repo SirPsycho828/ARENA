@@ -167,6 +167,10 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
       sessionManager.handleChallengerEnd(socket.id);
     });
 
+    (socket as any).on('playback_done', (data: { agentId: string; generation: number }) => {
+      sessionManager.handlePlaybackDone(data.agentId, data.generation);
+    });
+
     socket.on('disconnect', (reason) => {
       console.log(`  Viewer disconnected: ${socket.id} (${reason})`);
       broadcastSpectatorCount();

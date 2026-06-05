@@ -377,6 +377,15 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set({ currentSpeaker: agentId });
     });
 
+    // Server signals all audio chunks sent — wait for client playback buffer to drain
+    (socket as any).on('turn_audio_complete', ({ agentId, generation }: { agentId: string; generation: number }) => {
+      const remaining = pcmPlayer?.getRemainingTime() || 0;
+      const delayMs = Math.max(0, remaining * 1000) + 500; // 500ms extra safety margin
+      setTimeout(() => {
+        (socket as any).emit('playback_done', { agentId, generation });
+      }, delayMs);
+    });
+
     socket.on('vote_update', (tallies) => {
       set({ voteTallies: tallies });
     });

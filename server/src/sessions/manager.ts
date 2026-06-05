@@ -1333,17 +1333,40 @@ export class SessionManager {
   }
 
   private turnTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private turnGeneration = 0;
+  private playbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   private maybeAdvanceTurn(agentId: string) {
     if (!this.turnTextComplete || !this.turnAudioDone) return;
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
 
-    const name = this.getAgentName(agentId);
-    console.log(`  [${name}] text+audio done — advancing turn`);
-
     // Cancel the no-response timeout
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
 
+    // Signal clients that all audio has been sent — wait for playback to finish
+    this.turnGeneration++;
+    const gen = this.turnGeneration;
+    const name = this.getAgentName(agentId);
+    console.log(`  [${name}] text+audio done — waiting for client playback (gen=${gen})`);
+
+    (this.io as any).emit('turn_audio_complete', { agentId, generation: gen });
+
+    // Fallback: advance after 30s if no client responds
+    if (this.playbackTimer) clearTimeout(this.playbackTimer);
+    this.playbackTimer = setTimeout(() => {
+      if (this.turnManager?.getCurrentSpeaker() === agentId) {
+        console.log(`  [${name}] playback fallback advance (30s, gen=${gen})`);
+        this.doAdvanceTurn(agentId);
+      }
+    }, 30000);
+  }
+
+  handlePlaybackDone(agentId: string, generation: number) {
+    if (generation !== this.turnGeneration) return; // stale
+    if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+    if (this.playbackTimer) { clearTimeout(this.playbackTimer); this.playbackTimer = null; }
+    const name = this.getAgentName(agentId);
+    console.log(`  [${name}] client playback done (gen=${generation}) — advancing turn`);
     this.doAdvanceTurn(agentId);
   }
 
@@ -1410,6 +1433,7 @@ export class SessionManager {
       this.lastAudioChunkAt = 0;
       if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
       if (this.audioDrainTimer) { clearTimeout(this.audioDrainTimer); this.audioDrainTimer = null; }
+      if (this.playbackTimer) { clearTimeout(this.playbackTimer); this.playbackTimer = null; }
 
       this.io.emit('speaker_change', { agentId });
       const turnAgentName = this.agentConfigs.get(agentId)?.name || 'Unknown';

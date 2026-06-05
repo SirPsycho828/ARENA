@@ -82,6 +82,11 @@ export class PcmAudioPlayer {
     this.nextPlayTime = start + buffer.duration;
   }
 
+  /** Returns seconds of audio still buffered and waiting to play */
+  getRemainingTime(): number {
+    return Math.max(0, this.nextPlayTime - this.ctx.currentTime);
+  }
+
   /** Reset on speaker change — instant cutoff of any remaining audio */
   reset() {
     this.nextPlayTime = 0;
