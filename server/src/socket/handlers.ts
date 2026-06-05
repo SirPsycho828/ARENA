@@ -43,6 +43,16 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
       });
     }
 
+    // ─── Auth: create user doc + starter credits on first sign-in ────────
+
+    socket.on('authenticate' as any, async (data: { token: string }) => {
+      const user = await verifyToken(data.token);
+      if (user) {
+        await creditService.ensureUser(user.uid, user.name);
+        socket.emit('auth_ok' as any, { uid: user.uid });
+      }
+    });
+
     // ─── Audience Events ──────────────────────────────────────────────────
 
     socket.on('chaos_inject', async (data) => {

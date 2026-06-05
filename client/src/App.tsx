@@ -49,15 +49,19 @@ function App() {
     return () => disconnect();
   }, [connect, disconnect]);
 
-  // Credit listener lifecycle
+  // On sign-in: create user doc (starter credits) + listen for balance
+  const socket = useArenaStore((s) => s.socket);
   useEffect(() => {
-    if (user) {
+    if (user && socket) {
+      user.getIdToken().then((token) => {
+        (socket as any).emit('authenticate', { token });
+      });
       listenCredits(user.uid);
     } else {
       stopListeningCredits();
     }
     return () => stopListeningCredits();
-  }, [user, listenCredits, stopListeningCredits]);
+  }, [user, socket, listenCredits, stopListeningCredits]);
 
   // Handle Stripe success redirect
   useEffect(() => {
