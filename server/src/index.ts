@@ -167,17 +167,23 @@ const creditServiceHttp = new CreditService();
 
 app.post('/api/authenticate', async (req, res) => {
   const { token } = req.body;
+  console.log(`  [Auth] /api/authenticate called, token length: ${token?.length || 0}`);
   if (!token) return res.status(401).json({ error: 'No token' });
+  if (!adminAuth) {
+    console.error('  [Auth] adminAuth is null — Firebase Admin not initialized');
+    return res.status(503).json({ error: 'Firebase Admin not ready' });
+  }
   try {
     const decoded = await adminAuth.verifyIdToken(token);
     const name = decoded.name || null;
-    console.log(`  [Auth] /api/authenticate: ${name || decoded.uid}`);
-    await creditService.ensureUser(decoded.uid, name);
+    console.log(`  [Auth] Verified: ${name || decoded.uid}`);
+    await creditServiceHttp.ensureUser(decoded.uid, name);
     console.log(`  [Auth] User doc ready for ${decoded.uid}`);
     res.json({ uid: decoded.uid });
   } catch (err) {
-    console.error('  [Auth] authenticate failed:', (err as Error).message);
-    res.status(401).json({ error: 'Invalid token' });
+    const msg = (err as Error).message;
+    console.error(`  [Auth] verifyIdToken failed: ${msg}`);
+    res.status(401).json({ error: msg });
   }
 });
 
