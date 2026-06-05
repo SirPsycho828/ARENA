@@ -69,8 +69,8 @@ export class WebSocketAgentConnection extends EventEmitter {
 
         // Continuously send silent audio to keep the audio channel active.
         // Napster expects ongoing mic input; without it, audio_received events don't flow.
-        // 250ms chunks: 24kHz × 16-bit × mono = 12000 bytes per chunk.
-        const silence = Buffer.alloc(12000, 0).toString('base64');
+        // 250ms chunks: 16kHz × 16-bit × mono = 8000 bytes per chunk.
+        const silence = Buffer.alloc(8000, 0).toString('base64');
         const sendSilence = () => {
           if (this.ws?.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ type: 'send_audio', data: { audio: silence } }));

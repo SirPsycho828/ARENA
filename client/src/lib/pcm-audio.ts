@@ -13,7 +13,7 @@ export class PcmAudioPlayer {
   private chunks = 0;
 
   constructor() {
-    this.ctx = new AudioContext({ sampleRate: 24000 });
+    this.ctx = new AudioContext({ sampleRate: 16000 });
     this.gainNode = this.ctx.createGain();
     this.gainNode.connect(this.ctx.destination);
 
@@ -78,8 +78,7 @@ export class PcmAudioPlayer {
     if (int16.length === 0) return;
 
     // Convert Int16 → Float32 for Web Audio
-    // Napster uses OpenAI Realtime API under the hood → 24kHz PCM
-    const buffer = this.ctx.createBuffer(1, int16.length, 24000);
+    const buffer = this.ctx.createBuffer(1, int16.length, 16000);
     const channel = buffer.getChannelData(0);
     for (let i = 0; i < int16.length; i++) channel[i] = int16[i] / 32768;
 
