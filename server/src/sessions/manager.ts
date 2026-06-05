@@ -17,7 +17,6 @@ import type {
 } from '../../../shared/types.js';
 import { getNapsterResources } from '../lib/napster-resources.js';
 import { getCustomCompanions } from '../lib/companions.js';
-import { AvatarHost } from '../avatar-host/puppeteer.js';
 import { createViewerToken, getLiveKitUrl, isLiveKitConfigured } from '../lib/livekit.js';
 
 // Agent personality presets (companions loaded separately)
@@ -179,7 +178,6 @@ export class SessionManager {
   private agentConfigs: Map<string, AgentConfig> = new Map();
   private companionMap: Record<string, string> = {}; // role -> companionId
   private topicRotationTimer: ReturnType<typeof setInterval> | null = null;
-  private avatarHost: AvatarHost | null = null;
   // Track both conditions for turn advance — advance when BOTH are true.
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
@@ -336,37 +334,35 @@ export class SessionManager {
 
     const USE_MOCK = process.env.USE_MOCK === 'true';
 
-    if (USE_MOCK) {
-      // Mock mode: connect agents directly
-      const connectedAgentIds: string[] = [];
-      for (const agentId of this.session.agentIds) {
-        const config = this.agentConfigs.get(agentId)!;
-        try {
-          const agent = await this.omniagent.createAndConnect(config);
-          if (agent) {
-            this.wireAgentEvents(agent, agentId);
-            connectedAgentIds.push(agentId);
-            console.log(`  Connected: ${config.name}`);
-          }
-        } catch (err) {
-          console.error(`  Failed to connect ${config.name}:`, (err as Error).message);
-        }
+    // Connect agents via WebSocket (same flow for mock + real)
+    const connectedAgentIds: string[] = [];
+    for (const agentId of this.session.agentIds) {
+      const config = this.agentConfigs.get(agentId)!;
+      try {
+        const agent = await this.omniagent.createAndConnect(config);
+        this.wireAgentEvents(agent, agentId);
+        connectedAgentIds.push(agentId);
+        console.log(`  Connected: ${config.name}`);
+      } catch (err) {
+        console.error(`  Failed to connect ${config.name}:`, (err as Error).message);
       }
-      const totalCreated = this.session.agentIds.length;
-      this.session.agentIds = connectedAgentIds;
-      console.log(`  ${connectedAgentIds.length}/${totalCreated} agents connected (mock)`);
-    } else {
-      // Real mode: send per-viewer WebRTC tokens so clients render avatars directly
+    }
+    const totalCreated = this.session.agentIds.length;
+    this.session.agentIds = connectedAgentIds;
+    console.log(`  ${connectedAgentIds.length}/${totalCreated} agents connected`);
+
+    if (connectedAgentIds.length === 0) {
+      console.error('  No agents connected — aborting debate');
+      this.session.status = 'ended';
+      db.prepare('UPDATE sessions SET status = ? WHERE id = ?').run('ended', this.session.id);
+      return;
+    }
+
+    if (!USE_MOCK) {
+      // Send per-viewer WebRTC tokens for avatar rendering (non-critical)
       this.sendAvatarTokensToAll().catch(err => {
         console.error('  Avatar token broadcast failed:', (err as Error).message);
       });
-
-      // Launch AvatarHost for debate logic — MUST complete before turns start
-      try {
-        await this.launchAvatarHost();
-      } catch (err) {
-        console.error('  AvatarHost launch failed:', (err as Error).message);
-      }
     }
 
     // Initialize orchestration
@@ -398,8 +394,7 @@ export class SessionManager {
     // Notify viewers
     this.io.emit('session_state', this.getSessionState());
 
-    // LiveKit tokens are sent after AvatarHost is ready (see background launch above)
-    // For viewers that connect AFTER AvatarHost is ready, handlers.ts sends tokens on connect
+    // For viewers that connect AFTER debate starts, handlers.ts sends tokens on connect
 
     // Resume watchdog for new session
     this.watchdog?.resume();
@@ -419,12 +414,6 @@ export class SessionManager {
     this.turnManager?.stop();
     this.chaosQueue?.stop();
     this.omniagent.disconnectAll();
-
-    // Shutdown AvatarHost (Puppeteer)
-    if (this.avatarHost) {
-      await this.avatarHost.shutdown();
-      this.avatarHost = null;
-    }
 
     db.prepare('UPDATE sessions SET status = ?, ended_at = ? WHERE id = ?')
       .run('ended', this.session.endedAt, this.session.id);
@@ -1126,46 +1115,6 @@ export class SessionManager {
       agentId, agentName: this.getAgentName(agentId), tool: toolName, args,
     });
     this.emitDebug('tool_call', agentId, this.getAgentName(agentId), `${toolName}(${argsJson})`);
-  }
-
-  // ─── AvatarHost Launch ────────────────────────────────────────────────
-
-  private async launchAvatarHost(): Promise<void> {
-    if (!this.session) return;
-
-    // Create WebRTC tokens for the headless browser (one per agent)
-    const hostTokens = await this.createVideoTokensForViewer('avatarhost');
-    const agents = this.session.agentIds
-      .filter(id => hostTokens[id])
-      .map(id => ({
-        id,
-        name: this.getAgentName(id),
-        token: hostTokens[id],
-      }));
-
-    if (agents.length === 0) {
-      console.error('[AvatarHost] No WebRTC tokens created — cannot launch');
-      return;
-    }
-
-    const port = parseInt(process.env.PORT || '3001', 10);
-
-    // Launch Puppeteer
-    this.avatarHost = new AvatarHost();
-    this.omniagent.setAvatarHost(this.avatarHost);
-
-    await this.avatarHost.launch(agents, '', '', port, {
-      onSpeechDelta: (agentId, text) => this.handleResponseDelta(agentId, text),
-      onSpeechEnd: (agentId, fullText) => this.handleSpeechEnd(agentId, fullText),
-      onTalkState: (agentId, state) => this.handleTalkState(agentId, state),
-      onResponseStart: (agentId) => this.handleResponseStart(agentId),
-      onToolEffect: (agentId, toolName, argsJson, callId) => this.handleToolEffect(agentId, toolName, argsJson, callId),
-      onHostReady: () => { /* resolved inside AvatarHost */ },
-    });
-  }
-
-  isAvatarHostReady(): boolean {
-    return this.avatarHost?.isReady() ?? false;
   }
 
   private async sendAvatarTokensToAll(): Promise<void> {

@@ -1,90 +1,67 @@
 import { MockOmniagentConnection } from './mock.js';
+import { WebSocketAgentConnection } from './websocket.js';
 import type { AgentConfig } from '../../../shared/types.js';
-import type { AvatarHost } from '../avatar-host/puppeteer.js';
 
 const USE_MOCK = process.env.USE_MOCK === 'true';
 
-export type AgentInstance = MockOmniagentConnection;
+export type AgentInstance = MockOmniagentConnection | WebSocketAgentConnection;
 
 export class OmniagentManager {
-  private mockAgents: Map<string, MockOmniagentConnection> = new Map();
-  private avatarHost: AvatarHost | null = null;
-  private agentIds: Set<string> = new Set();
+  private agents: Map<string, AgentInstance> = new Map();
 
-  setAvatarHost(host: AvatarHost) {
-    this.avatarHost = host;
-  }
-
-  getAvatarHost(): AvatarHost | null {
-    return this.avatarHost;
-  }
-
-  async createAndConnect(config: AgentConfig): Promise<MockOmniagentConnection | null> {
+  async createAndConnect(config: AgentConfig): Promise<AgentInstance> {
     if (USE_MOCK) {
       const agent = new MockOmniagentConnection(config);
       await agent.connect();
-      this.mockAgents.set(config.id, agent);
+      this.agents.set(config.id, agent);
       return agent;
     }
-    // In Puppeteer mode, agents are managed by AvatarHost — no individual connection
-    this.agentIds.add(config.id);
-    return null;
+
+    // Real mode: direct WebSocket connection to Napster agent
+    const apiKey = process.env.OMNIAGENT_API_KEY!;
+    const agent = new WebSocketAgentConnection(config.id, config.name, apiKey);
+    await agent.connect();
+    this.agents.set(config.id, agent);
+    return agent;
   }
 
-  get(agentId: string): MockOmniagentConnection | undefined {
-    return this.mockAgents.get(agentId);
+  get(agentId: string): AgentInstance | undefined {
+    return this.agents.get(agentId);
   }
 
-  getAll(): MockOmniagentConnection[] {
-    return [...this.mockAgents.values()];
+  getAll(): AgentInstance[] {
+    return [...this.agents.values()];
   }
 
   sendMessage(agentId: string, role: 'user' | 'system', text: string, triggerResponse = true) {
-    if (USE_MOCK) {
-      const agent = this.mockAgents.get(agentId);
-      if (!agent) { console.warn(`Agent ${agentId} not found`); return; }
-      agent.sendMessage(role, text, triggerResponse);
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      console.warn(`[OmniagentManager] Agent ${agentId} not found`);
       return;
     }
-    // Delegate to AvatarHost (Puppeteer)
-    this.avatarHost?.sendMessage(agentId, role, text, triggerResponse).catch((err) => {
-      console.error(`[OmniagentManager] sendMessage failed for ${agentId}:`, (err as Error).message);
-    });
+    agent.sendMessage(role, text, triggerResponse);
   }
 
   updateSettings(agentId: string, instructions: string) {
-    // set_settings doesn't work on WebRTC connections — instructions are set at agent creation
-    if (USE_MOCK) {
-      this.mockAgents.get(agentId)?.updateSettings(instructions);
-    }
+    this.agents.get(agentId)?.updateSettings(instructions);
   }
 
   disconnectAll() {
-    for (const agent of this.mockAgents.values()) {
+    for (const agent of this.agents.values()) {
       agent.disconnect();
     }
-    this.mockAgents.clear();
-    this.agentIds.clear();
-    // AvatarHost shutdown is handled by SessionManager/index.ts
+    this.agents.clear();
   }
 
   disconnect(agentId: string) {
-    this.mockAgents.get(agentId)?.disconnect();
-    this.mockAgents.delete(agentId);
-    this.agentIds.delete(agentId);
+    this.agents.get(agentId)?.disconnect();
+    this.agents.delete(agentId);
   }
 
   getAgentHealth(): Record<string, { alive: boolean; lastActivity: number; reconnectAttempts: number }> {
     const health: Record<string, { alive: boolean; lastActivity: number; reconnectAttempts: number }> = {};
-    if (USE_MOCK) {
-      for (const [id] of this.mockAgents) {
-        health[id] = { alive: true, lastActivity: Date.now(), reconnectAttempts: 0 };
-      }
-    } else {
-      const ready = this.avatarHost?.isReady() ?? false;
-      for (const id of this.agentIds) {
-        health[id] = { alive: ready, lastActivity: Date.now(), reconnectAttempts: 0 };
-      }
+    for (const [id, agent] of this.agents) {
+      health[id] = { alive: agent.isAlive(), lastActivity: agent.lastActivityAt, reconnectAttempts: 0 };
     }
     return health;
   }

@@ -335,8 +335,7 @@ async function shutdown(signal: string) {
   watchdog.stop();
   sessionManager.cancelRestart();
   await sessionManager.endDebate('shutdown').catch(() => {});
-  const host = omniagent.getAvatarHost();
-  if (host) await host.shutdown();
+  omniagent.disconnectAll();
   io.close();
   db.close();
   httpServer.close(() => process.exit(0));
