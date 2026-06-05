@@ -182,6 +182,8 @@ export class SessionManager {
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
   private turnAudioDone = false;
+  private lastAudioChunkAt = 0;
+  private audioDrainTimer: ReturnType<typeof setTimeout> | null = null;
   // Consensus meter
   private consensusState: ConsensusState | null = null;
   private poleVoterRecord: Set<string> = new Set();
@@ -1209,16 +1211,30 @@ export class SessionManager {
 
   handleTalkState(agentId: string, state: string) {
     if (state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
-      // Wait 6s after talk_state:ended to let audio chunks finish streaming to viewers.
-      // Audio chunks flow: Napster→Server→Socket.io→Client→AudioContext buffer.
-      // Polling transport adds latency, so we need generous buffer time.
-      setTimeout(() => {
-        if (this.turnManager?.getCurrentSpeaker() === agentId) {
-          this.turnAudioDone = true;
-          this.maybeAdvanceTurn(agentId);
-        }
-      }, 6000);
+      // Instead of a fixed delay, wait until audio chunks actually stop arriving.
+      // Audio may continue streaming after talk_state:ended due to buffering.
+      this.waitForAudioDrain(agentId);
     }
+  }
+
+  private waitForAudioDrain(agentId: string) {
+    if (this.audioDrainTimer) { clearTimeout(this.audioDrainTimer); this.audioDrainTimer = null; }
+
+    const check = () => {
+      if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+      const silenceMs = Date.now() - this.lastAudioChunkAt;
+      if (silenceMs >= 2000) {
+        // No audio for 2s after talk_state:ended — audio is done
+        this.turnAudioDone = true;
+        this.maybeAdvanceTurn(agentId);
+      } else {
+        // Audio still flowing — check again in 500ms
+        this.audioDrainTimer = setTimeout(check, 500);
+      }
+    };
+
+    // Start checking after 2s minimum
+    this.audioDrainTimer = setTimeout(check, 2000);
   }
 
   handleResponseStart(agentId: string) {
@@ -1283,6 +1299,7 @@ export class SessionManager {
       }
       // Only forward audio from the current speaker (ignore pole-generation audio, etc.)
       if (this.turnManager?.getCurrentSpeaker() === agentId) {
+        this.lastAudioChunkAt = Date.now();
         (this.io as any).emit('audio_chunk', { agentId, audio: data.audio });
         audioChunksEmitted++;
         if (audioChunksEmitted === 1) {
@@ -1376,7 +1393,9 @@ export class SessionManager {
       // Reset turn state for new speaker
       this.turnTextComplete = false;
       this.turnAudioDone = false;
+      this.lastAudioChunkAt = 0;
       if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
+      if (this.audioDrainTimer) { clearTimeout(this.audioDrainTimer); this.audioDrainTimer = null; }
 
       this.io.emit('speaker_change', { agentId });
       const turnAgentName = this.agentConfigs.get(agentId)?.name || 'Unknown';
