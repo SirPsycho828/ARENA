@@ -395,6 +395,10 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       const delayMs = Math.max(500, remaining * 1000 + 500);
       console.log(`[Audio] turn_audio_complete gen=${generation}, buffer=${remaining.toFixed(1)}s, waiting ${delayMs}ms`);
       setTimeout(() => {
+        // Stop lip-sync when audio finishes — don't wait for turn advance
+        if (get().lipSyncSpeaker === agentId) {
+          set({ lipSyncSpeaker: null });
+        }
         (socket as any).emit('playback_done', { agentId, generation });
       }, delayMs);
     });

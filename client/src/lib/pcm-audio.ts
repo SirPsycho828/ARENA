@@ -79,10 +79,12 @@ export class PcmAudioPlayer {
 
     if (int16.length === 0) return;
 
-    // Convert Int16 → Float32 for Web Audio
+    // Convert Int16 → Float32 for Web Audio.
+    // Attenuate by 0.8x to prevent clipping: browser's 16kHz→48kHz sinc resampler
+    // can overshoot peaks (Gibbs phenomenon), especially on sibilants (S, Z sounds).
     const buffer = this.ctx.createBuffer(1, int16.length, 16000);
     const channel = buffer.getChannelData(0);
-    for (let i = 0; i < int16.length; i++) channel[i] = int16[i] / 32768;
+    for (let i = 0; i < int16.length; i++) channel[i] = int16[i] / 32768 * 0.8;
 
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;

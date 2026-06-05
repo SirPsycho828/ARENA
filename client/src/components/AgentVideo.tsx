@@ -65,9 +65,10 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
     return () => clearTimeout(timer);
   }, [token, avatarReady, avatarFailed, agentName]);
 
-  // Lip-sync: triggered when first audio chunk plays (via lipSyncSpeaker),
-  // NOT on speaker_change, so lips start when audio is actually heard
-  const topic = useArenaStore((s) => s.topic);
+  // Lip-sync: triggered when first audio chunk plays (via lipSyncSpeaker).
+  // Short prompt = faster avatar API response = less lip-sync delay.
+  // Avatar audio is muted — we only care about lip movement, not what it says.
+  const topic = useArenaStore((s) => s.session?.topic);
   const isLipSyncing = useArenaStore((s) => s.lipSyncSpeaker === agentId);
   const wasLipSyncingRef = useRef(false);
   useEffect(() => {
@@ -78,7 +79,7 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
       win.postMessage({
         type: 'send-message',
         agentId,
-        text: `React passionately to the debate topic: "${topic || 'the current discussion'}". Keep your response to about 20 seconds.`,
+        text: `Argue about "${topic || 'this'}".`,
         role: 'user',
         triggerResponse: true,
       }, '*');
