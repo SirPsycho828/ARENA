@@ -2,12 +2,18 @@ import { useState } from 'react';
 import { Volume2, Volume1, VolumeX } from 'lucide-react';
 import { useArenaStore } from '../store/arena';
 import { sounds } from '../lib/sounds';
+import { PcmAudioPlayer } from '../lib/pcm-audio';
 
 export function SoundToggle() {
   const soundMuted = useArenaStore((s) => s.soundMuted);
   const toggleSound = useArenaStore((s) => s.toggleSound);
   const setStoreVolume = useArenaStore((s) => s.setVolume);
-  const [volume, setVolume] = useState(0.8);
+  const [volume, setVolume] = useState(() => {
+    try {
+      const saved = localStorage.getItem(PcmAudioPlayer.STORAGE_KEY);
+      return saved !== null ? parseFloat(saved) : PcmAudioPlayer.DEFAULT_VOLUME;
+    } catch { return PcmAudioPlayer.DEFAULT_VOLUME; }
+  });
 
   const handleToggle = () => {
     toggleSound();
