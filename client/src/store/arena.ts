@@ -381,6 +381,19 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     socket.on('session_ended', (data: any) => {
       const s = get();
+      const reason = data?.reason || 'manual';
+      const isAutoRestart = reason === 'watchdog_restart' || reason === 'topic_rotation';
+
+      // Skip victory screen for auto-restarts — new session arrives momentarily
+      if (isAutoRestart) {
+        set({
+          session: s.session ? { ...s.session, status: 'ended' } : null,
+          currentSpeaker: null,
+          streamingTranscript: null,
+        });
+        return;
+      }
+
       const results = data?.results;
       let victoryData: VictoryData | null = null;
 

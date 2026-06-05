@@ -194,7 +194,7 @@ export class SessionManager {
   private lastTurnAdvanceTime: number = Date.now();
   private restartRetryCount = 0;
   private isRestarting = false;
-  private watchdog: { pause(): void; resume(): void } | null = null;
+  private watchdog: { pause(): void; resume(): void; markRealResponse(): void } | null = null;
 
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
@@ -202,7 +202,7 @@ export class SessionManager {
     this.io = io;
   }
 
-  setWatchdog(watchdog: { pause(): void; resume(): void }) {
+  setWatchdog(watchdog: { pause(): void; resume(): void; markRealResponse(): void }) {
     this.watchdog = watchdog;
   }
 
@@ -466,7 +466,7 @@ export class SessionManager {
     }
     this.isRestarting = true;
 
-    const delays = [5000, 15000, 45000, 90000, 120000];
+    const delays = [2000, 5000, 10000, 20000, 30000];
 
     while (this.isRestarting) {
       const delay = delays[Math.min(this.restartRetryCount, delays.length - 1)];
@@ -492,6 +492,7 @@ export class SessionManager {
 
         this.restartRetryCount = 0;
         this.isRestarting = false;
+        this.watchdog?.resume();
         console.log(`[Watchdog] Restart succeeded: "${topic}"`);
         return;
       } catch (err) {
@@ -1063,6 +1064,7 @@ export class SessionManager {
 
   handleResponseDelta(agentId: string, content: string) {
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+    this.watchdog?.markRealResponse();
     const cleaned = this.stripEmDashes(content);
     (this.io as any).emit('transcript_delta', { agentId, agentName: this.getAgentName(agentId), content: cleaned });
   }

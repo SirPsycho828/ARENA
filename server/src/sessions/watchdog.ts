@@ -13,9 +13,9 @@ export interface WatchdogStatus {
 }
 
 const CHECK_INTERVAL = 10_000;       // 10s between health checks
-const SILENT_THRESHOLD = 45_000;     // 45s no activity = zombie connection
-const STUCK_TURN_THRESHOLD = 60_000; // 60s no turn advance = stuck
-const MAX_RECONNECT_PER_AGENT = 3;
+const STUCK_TURN_THRESHOLD = 30_000; // 30s no turn advance = stuck
+const MAX_FORCE_ADVANCES = 3;        // 3 consecutive force-advances = dead session
+const SESSION_DEAD_THRESHOLD = 120_000; // 2min no real response = dead
 
 export class DebateWatchdog {
   private sessionManager: SessionManager;
@@ -24,8 +24,8 @@ export class DebateWatchdog {
   private lastCheckTime = 0;
   private watchdogStatus: 'healthy' | 'recovering' | 'restarting' = 'healthy';
   private paused = false;
-  private reconnectCounts: Map<string, number> = new Map();
-  private permanentlyDead: Set<string> = new Set();
+  private consecutiveForceAdvances = 0;
+  private lastRealResponseTime = Date.now();
 
   constructor(sessionManager: SessionManager, omniagent: OmniagentManager) {
     this.sessionManager = sessionManager;
@@ -35,6 +35,8 @@ export class DebateWatchdog {
   start() {
     if (this.timer) return;
     console.log('[Watchdog] Started — checking every 10s');
+    this.lastRealResponseTime = Date.now();
+    this.consecutiveForceAdvances = 0;
     this.timer = setInterval(() => this.check(), CHECK_INTERVAL);
   }
 
@@ -52,9 +54,15 @@ export class DebateWatchdog {
 
   resume() {
     this.paused = false;
-    this.reconnectCounts.clear();
-    this.permanentlyDead.clear();
+    this.consecutiveForceAdvances = 0;
+    this.lastRealResponseTime = Date.now();
     this.watchdogStatus = 'healthy';
+  }
+
+  /** Called by SessionManager when a real agent response comes in */
+  markRealResponse() {
+    this.consecutiveForceAdvances = 0;
+    this.lastRealResponseTime = Date.now();
   }
 
   getStatus(): WatchdogStatus {
@@ -74,87 +82,38 @@ export class DebateWatchdog {
 
     this.lastCheckTime = Date.now();
     const now = Date.now();
-    const agentHealth = this.omniagent.getAgentHealth();
 
-    // 1. Check each agent's connection
-    let deadCount = 0;
-    for (const agentId of session.agentIds) {
-      const health = agentHealth[agentId];
-      if (!health) continue;
-
-      const isDead = !health.alive;
-      const isZombie = health.alive && (now - health.lastActivity > SILENT_THRESHOLD);
-
-      if (isDead || isZombie) {
-        if (this.permanentlyDead.has(agentId)) {
-          deadCount++;
-          continue;
-        }
-
-        const attempts = this.reconnectCounts.get(agentId) || 0;
-        const agentName = this.sessionManager.getAgentConfigs().get(agentId)?.name || agentId;
-
-        if (attempts >= MAX_RECONNECT_PER_AGENT) {
-          console.log(`[Watchdog] ${agentName} permanently dead after ${MAX_RECONNECT_PER_AGENT} reconnect attempts`);
-          this.permanentlyDead.add(agentId);
-          deadCount++;
-          continue;
-        }
-
-        this.watchdogStatus = 'recovering';
-        this.reconnectCounts.set(agentId, attempts + 1);
-        console.log(`[Watchdog] ${agentName} ${isDead ? 'dead' : 'zombie'} — reconnecting (${attempts + 1}/${MAX_RECONNECT_PER_AGENT})`);
-
-        try {
-          const agent = this.omniagent.get(agentId);
-          if (agent && 'resetReconnectCounter' in agent) {
-            (agent as any).resetReconnectCounter();
-          }
-          // Disconnect and reconnect
-          this.omniagent.disconnect(agentId);
-          const config = this.sessionManager.getAgentConfigs().get(agentId);
-          if (config) {
-            const newAgent = await this.omniagent.createAndConnect(config);
-            // Re-wire events — SessionManager needs to know about the new agent instance
-            if (newAgent) this.sessionManager.rewireAgentEvents(newAgent, agentId);
-            console.log(`[Watchdog] ${agentName} reconnected successfully`);
-            this.reconnectCounts.set(agentId, 0);
-          }
-        } catch (err) {
-          console.error(`[Watchdog] ${agentName} reconnect failed:`, (err as Error).message);
-        }
-      }
-    }
-
-    // 2. Check if session is unrecoverable (2+ agents permanently dead)
-    if (this.permanentlyDead.size >= 2) {
-      console.log(`[Watchdog] ${this.permanentlyDead.size} agents permanently dead — restarting session`);
+    // 1. Check if session is dead: too many force-advances or too long without real response
+    const timeSinceRealResponse = now - this.lastRealResponseTime;
+    if (this.consecutiveForceAdvances >= MAX_FORCE_ADVANCES || timeSinceRealResponse > SESSION_DEAD_THRESHOLD) {
+      const reason = this.consecutiveForceAdvances >= MAX_FORCE_ADVANCES
+        ? `${this.consecutiveForceAdvances} consecutive force-advances`
+        : `no real response for ${(timeSinceRealResponse / 1000).toFixed(0)}s`;
+      console.log(`[Watchdog] Session dead (${reason}) — restarting`);
       this.watchdogStatus = 'restarting';
-      this.paused = true; // Pause during restart
+      this.paused = true;
       try {
         await this.sessionManager.endDebate('watchdog_restart');
-        // endDebate calls restartWithRetry() which will resume the watchdog
       } catch (err) {
         console.error('[Watchdog] Session restart failed:', (err as Error).message);
-        // restartWithRetry will keep trying
       }
       return;
     }
 
-    // 3. Check for stuck turns
+    // 2. Check for stuck turns — force-advance if needed
     const timeSinceLastAdvance = now - this.sessionManager.getLastTurnAdvanceTime();
     if (timeSinceLastAdvance > STUCK_TURN_THRESHOLD) {
       const turnManager = this.sessionManager.getTurnManager();
       const currentSpeaker = turnManager?.getCurrentSpeaker();
       if (currentSpeaker) {
+        this.consecutiveForceAdvances++;
         const name = this.sessionManager.getAgentConfigs().get(currentSpeaker)?.name || 'Unknown';
-        console.log(`[Watchdog] Turn stuck for ${(timeSinceLastAdvance / 1000).toFixed(0)}s — force-advancing past ${name}`);
+        console.log(`[Watchdog] Turn stuck for ${(timeSinceLastAdvance / 1000).toFixed(0)}s — force-advancing past ${name} (${this.consecutiveForceAdvances}/${MAX_FORCE_ADVANCES})`);
         turnManager?.onSpeechEnd(currentSpeaker, '');
       }
     }
 
-    // Reset status if everything looks good
-    if (deadCount === 0 && timeSinceLastAdvance < STUCK_TURN_THRESHOLD) {
+    if (this.consecutiveForceAdvances === 0 && timeSinceLastAdvance < STUCK_TURN_THRESHOLD) {
       this.watchdogStatus = 'healthy';
     }
   }
