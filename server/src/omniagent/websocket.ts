@@ -167,8 +167,8 @@ export class WebSocketAgentConnection extends EventEmitter {
           const sample = data.audio ? `audio(${data.audio.length})` : `no data.audio, keys=[${keys}]`;
           console.log(`  [WS ${this.agentName}] audio_received structure: ${sample}, raw keys=[${Object.keys(event)}]`);
         }
-        // Try multiple possible audio data locations
-        const audioData = data.audio || event.audio || data.data?.audio;
+        // Napster sends audio as data.data (not data.audio as docs claim)
+        const audioData = data.data || data.audio;
         if (audioData) {
           this.emit('audio_data', { audio: audioData });
         } else if (count === 1) {
