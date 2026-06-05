@@ -181,9 +181,8 @@ export class SessionManager {
   // Track both conditions for turn advance — advance when BOTH are true.
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
-  private turnAudioDone = false;
+  private turnTalkEnded = false;
   private lastAudioChunkAt = 0;
-  private audioDrainTimer: ReturnType<typeof setTimeout> | null = null;
   // Consensus meter
   private consensusState: ConsensusState | null = null;
   private poleVoterRecord: Set<string> = new Set();
@@ -1206,49 +1205,16 @@ export class SessionManager {
     this.analyzeAgentStance(agentId, cleanText);
 
     this.turnTextComplete = true;
-    this.maybeAdvanceTurn(agentId);
+    this.maybeEmitTurnComplete(agentId);
   }
 
   handleTalkState(agentId: string, state: string) {
     if (state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
-      // Instead of a fixed delay, wait until audio chunks actually stop arriving.
-      // Audio may continue streaming after talk_state:ended due to buffering.
-      this.waitForAudioDrain(agentId);
+      // talk_state:ended = Napster finished sending all audio for this response.
+      // Socket.io ordering ensures client receives all audio_chunks before turn_audio_complete.
+      this.turnTalkEnded = true;
+      this.maybeEmitTurnComplete(agentId);
     }
-  }
-
-  private waitForAudioDrain(agentId: string) {
-    if (this.audioDrainTimer) { clearTimeout(this.audioDrainTimer); this.audioDrainTimer = null; }
-
-    const drainStartedAt = Date.now();
-
-    const check = () => {
-      if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
-
-      // If no audio chunks received yet for this turn, keep waiting (up to 15s)
-      if (this.lastAudioChunkAt === 0) {
-        if (Date.now() - drainStartedAt < 15000) {
-          this.audioDrainTimer = setTimeout(check, 500);
-        } else {
-          this.turnAudioDone = true;
-          this.maybeAdvanceTurn(agentId);
-        }
-        return;
-      }
-
-      const silenceMs = Date.now() - this.lastAudioChunkAt;
-      if (silenceMs >= 2000) {
-        // No audio for 2s — audio is done
-        this.turnAudioDone = true;
-        this.maybeAdvanceTurn(agentId);
-      } else {
-        // Audio still flowing — check again in 500ms
-        this.audioDrainTimer = setTimeout(check, 500);
-      }
-    };
-
-    // Start checking after 2s minimum
-    this.audioDrainTimer = setTimeout(check, 2000);
   }
 
   handleResponseStart(agentId: string) {
@@ -1336,22 +1302,23 @@ export class SessionManager {
   private turnGeneration = 0;
   private playbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private maybeAdvanceTurn(agentId: string) {
-    if (!this.turnTextComplete || !this.turnAudioDone) return;
+  private maybeEmitTurnComplete(agentId: string) {
+    if (!this.turnTextComplete || !this.turnTalkEnded) return;
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
 
     // Cancel the no-response timeout
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
 
-    // Signal clients that all audio has been sent — wait for playback to finish
+    // Signal clients that all audio has been sent — wait for playback to finish.
+    // Socket.io ordering guarantees all audio_chunk events arrive before this.
     this.turnGeneration++;
     const gen = this.turnGeneration;
     const name = this.getAgentName(agentId);
-    console.log(`  [${name}] text+audio done — waiting for client playback (gen=${gen})`);
+    console.log(`  [${name}] text+talk done — waiting for client playback (gen=${gen})`);
 
     (this.io as any).emit('turn_audio_complete', { agentId, generation: gen });
 
-    // Fallback: advance after 30s if no client responds
+    // Fallback: advance after 30s if no client responds (backgrounded tabs, no viewers)
     if (this.playbackTimer) clearTimeout(this.playbackTimer);
     this.playbackTimer = setTimeout(() => {
       if (this.turnManager?.getCurrentSpeaker() === agentId) {
@@ -1429,10 +1396,9 @@ export class SessionManager {
     this.turnManager.on('turn_start', ({ agentId }: { agentId: string }) => {
       // Reset turn state for new speaker
       this.turnTextComplete = false;
-      this.turnAudioDone = false;
+      this.turnTalkEnded = false;
       this.lastAudioChunkAt = 0;
       if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
-      if (this.audioDrainTimer) { clearTimeout(this.audioDrainTimer); this.audioDrainTimer = null; }
       if (this.playbackTimer) { clearTimeout(this.playbackTimer); this.playbackTimer = null; }
 
       this.io.emit('speaker_change', { agentId });

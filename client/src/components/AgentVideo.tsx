@@ -65,14 +65,16 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
     return () => clearTimeout(timer);
   }, [token, avatarReady, avatarFailed, agentName]);
 
-  // Lip-sync: when this agent becomes the speaker, trigger avatar talking
+  // Lip-sync: triggered when first audio chunk plays (via lipSyncSpeaker),
+  // NOT on speaker_change, so lips start when audio is actually heard
   const topic = useArenaStore((s) => s.topic);
-  const wasSpeakingRef = useRef(false);
+  const isLipSyncing = useArenaStore((s) => s.lipSyncSpeaker === agentId);
+  const wasLipSyncingRef = useRef(false);
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
     if (!win || !avatarReady) return;
 
-    if (isSpeaking && !wasSpeakingRef.current) {
+    if (isLipSyncing && !wasLipSyncingRef.current) {
       win.postMessage({
         type: 'send-message',
         agentId,
@@ -80,11 +82,11 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
         role: 'user',
         triggerResponse: true,
       }, '*');
-    } else if (!isSpeaking && wasSpeakingRef.current) {
+    } else if (!isLipSyncing && wasLipSyncingRef.current) {
       win.postMessage({ type: 'stop-speaking', agentId }, '*');
     }
-    wasSpeakingRef.current = isSpeaking;
-  }, [isSpeaking, agentId, topic, avatarReady]);
+    wasLipSyncingRef.current = isLipSyncing;
+  }, [isLipSyncing, agentId, topic, avatarReady]);
 
   // Static image fallback component
   const staticFallback = (

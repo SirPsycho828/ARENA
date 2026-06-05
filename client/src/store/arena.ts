@@ -109,6 +109,9 @@ interface ArenaState {
   toggleSound: () => void;
   setVolume: (v: number) => void;
 
+  // Lip-sync: set when first audio chunk from a speaker starts playing
+  lipSyncSpeaker: string | null;
+
   // Victory
   victoryData: VictoryData | null;
 
@@ -272,6 +275,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   challengerAgentId: null,
   challengerViewerName: null,
   soundMuted: false,
+  lipSyncSpeaker: null,
   toggleSound: () => set((s) => {
     const newMuted = !s.soundMuted;
     pcmPlayer?.setMuted(newMuted);
@@ -365,20 +369,24 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     pcmPlayer = new PcmAudioPlayer();
     pcmPlayer.setMuted(get().soundMuted);
     let lastAudioSpeaker: string | null = null;
+    let lipSyncTimer: ReturnType<typeof setTimeout> | null = null;
     (socket as any).on('audio_chunk', ({ agentId, audio }: { agentId: string; audio: string }) => {
-      // Reset audio player when a NEW speaker starts sending audio (not on speaker_change)
-      // This lets the previous speaker's buffered audio finish playing naturally
       if (agentId !== lastAudioSpeaker) {
         pcmPlayer?.reset();
         lastAudioSpeaker = agentId;
+        // Trigger lip-sync after jitter buffer delay (when audio actually plays)
+        if (lipSyncTimer) clearTimeout(lipSyncTimer);
+        lipSyncTimer = setTimeout(() => {
+          set({ lipSyncSpeaker: agentId });
+        }, 250); // 200ms jitter buffer + 50ms margin
       }
       pcmPlayer?.playChunk(audio);
     });
 
     socket.on('speaker_change', ({ agentId }) => {
       transcriptPacer.flush(set);
-      // Don't reset audio here — let old speaker's buffered audio finish
-      set({ currentSpeaker: agentId });
+      // Clear lip-sync immediately, set new speaker for UI (badge, ring)
+      set({ currentSpeaker: agentId, lipSyncSpeaker: null });
     });
 
     // Server signals all audio chunks sent — wait for client playback buffer to drain
