@@ -121,10 +121,18 @@
               instance.muteMic();
               instance.showAvatar();
               // Mute avatar audio — debate audio comes from server PCM stream
-              document.querySelectorAll('#container video, #container audio').forEach(el => {
-                el.muted = true;
-                el.volume = 0;
-              });
+              // Also observe DOM for any new media elements the SDK creates
+              function muteAllMedia() {
+                document.querySelectorAll('#container video, #container audio').forEach(el => {
+                  el.muted = true;
+                  el.volume = 0;
+                });
+              }
+              muteAllMedia();
+              new MutationObserver(muteAllMedia).observe(
+                document.getElementById('container'),
+                { childList: true, subtree: true }
+              );
               window.parent.postMessage({ type: 'avatar-ready', agentId }, '*');
             },
             onError: (err) => {

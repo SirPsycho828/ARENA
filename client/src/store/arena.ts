@@ -384,7 +384,9 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     // Server signals all audio chunks sent — wait for client playback buffer to drain
     (socket as any).on('turn_audio_complete', ({ agentId, generation }: { agentId: string; generation: number }) => {
       const remaining = pcmPlayer?.getRemainingTime() || 0;
-      const delayMs = Math.max(0, remaining * 1000) + 500; // 500ms extra safety margin
+      // Min 2s delay (Socket.io polling adds latency), plus actual buffer remaining
+      const delayMs = Math.max(2000, remaining * 1000 + 1500);
+      console.log(`[Audio] turn_audio_complete gen=${generation}, buffer=${remaining.toFixed(1)}s, waiting ${delayMs}ms`);
       setTimeout(() => {
         (socket as any).emit('playback_done', { agentId, generation });
       }, delayMs);

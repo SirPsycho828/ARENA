@@ -86,11 +86,14 @@ export class PcmAudioPlayer {
     source.buffer = buffer;
     source.connect(this.gainNode);
 
-    // Schedule gaplessly
+    // Schedule with jitter buffer to prevent clicks from network latency
     const now = this.ctx.currentTime;
-    const start = Math.max(now, this.nextPlayTime);
-    source.start(start);
-    this.nextPlayTime = start + buffer.duration;
+    if (this.nextPlayTime <= now) {
+      // Buffer underrun or first chunk — add 200ms lookahead to absorb jitter
+      this.nextPlayTime = now + 0.2;
+    }
+    source.start(this.nextPlayTime);
+    this.nextPlayTime += buffer.duration;
   }
 
   /** Returns seconds of audio still buffered and waiting to play */

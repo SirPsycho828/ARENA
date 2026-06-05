@@ -48,6 +48,28 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
     initedRef.current = false;
   }, [token]);
 
+  // Lip-sync: when this agent becomes the speaker, trigger avatar talking
+  const topic = useArenaStore((s) => s.topic);
+  const wasSpeakingRef = useRef(false);
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win || !initedRef.current) return;
+
+    if (isSpeaking && !wasSpeakingRef.current) {
+      // Agent's turn started — make avatar talk for lip-sync animation
+      win.postMessage({
+        type: 'send-message',
+        agentId,
+        text: `React passionately to the debate topic: "${topic || 'the current discussion'}". Keep your response to about 20 seconds.`,
+        role: 'user',
+        triggerResponse: true,
+      }, '*');
+    } else if (!isSpeaking && wasSpeakingRef.current) {
+      // Agent's turn ended — stop avatar talking
+      win.postMessage({ type: 'stop-speaking', agentId }, '*');
+    }
+    wasSpeakingRef.current = isSpeaking;
+  }, [isSpeaking, agentId, topic]);
 
   return (
     <div className={`w-full h-full relative ${isSpeaking ? 'ring-2 ring-offset-2 ring-offset-gray-900' : ''}`}
