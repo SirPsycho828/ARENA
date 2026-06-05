@@ -369,16 +369,13 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     pcmPlayer = new PcmAudioPlayer();
     pcmPlayer.setMuted(get().soundMuted);
     let lastAudioSpeaker: string | null = null;
-    let lipSyncTimer: ReturnType<typeof setTimeout> | null = null;
     (socket as any).on('audio_chunk', ({ agentId, audio }: { agentId: string; audio: string }) => {
       if (agentId !== lastAudioSpeaker) {
         pcmPlayer?.reset();
         lastAudioSpeaker = agentId;
-        // Trigger lip-sync after jitter buffer delay (when audio actually plays)
-        if (lipSyncTimer) clearTimeout(lipSyncTimer);
-        lipSyncTimer = setTimeout(() => {
-          set({ lipSyncSpeaker: agentId });
-        }, 250); // 200ms jitter buffer + 50ms margin
+        // Trigger lip-sync immediately — avatar API startup latency (~300ms)
+        // roughly offsets the jitter buffer (200ms), so lips and audio align
+        set({ lipSyncSpeaker: agentId });
       }
       pcmPlayer?.playChunk(audio);
     });
@@ -389,11 +386,13 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set({ currentSpeaker: agentId, lipSyncSpeaker: null });
     });
 
-    // Server signals all audio chunks sent — wait for client playback buffer to drain
+    // Server signals all audio chunks sent (after 1.5s trailing-audio grace period).
+    // Wait for client playback buffer to drain, then tell server we're done.
     (socket as any).on('turn_audio_complete', ({ agentId, generation }: { agentId: string; generation: number }) => {
       const remaining = pcmPlayer?.getRemainingTime() || 0;
-      // Min 2s delay (Socket.io polling adds latency), plus actual buffer remaining
-      const delayMs = Math.max(2000, remaining * 1000 + 1500);
+      // Server already waited 1.5s for trailing chunks, so all audio is buffered.
+      // Just wait for the buffer to finish + 500ms margin.
+      const delayMs = Math.max(500, remaining * 1000 + 500);
       console.log(`[Audio] turn_audio_complete gen=${generation}, buffer=${remaining.toFixed(1)}s, waiting ${delayMs}ms`);
       setTimeout(() => {
         (socket as any).emit('playback_done', { agentId, generation });

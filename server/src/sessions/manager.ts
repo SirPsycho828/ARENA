@@ -1210,10 +1210,17 @@ export class SessionManager {
 
   handleTalkState(agentId: string, state: string) {
     if (state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
-      // talk_state:ended = Napster finished sending all audio for this response.
-      // Socket.io ordering ensures client receives all audio_chunks before turn_audio_complete.
-      this.turnTalkEnded = true;
-      this.maybeEmitTurnComplete(agentId);
+      // talk_state:ended fires when the agent stops talking, but trailing audio
+      // chunks may still be in the WebSocket pipeline. Wait 1.5s for them to flush
+      // before signaling clients that all audio has been sent.
+      const name = this.getAgentName(agentId);
+      console.log(`  [${name}] talk_state:ended — waiting 1.5s for trailing audio`);
+      setTimeout(() => {
+        if (this.turnManager?.getCurrentSpeaker() === agentId) {
+          this.turnTalkEnded = true;
+          this.maybeEmitTurnComplete(agentId);
+        }
+      }, 1500);
     }
   }
 
