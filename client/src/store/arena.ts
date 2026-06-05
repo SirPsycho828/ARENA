@@ -575,12 +575,17 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     set({ creditsLoading: true });
 
     // Ensure user doc exists server-side (creates starter credits on first sign-in)
-    const socket = get().socket;
     const currentUser = getAuth().currentUser;
-    if (socket && currentUser) {
+    if (currentUser) {
       currentUser.getIdToken().then((token) => {
-        console.log('[Auth] Emitting authenticate to server');
-        (socket as any).emit('authenticate', { token });
+        console.log('[Auth] Calling /api/authenticate');
+        fetch('/api/authenticate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        }).then(r => r.json()).then(data => {
+          console.log('[Auth] User doc ready:', data.uid);
+        }).catch((err) => console.error('[Auth] authenticate failed:', err));
       }).catch((err) => console.error('[Auth] getIdToken failed:', err));
     }
 

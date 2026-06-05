@@ -50,18 +50,14 @@ function App() {
   }, [connect, disconnect]);
 
   // On sign-in: create user doc (starter credits) + listen for balance
-  const socket = useArenaStore((s) => s.socket);
   useEffect(() => {
-    if (user && socket) {
-      user.getIdToken().then((token) => {
-        (socket as any).emit('authenticate', { token });
-      });
+    if (user) {
       listenCredits(user.uid);
     } else {
       stopListeningCredits();
     }
     return () => stopListeningCredits();
-  }, [user, socket, listenCredits, stopListeningCredits]);
+  }, [user, listenCredits, stopListeningCredits]);
 
   // Handle Stripe success redirect
   useEffect(() => {

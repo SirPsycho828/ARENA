@@ -162,6 +162,25 @@ app.get('/api/topics', (_req, res) => {
   res.json({ topics: getTopicPool() });
 });
 
+// ─── Authenticate (ensure user doc + starter credits) ────────────────────
+const creditServiceHttp = new CreditService();
+
+app.post('/api/authenticate', async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(401).json({ error: 'No token' });
+  try {
+    const decoded = await adminAuth.verifyIdToken(token);
+    const name = decoded.name || null;
+    console.log(`  [Auth] /api/authenticate: ${name || decoded.uid}`);
+    await creditService.ensureUser(decoded.uid, name);
+    console.log(`  [Auth] User doc ready for ${decoded.uid}`);
+    res.json({ uid: decoded.uid });
+  } catch (err) {
+    console.error('  [Auth] authenticate failed:', (err as Error).message);
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
 // ─── Credit Purchase ──────────────────────────────────────────────────────
 const CREDIT_PACKAGES: Record<string, { credits: number; price: number; name: string }> = {
   starter: { credits: 10, price: 500, name: '10 ARENA Credits' },
