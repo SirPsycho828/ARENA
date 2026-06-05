@@ -61,12 +61,24 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
           style={{ background: 'transparent' }}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center absolute inset-0 z-0">
-          <div
-            className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold"
-            style={{ backgroundColor: color + '20', color, border: `2px solid ${color}40` }}
-          >
-            {agentName.split(' ').pop()?.[0] || agentName[0]}
+        <div className="w-full h-full absolute inset-0 z-0 overflow-hidden">
+          <img
+            src={`/static/avatars/${agentName.replace(/[^a-zA-Z]/g, '')}.png`}
+            alt={agentName}
+            className="w-full h-full object-cover object-top"
+            onError={(e) => {
+              // Fallback to letter circle if image doesn't exist
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+            }}
+          />
+          <div className="hidden w-full h-full flex items-center justify-center absolute inset-0">
+            <div
+              className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold"
+              style={{ backgroundColor: color + '20', color, border: `2px solid ${color}40` }}
+            >
+              {agentName.split(' ').pop()?.[0] || agentName[0]}
+            </div>
           </div>
         </div>
       )}

@@ -1209,12 +1209,15 @@ export class SessionManager {
 
   handleTalkState(agentId: string, state: string) {
     if (state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
+      // Wait 6s after talk_state:ended to let audio chunks finish streaming to viewers.
+      // Audio chunks flow: Napster→Server→Socket.io→Client→AudioContext buffer.
+      // Polling transport adds latency, so we need generous buffer time.
       setTimeout(() => {
         if (this.turnManager?.getCurrentSpeaker() === agentId) {
           this.turnAudioDone = true;
           this.maybeAdvanceTurn(agentId);
         }
-      }, 3000);
+      }, 6000);
     }
   }
 

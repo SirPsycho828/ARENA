@@ -360,13 +360,20 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     // PCM audio chunks from server (Napster WebSocket audio)
     pcmPlayer = new PcmAudioPlayer();
     pcmPlayer.setMuted(get().soundMuted);
-    (socket as any).on('audio_chunk', ({ audio }: { agentId: string; audio: string }) => {
+    let lastAudioSpeaker: string | null = null;
+    (socket as any).on('audio_chunk', ({ agentId, audio }: { agentId: string; audio: string }) => {
+      // Reset audio player when a NEW speaker starts sending audio (not on speaker_change)
+      // This lets the previous speaker's buffered audio finish playing naturally
+      if (agentId !== lastAudioSpeaker) {
+        pcmPlayer?.reset();
+        lastAudioSpeaker = agentId;
+      }
       pcmPlayer?.playChunk(audio);
     });
 
     socket.on('speaker_change', ({ agentId }) => {
       transcriptPacer.flush(set);
-      pcmPlayer?.reset();
+      // Don't reset audio here — let old speaker's buffered audio finish
       set({ currentSpeaker: agentId });
     });
 
