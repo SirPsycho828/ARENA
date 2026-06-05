@@ -1208,19 +1208,32 @@ export class SessionManager {
     this.maybeEmitTurnComplete(agentId);
   }
 
+  private talkEndedTimer: ReturnType<typeof setTimeout> | null = null;
+
   handleTalkState(agentId: string, state: string) {
-    if (state === 'ended' && this.turnManager?.getCurrentSpeaker() === agentId) {
-      // talk_state:ended fires when the agent stops talking, but trailing audio
-      // chunks may still be in the WebSocket pipeline. Wait 1.5s for them to flush
-      // before signaling clients that all audio has been sent.
-      const name = this.getAgentName(agentId);
+    if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+    const name = this.getAgentName(agentId);
+
+    if (state === 'ended') {
+      // Agent stopped talking — but might resume after a pause.
+      // Start 1.5s timer; cancel if talk_state:started fires before it expires.
+      if (this.talkEndedTimer) clearTimeout(this.talkEndedTimer);
       console.log(`  [${name}] talk_state:ended — waiting 1.5s for trailing audio`);
-      setTimeout(() => {
+      this.talkEndedTimer = setTimeout(() => {
+        this.talkEndedTimer = null;
         if (this.turnManager?.getCurrentSpeaker() === agentId) {
           this.turnTalkEnded = true;
           this.maybeEmitTurnComplete(agentId);
         }
       }, 1500);
+    } else if (state === 'started' || state === 'preparing') {
+      // Agent resumed speaking — cancel the ended timer and reset flag
+      if (this.talkEndedTimer) {
+        console.log(`  [${name}] talk_state:${state} — still speaking, cancelling ended timer`);
+        clearTimeout(this.talkEndedTimer);
+        this.talkEndedTimer = null;
+      }
+      this.turnTalkEnded = false;
     }
   }
 
@@ -1407,6 +1420,7 @@ export class SessionManager {
       this.lastAudioChunkAt = 0;
       if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
       if (this.playbackTimer) { clearTimeout(this.playbackTimer); this.playbackTimer = null; }
+      if (this.talkEndedTimer) { clearTimeout(this.talkEndedTimer); this.talkEndedTimer = null; }
 
       this.io.emit('speaker_change', { agentId });
       const turnAgentName = this.agentConfigs.get(agentId)?.name || 'Unknown';
