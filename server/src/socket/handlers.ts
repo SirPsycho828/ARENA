@@ -46,10 +46,18 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
     // ─── Auth: create user doc + starter credits on first sign-in ────────
 
     socket.on('authenticate' as any, async (data: { token: string }) => {
-      const user = await verifyToken(data.token);
-      if (user) {
+      try {
+        const user = await verifyToken(data.token);
+        if (!user) {
+          console.warn('  [Auth] authenticate: token verification failed');
+          return;
+        }
+        console.log(`  [Auth] authenticate: ${user.name || user.uid} — creating user doc`);
         await creditService.ensureUser(user.uid, user.name);
+        console.log(`  [Auth] authenticate: user doc ready for ${user.uid}`);
         socket.emit('auth_ok' as any, { uid: user.uid });
+      } catch (err) {
+        console.error('  [Auth] authenticate failed:', (err as Error).message);
       }
     });
 

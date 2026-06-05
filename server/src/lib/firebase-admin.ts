@@ -28,3 +28,9 @@ initAdmin();
 
 export const adminAuth = admin.apps.length ? admin.auth() : (null as unknown as admin.auth.Auth);
 export const adminDb = admin.apps.length ? admin.firestore() : (null as unknown as admin.firestore.Firestore);
+
+if (!admin.apps.length) {
+  console.error('  ⚠ Firebase Admin NOT initialized — adminAuth and adminDb are null!');
+} else {
+  console.log(`  Firebase Admin ready — project: ${admin.app().options.projectId}`);
+}
