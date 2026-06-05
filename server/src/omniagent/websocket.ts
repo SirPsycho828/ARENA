@@ -63,6 +63,11 @@ export class WebSocketAgentConnection extends EventEmitter {
         this.connected = true;
         this.lastActivityAt = Date.now();
         console.log(`  [WS ${this.agentName}] Connected`);
+
+        // Prime audio channel with 100ms of silence (16kHz, 16-bit mono = 3200 bytes)
+        const silence = Buffer.alloc(3200, 0).toString('base64');
+        this.ws!.send(JSON.stringify({ type: 'send_audio', data: { audio: silence } }));
+
         resolve();
       });
 
@@ -132,6 +137,14 @@ export class WebSocketAgentConnection extends EventEmitter {
       case 'talk_state_changed': {
         const state = data.state || data.talk_state;
         if (state) this.emit('talk_state', { state });
+        break;
+      }
+
+      case 'audio_received': {
+        const audioData = data.audio;
+        if (audioData) {
+          this.emit('audio_data', { audio: audioData });
+        }
         break;
       }
 

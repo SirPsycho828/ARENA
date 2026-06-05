@@ -313,6 +313,9 @@ httpServer.listen(PORT, () => {
         initNapsterResources(serverUrl),
       ]);
 
+      // Clean up stale agents from previous sessions to free WebRTC pool
+      await sessionManager.cleanupStaleAgents();
+
       const topic = getNextTopic();
       await sessionManager.createSession(topic, 3);
       await sessionManager.startDebate();

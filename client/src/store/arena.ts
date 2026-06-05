@@ -3,6 +3,10 @@ import { io, Socket } from 'socket.io-client';
 import { doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { connectLiveKit, disconnectLiveKit, type TrackMap } from '../lib/livekit-room';
+import { PcmAudioPlayer } from '../lib/pcm-audio';
+
+// Module-level audio player so toggleSound can reach it
+let pcmPlayer: PcmAudioPlayer | null = null;
 
 interface AgentInfo {
   id: string;
@@ -267,7 +271,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   challengerAgentId: null,
   challengerViewerName: null,
   soundMuted: false,
-  toggleSound: () => set((s) => ({ soundMuted: !s.soundMuted })),
+  toggleSound: () => set((s) => {
+    const newMuted = !s.soundMuted;
+    pcmPlayer?.setMuted(newMuted);
+    return { soundMuted: newMuted };
+  }),
   victoryData: null,
   livekitTracks: {},
   avatarTokens: {},
@@ -349,8 +357,16 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set({ avatarTokens: tokens });
     });
 
+    // PCM audio chunks from server (Napster WebSocket audio)
+    pcmPlayer = new PcmAudioPlayer();
+    pcmPlayer.setMuted(get().soundMuted);
+    (socket as any).on('audio_chunk', ({ audio }: { agentId: string; audio: string }) => {
+      pcmPlayer?.playChunk(audio);
+    });
+
     socket.on('speaker_change', ({ agentId }) => {
       transcriptPacer.flush(set);
+      pcmPlayer?.reset();
       set({ currentSpeaker: agentId });
     });
 
@@ -469,6 +485,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     const { socket } = get();
     socket?.disconnect();
     disconnectLiveKit();
+    pcmPlayer?.destroy();
+    pcmPlayer = null;
     set({ socket: null, connected: false, livekitTracks: {} });
   },
 

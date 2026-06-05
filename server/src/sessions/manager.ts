@@ -415,6 +415,11 @@ export class SessionManager {
     this.chaosQueue?.stop();
     this.omniagent.disconnectAll();
 
+    // Delete agents from Napster API to free connection pool (WebRTC slots)
+    this.deleteOmniagentAgents().catch(err =>
+      console.warn('  Agent cleanup error:', (err as Error).message)
+    );
+
     db.prepare('UPDATE sessions SET status = ?, ended_at = ? WHERE id = ?')
       .run('ended', this.session.endedAt, this.session.id);
 
@@ -836,6 +841,14 @@ export class SessionManager {
       // Try two lines with labels
       match = text.match(/(?:left|for|pro)[:\s]+(.+?)[\n|]+\s*(?:right|against|con)[:\s]+(.+)/is);
     }
+    if (!match) {
+      // Try two separate LEFT/RIGHT on different lines or sentences
+      const leftMatch = text.match(/LEFT:\s*(.+?)(?:\n|$)/i);
+      const rightMatch = text.match(/RIGHT:\s*(.+?)(?:\n|$)/i);
+      if (leftMatch && rightMatch) {
+        match = [text, leftMatch[1], rightMatch[1]];
+      }
+    }
 
     if (match) {
       const left = clean(match[1]);
@@ -848,7 +861,29 @@ export class SessionManager {
         return;
       }
     }
-    console.log(`  [Consensus] Could not parse AI poles, keeping fallback. Raw: "${text.slice(0, 150)}"`);
+
+    // Last resort: if we got only LEFT, generate RIGHT as the negation
+    const soloLeft = text.match(/LEFT:\s*(.+?)(?:\||$)/i);
+    if (soloLeft && this.session) {
+      const left = clean(soloLeft[1]);
+      if (left.length > 2) {
+        const fallback = this.generatePoles(this.session.topic);
+        this.consensusState.leftPole = left;
+        this.consensusState.rightPole = fallback.right;
+        (this.io as any).emit('consensus_update', this.consensusState);
+        console.log(`  [Consensus] Partial AI poles: "${left}" vs "${fallback.right}" (fallback right)`);
+        return;
+      }
+    }
+
+    console.log(`  [Consensus] Could not parse AI poles, using topic fallback. Raw: "${text.slice(0, 150)}"`);
+    // Use topic-based fallback instead of keeping empty/default
+    if (this.session) {
+      const fallback = this.generatePoles(this.session.topic);
+      this.consensusState.leftPole = fallback.left;
+      this.consensusState.rightPole = fallback.right;
+      (this.io as any).emit('consensus_update', this.consensusState);
+    }
   }
 
   // ─── Private: Debug ──────────────────────────────────────────────────
@@ -977,6 +1012,75 @@ export class SessionManager {
     return tokens;
   }
 
+
+  // ─── Private: Agent Cleanup ─────────────────────────────────────────────
+
+  /** Delete agents from Napster API to free the connection pool (especially WebRTC) */
+  private async deleteOmniagentAgents(): Promise<void> {
+    if (process.env.USE_MOCK === 'true') return;
+    const API_KEY = process.env.OMNIAGENT_API_KEY;
+    if (!API_KEY) return;
+
+    const agentIds = [...this.agentConfigs.keys()];
+    if (agentIds.length === 0) return;
+
+    const results = await Promise.allSettled(
+      agentIds.map(async (agentId) => {
+        const name = this.agentConfigs.get(agentId)?.name || agentId;
+        const res = await fetch(`https://companion-api.napster.com/public/agents/${agentId}`, {
+          method: 'DELETE',
+          headers: { 'X-Api-Key': API_KEY },
+        });
+        if (!res.ok && res.status !== 404) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        return name;
+      })
+    );
+
+    let deleted = 0;
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        deleted++;
+      } else {
+        console.warn(`  Agent delete failed: ${r.reason}`);
+      }
+    }
+    console.log(`  Deleted ${deleted}/${agentIds.length} agents from Napster API`);
+    this.agentConfigs.clear();
+  }
+
+  /** Clean up stale agents from previous sessions on startup */
+  async cleanupStaleAgents(): Promise<void> {
+    if (process.env.USE_MOCK === 'true') return;
+    const API_KEY = process.env.OMNIAGENT_API_KEY;
+    if (!API_KEY) return;
+
+    try {
+      const res = await fetch('https://companion-api.napster.com/public/agents', {
+        headers: { 'X-Api-Key': API_KEY },
+      });
+      if (!res.ok) return;
+
+      const data = await res.json() as { items?: Array<{ id: string; name?: string; tags?: Record<string, string> }> };
+      const arenaAgents = (data.items || []).filter(a => a.tags?.arena_version);
+      if (arenaAgents.length === 0) return;
+
+      console.log(`  Found ${arenaAgents.length} stale ARENA agents — cleaning up...`);
+      const delResults = await Promise.allSettled(
+        arenaAgents.map(a =>
+          fetch(`https://companion-api.napster.com/public/agents/${a.id}`, {
+            method: 'DELETE',
+            headers: { 'X-Api-Key': API_KEY },
+          })
+        )
+      );
+      const ok = delResults.filter(r => r.status === 'fulfilled').length;
+      console.log(`  Cleaned up ${ok}/${arenaAgents.length} stale agents`);
+    } catch (err) {
+      console.warn('  Stale agent cleanup failed:', (err as Error).message);
+    }
+  }
 
   // ─── Private: Agent Creation ────────────────────────────────────────────
 
@@ -1157,6 +1261,13 @@ export class SessionManager {
       if (data?.state) this.handleTalkState(agentId, data.state);
     });
 
+    agent.on('audio_data', (data: { audio: string }) => {
+      // Only forward audio from the current speaker (ignore pole-generation audio, etc.)
+      if (this.turnManager?.getCurrentSpeaker() === agentId) {
+        (this.io as any).emit('audio_chunk', { agentId, audio: data.audio });
+      }
+    });
+
     agent.on('tool_effect', (data: { agentId: string; agentName: string; toolName: string; args: any; callId: string }) => {
       this.handleToolEffect(agentId, data.toolName, JSON.stringify(data.args || {}), data.callId);
     });
@@ -1229,9 +1340,9 @@ export class SessionManager {
     }, 10000);
 
     const topic = this.session.topic;
-    const prompt = `Quick task, not a debate question. You just heard this debate:\n\n${transcript}\n\nTopic: "${topic}"\n\nWhat are the TWO main opposing positions that emerged? Create two short vote-button labels (max 5 words each) so a viewer can pick a side. The labels must reflect the ACTUAL positions argued, not generic for/against. Each label should be a clear stance a viewer would want to rally behind. Reply ONLY in this format: LEFT: [position 1] | RIGHT: [position 2]`;
+    const prompt = `SYSTEM TASK (not a debate prompt — reply ONLY in the exact format below, nothing else):\n\nDebate transcript:\n${transcript}\n\nTopic: "${topic}"\n\nWhat are the TWO opposing positions? Write two short vote-button labels (2-5 words each).\nReply EXACTLY: LEFT: [label] | RIGHT: [label]\nExample: LEFT: PINEAPPLE BELONGS | RIGHT: KEEP IT CLASSIC`;
 
-    this.omniagent.sendMessage(poleAgentId, 'user', prompt, true);
+    this.omniagent.sendMessage(poleAgentId, 'system', prompt, true);
     console.log(`  [Consensus] Generating poles from transcript via ${this.agentConfigs.get(poleAgentId)?.name || poleAgentId}`);
   }
 
