@@ -1215,17 +1215,32 @@ export class SessionManager {
     const name = this.getAgentName(agentId);
 
     if (state === 'ended') {
-      // Agent stopped talking — but might resume after a pause.
-      // Start 1.5s timer; cancel if talk_state:started fires before it expires.
+      // Agent stopped talking — but might resume after a pause (mid-speech pauses
+      // can last 2-3s with LLM TTS). Wait 3s, then check if audio chunks are
+      // still arriving before marking the turn as audio-done.
       if (this.talkEndedTimer) clearTimeout(this.talkEndedTimer);
-      console.log(`  [${name}] talk_state:ended — waiting 1.5s for trailing audio`);
+      console.log(`  [${name}] talk_state:ended — waiting 3s for trailing audio`);
       this.talkEndedTimer = setTimeout(() => {
         this.talkEndedTimer = null;
-        if (this.turnManager?.getCurrentSpeaker() === agentId) {
-          this.turnTalkEnded = true;
-          this.maybeEmitTurnComplete(agentId);
+        if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+
+        // If audio chunks arrived within the last 1s, audio is still flowing — wait 2s more
+        const msSinceAudio = this.lastAudioChunkAt > 0 ? Date.now() - this.lastAudioChunkAt : Infinity;
+        if (msSinceAudio < 1000) {
+          console.log(`  [${name}] talk ended timer fired but audio still flowing (${msSinceAudio}ms ago) — extending 2s`);
+          this.talkEndedTimer = setTimeout(() => {
+            this.talkEndedTimer = null;
+            if (this.turnManager?.getCurrentSpeaker() === agentId) {
+              this.turnTalkEnded = true;
+              this.maybeEmitTurnComplete(agentId);
+            }
+          }, 2000);
+          return;
         }
-      }, 1500);
+
+        this.turnTalkEnded = true;
+        this.maybeEmitTurnComplete(agentId);
+      }, 3000);
     } else if (state === 'started' || state === 'preparing') {
       // Agent resumed speaking — cancel the ended timer and reset flag
       if (this.talkEndedTimer) {

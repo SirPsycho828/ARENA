@@ -45,7 +45,7 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
 
     // ─── Auth: create user doc + starter credits on first sign-in ────────
 
-    socket.on('authenticate' as any, async (data: { token: string }) => {
+    (socket as any).on('authenticate', async (data: { token: string }) => {
       try {
         const user = await verifyToken(data.token);
         if (!user) {
