@@ -13,7 +13,9 @@ export class PcmAudioPlayer {
   private chunks = 0;
 
   constructor() {
-    this.ctx = new AudioContext({ sampleRate: 16000 });
+    // Use system default rate (usually 48kHz) — browser's high-quality resampler
+    // handles 16kHz→48kHz much better than forcing the context to 16kHz
+    this.ctx = new AudioContext();
     this.gainNode = this.ctx.createGain();
     this.gainNode.connect(this.ctx.destination);
 
