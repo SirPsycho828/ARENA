@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { io, Socket } from 'socket.io-client';
-import { doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp, type Unsubscribe } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
 import { connectLiveKit, disconnectLiveKit, type TrackMap } from '../lib/livekit-room';
@@ -574,24 +574,22 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     if (creditsUnsub) creditsUnsub();
     set({ creditsLoading: true });
 
-    // Ensure user doc exists server-side (creates starter credits on first sign-in)
+    // Ensure user doc exists (creates starter credits on first sign-in)
     const currentUser = getAuth().currentUser;
     if (currentUser) {
-      currentUser.getIdToken(true).then((token) => {
-        console.log('[Auth] Calling /api/authenticate, token length:', token.length);
-        fetch('/api/authenticate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-        }).then(async (r) => {
-          const data = await r.json();
-          if (r.ok) {
-            console.log('[Auth] User doc ready:', data.uid);
-          } else {
-            console.error('[Auth] Server rejected:', r.status, data.error);
-          }
-        }).catch((err) => console.error('[Auth] authenticate failed:', err));
-      }).catch((err) => console.error('[Auth] getIdToken failed:', err));
+      const userRef = doc(db, 'users', uid);
+      getDoc(userRef).then((snap) => {
+        if (!snap.exists()) {
+          console.log('[Auth] Creating user doc with 10 starter credits');
+          return setDoc(userRef, {
+            displayName: currentUser.displayName || null,
+            credits: 10,
+            createdAt: serverTimestamp(),
+          });
+        }
+      }).then(() => {
+        console.log('[Auth] User doc ready');
+      }).catch((err) => console.error('[Auth] ensureUser failed:', err));
     }
 
     creditsUnsub = onSnapshot(doc(db, 'users', uid), (snap) => {

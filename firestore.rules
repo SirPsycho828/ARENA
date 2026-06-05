@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      // Users can read their own doc (for real-time credit balance)
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Users can create their own doc with exactly 10 starter credits
+      allow create: if request.auth != null && request.auth.uid == userId
+                    && request.resource.data.credits == 10
+                    && request.resource.data.keys().hasAll(['credits', 'createdAt']);
+      // Only Admin SDK can update/delete (credit deductions, purchases)
+    }
+    match /transactions/{doc} {
+      allow read, write: if false;
+    }
+  }
+}
