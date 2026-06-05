@@ -60,7 +60,7 @@ export class PcmAudioPlayer {
 
     // Log first chunk received
     if (this.chunks === 0) {
-      console.log(`[Audio] First chunk received, ctx=${this.ctx.state}, size=${base64.length}`);
+      console.log(`[Audio] First chunk received, ctx=${this.ctx.state}, size=${base64.length}, outRate=${this.ctx.sampleRate}`);
     }
     this.chunks++;
 
@@ -79,12 +79,29 @@ export class PcmAudioPlayer {
 
     if (int16.length === 0) return;
 
-    // Convert Int16 → Float32 for Web Audio.
-    // Attenuate by 0.8x to prevent clipping: browser's 16kHz→48kHz sinc resampler
-    // can overshoot peaks (Gibbs phenomenon), especially on sibilants (S, Z sounds).
-    const buffer = this.ctx.createBuffer(1, int16.length, 16000);
+    // Resample 16kHz → native rate (typically 48kHz) using linear interpolation.
+    // Why: creating many small 16kHz AudioBuffers forces the browser's sinc resampler
+    // to run independently on each one. At each buffer boundary the filter has no
+    // neighboring samples, producing spectral-leakage artifacts — audible as crackling,
+    // especially on sibilants. By resampling ourselves and creating buffers at the
+    // native rate, the browser plays them directly with zero internal resampling.
+    // Linear interpolation never overshoots (no clipping risk) and gently rolls off
+    // high frequencies, naturally taming harsh sibilants.
+    const outRate = this.ctx.sampleRate;
+    const ratio = outRate / 16000;
+    const srcLen = int16.length;
+    const outLen = Math.round(srcLen * ratio);
+    const buffer = this.ctx.createBuffer(1, outLen, outRate);
     const channel = buffer.getChannelData(0);
-    for (let i = 0; i < int16.length; i++) channel[i] = int16[i] / 32768 * 0.8;
+
+    for (let i = 0; i < outLen; i++) {
+      const srcPos = i / ratio;
+      const idx = Math.floor(srcPos);
+      const frac = srcPos - idx;
+      const s0 = idx < srcLen ? int16[idx] / 32768 : int16[srcLen - 1] / 32768;
+      const s1 = (idx + 1) < srcLen ? int16[idx + 1] / 32768 : s0;
+      channel[i] = (s0 + (s1 - s0) * frac) * 0.8;
+    }
 
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
