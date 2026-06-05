@@ -1220,11 +1220,25 @@ export class SessionManager {
   private waitForAudioDrain(agentId: string) {
     if (this.audioDrainTimer) { clearTimeout(this.audioDrainTimer); this.audioDrainTimer = null; }
 
+    const drainStartedAt = Date.now();
+
     const check = () => {
       if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+
+      // If no audio chunks received yet for this turn, keep waiting (up to 15s)
+      if (this.lastAudioChunkAt === 0) {
+        if (Date.now() - drainStartedAt < 15000) {
+          this.audioDrainTimer = setTimeout(check, 500);
+        } else {
+          this.turnAudioDone = true;
+          this.maybeAdvanceTurn(agentId);
+        }
+        return;
+      }
+
       const silenceMs = Date.now() - this.lastAudioChunkAt;
       if (silenceMs >= 2000) {
-        // No audio for 2s after talk_state:ended — audio is done
+        // No audio for 2s — audio is done
         this.turnAudioDone = true;
         this.maybeAdvanceTurn(agentId);
       } else {
