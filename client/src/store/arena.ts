@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { io, Socket } from 'socket.io-client';
 import { doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
 import { connectLiveKit, disconnectLiveKit, type TrackMap } from '../lib/livekit-room';
 import { PcmAudioPlayer } from '../lib/pcm-audio';
@@ -572,6 +573,17 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   listenCredits: (uid) => {
     if (creditsUnsub) creditsUnsub();
     set({ creditsLoading: true });
+
+    // Ensure user doc exists server-side (creates starter credits on first sign-in)
+    const socket = get().socket;
+    const currentUser = getAuth().currentUser;
+    if (socket && currentUser) {
+      currentUser.getIdToken().then((token) => {
+        console.log('[Auth] Emitting authenticate to server');
+        (socket as any).emit('authenticate', { token });
+      }).catch((err) => console.error('[Auth] getIdToken failed:', err));
+    }
+
     creditsUnsub = onSnapshot(doc(db, 'users', uid), (snap) => {
       const data = snap.data();
       set({ credits: data?.credits ?? 0, creditsLoading: false });
