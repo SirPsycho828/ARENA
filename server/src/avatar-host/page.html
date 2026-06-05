@@ -11,15 +11,13 @@
 <body>
   <div id="frames"></div>
 
-  <script src="https://unpkg.com/livekit-client@1.15.13/dist/livekit-client.umd.js"></script>
   <script>
-    const { Room, RoomEvent, Track, LocalVideoTrack, LocalAudioTrack } = LivekitClient;
-
     const avatarFrames = {}; // agentId -> { iframe, ready: boolean }
-    let livekitRoom = null;
     window.__hostReady = false;
 
     // ─── initHost: called by Puppeteer after exposeFunction setup ─────
+    // Server-side Puppeteer ONLY handles debate logic (prompts, responses, turn mgmt).
+    // Video + audio delivered directly to viewers via per-viewer WebRTC iframes.
     window.initHost = async function(config) {
       console.log('[Host] initHost called with', config.agents.length, 'agents');
       const framesDiv = document.getElementById('frames');
@@ -91,145 +89,13 @@
       }
       if (readyCount === 0) {
         console.error('[Host] No avatars connected — aborting');
-        window.__onHostReady();
-        return;
-      }
-      console.log(`[Host] ${readyCount}/${config.agents.length} avatars ready. Capturing streams...`);
-
-      // Helper: wait for video element to be truly playable
-      async function waitForVideo(iframe, agentId, timeoutMs) {
-        const start = Date.now();
-        while (Date.now() - start < timeoutMs) {
-          const v = iframe.contentDocument?.querySelector('video');
-          if (v && v.readyState >= 2 && v.videoWidth > 0) {
-            console.log(`[Host] Video ready for ${agentId}: readyState=${v.readyState} size=${v.videoWidth}x${v.videoHeight} paused=${v.paused}`);
-            return v;
-          }
-          const state = v ? `readyState=${v.readyState} size=${v.videoWidth}x${v.videoHeight}` : 'no element';
-          console.log(`[Host] Waiting for video ${agentId}: ${state} (${Math.round((Date.now() - start) / 1000)}s)`);
-          await new Promise(r => setTimeout(r, 2000));
-        }
-        const v = iframe.contentDocument?.querySelector('video');
-        console.warn(`[Host] Video wait timed out for ${agentId}: readyState=${v?.readyState ?? 'none'} size=${v?.videoWidth ?? 0}x${v?.videoHeight ?? 0}`);
-        return v;
       }
 
-      // Mirror an iframe's WebRTC video to a <video> in the PARENT page's DOM.
-      // Chrome only decodes video frames for elements the compositor is actively
-      // painting.  Iframe video elements in Xvfb don't get composited → drawImage
-      // always reads the same (first) frame.  A parent-DOM mirror forces Chrome
-      // to decode and present every frame, so drawImage picks up fresh pixels.
-      async function createMirrorVideo(iframeVideo, agentId) {
-        const mirror = document.createElement('video');
-        mirror.srcObject = iframeVideo.srcObject;   // same MediaStream, new element
-        mirror.autoplay = true;
-        mirror.muted   = true;
-        mirror.playsInline = true;
-        mirror.style.cssText = 'width:420px;height:420px;';
-        document.body.appendChild(mirror);           // visible in Xvfb viewport
-
-        try { await mirror.play(); } catch(e) { console.warn(`[Host] mirror play() failed for ${agentId}: ${e.message}`); }
-
-        // Wait until the mirror has decoded at least one frame
-        const start = Date.now();
-        while (Date.now() - start < 10000) {
-          if (mirror.readyState >= 2 && mirror.videoWidth > 0) break;
-          await new Promise(r => setTimeout(r, 500));
-        }
-        console.log(`[Host] Mirror ready for ${agentId}: readyState=${mirror.readyState} size=${mirror.videoWidth}x${mirror.videoHeight}`);
-        return mirror;
-      }
-
-      // Canvas capture: draws mirror-video frames to a canvas, then captures the
-      // canvas stream for LiveKit.  Uses setInterval (rAF doesn't fire in Xvfb).
-      function createCanvasCapture(mirrorVideo, agentId) {
-        const w = mirrorVideo.videoWidth || 420;
-        const h = mirrorVideo.videoHeight || 420;
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-
-        let frameCount = 0;
-        setInterval(() => {
-          if (mirrorVideo.readyState >= 2 && mirrorVideo.videoWidth > 0) {
-            ctx.drawImage(mirrorVideo, 0, 0, canvas.width, canvas.height);
-            frameCount++;
-          }
-        }, 66); // ~15fps
-
-        const canvasStream = canvas.captureStream(15);
-        const videoTrack = canvasStream.getVideoTracks()[0];
-
-        // Audio from the mirror (same MediaStream)
-        const audioStream = mirrorVideo.captureStream();
-        const audioTrack = audioStream.getAudioTracks()[0];
-
-        console.log(`[Host] Canvas capture for ${agentId}: ${w}x${h} video=${!!videoTrack} audio=${!!audioTrack}`);
-
-        setTimeout(() => {
-          console.log(`[Host] Canvas ${agentId}: ${frameCount} frames rendered in 3s`);
-        }, 3000);
-
-        return { videoTrack, audioTrack };
-      }
-
-      // Capture + publish per agent (each agent = separate LiveKit participant)
-      const livekitUrl = config.livekit?.url;
-      let totalPublished = 0;
-      for (const agent of config.agents) {
-        if (!avatarFrames[agent.id]?.ready) continue;
-
-        const iframe = avatarFrames[agent.id].iframe;
-        const video = await waitForVideo(iframe, agent.id, 20000);
-        if (!video) {
-          console.error(`[Host] No <video> element for ${agent.id} — skipping`);
-          continue;
-        }
-
-        // Mirror to parent DOM so Chrome's compositor decodes new frames
-        const mirror = await createMirrorVideo(video, agent.id);
-
-        // Canvas capture from the mirror (not the iframe's video)
-        const { videoTrack: vt, audioTrack: at } = createCanvasCapture(mirror, agent.id);
-
-        if (!livekitUrl || !agent.livekitToken) {
-          console.warn(`[Host] No LiveKit config for ${agent.id} — skipping publish`);
-          continue;
-        }
-
-        try {
-          const room = new Room();
-          await room.connect(livekitUrl, agent.livekitToken);
-          console.log(`[Host] ${agent.name} connected to LiveKit as host-${agent.id}`);
-
-          if (vt) {
-            await room.localParticipant.publishTrack(
-              new LocalVideoTrack(vt, undefined, false),
-              { name: `${agent.id}_video` },
-            );
-            totalPublished++;
-            console.log(`[Host] Published video for ${agent.id}`);
-          } else {
-            console.error(`[Host] NO video track to publish for ${agent.id}`);
-          }
-          if (at) {
-            await room.localParticipant.publishTrack(
-              new LocalAudioTrack(at, undefined, false),
-              { name: `${agent.id}_audio` },
-            );
-            totalPublished++;
-            console.log(`[Host] Published audio for ${agent.id}`);
-          }
-        } catch (err) {
-          console.error(`[Host] LiveKit publish failed for ${agent.id}: ${err.message}`);
-        }
-      }
-      console.log(`[Host] LiveKit: ${totalPublished} tracks published across ${config.agents.length} agents`);
-
+      // Signal ready immediately — no video/audio capture needed.
+      // Viewers render avatars directly in their own browsers.
+      console.log(`[Host] ${readyCount}/${config.agents.length} avatars ready. Host ready!`);
       window.__hostReady = true;
       window.__onHostReady();
-      console.log('[Host] All streams published. Host ready!');
     };
 
     // ─── sendToAvatar: called by Puppeteer to send debate prompts ─────

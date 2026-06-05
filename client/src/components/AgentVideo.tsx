@@ -9,12 +9,9 @@ interface AgentVideoProps {
 
 export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const initedRef = useRef(false);
   const token = useArenaStore((s) => s.avatarTokens[agentId]);
-  const audioTrack = useArenaStore((s) => s.livekitTracks[agentId]?.audio);
   const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
-  const soundMuted = useArenaStore((s) => s.soundMuted);
   const isSpeaking = currentSpeaker === agentId;
   const hasAvatar = !!token;
 
@@ -51,17 +48,6 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
     initedRef.current = false;
   }, [token]);
 
-  // Attach LiveKit audio track (only for current speaker)
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el || !audioTrack) return;
-    el.srcObject = new MediaStream([audioTrack]);
-    el.muted = !isSpeaking || soundMuted;
-    if (isSpeaking && !soundMuted) {
-      el.play().catch(() => {});
-    }
-    return () => { el.srcObject = null; };
-  }, [audioTrack, isSpeaking, soundMuted]);
 
   return (
     <div className={`w-full h-full relative ${isSpeaking ? 'ring-2 ring-offset-2 ring-offset-gray-900' : ''}`}
@@ -84,7 +70,6 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
           </div>
         </div>
       )}
-      <audio ref={audioRef} autoPlay />
     </div>
   );
 }

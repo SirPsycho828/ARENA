@@ -119,13 +119,6 @@
             onData: handleSdkEvent,
             onAvatarReady: () => {
               instance.muteMic();
-              // Mute audio for viewer iframes (audio comes from LiveKit)
-              const isViewer = new URLSearchParams(window.location.search).get('viewer') === '1';
-              if (isViewer) {
-                try { instance.muteAudio?.(); } catch {}
-                // Also mute any audio/video elements the SDK creates
-                document.querySelectorAll('audio, video').forEach(el => { el.muted = true; });
-              }
               instance.showAvatar();
               window.parent.postMessage({ type: 'avatar-ready', agentId }, '*');
             },
