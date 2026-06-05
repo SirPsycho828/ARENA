@@ -980,23 +980,32 @@ export class SessionManager {
     const results = await Promise.allSettled(
       this.session.agentIds.map(async (agentId) => {
         const config = this.agentConfigs.get(agentId);
-        const res = await fetch(
-          `https://companion-api.napster.com/public/agents/${agentId}/connections`,
-          {
-            method: 'POST',
-            headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              channelType: 'webrtc',
-              externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}${(config?.name || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`.slice(0, 32),
-            }),
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        try {
+          const res = await fetch(
+            `https://companion-api.napster.com/public/agents/${agentId}/connections`,
+            {
+              method: 'POST',
+              headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                channelType: 'webrtc',
+                externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}${(config?.name || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`.slice(0, 32),
+              }),
+              signal: controller.signal,
+            }
+          );
+          clearTimeout(timeoutId);
+          if (!res.ok) {
+            const errBody = await res.text().catch(() => '');
+            throw new Error(`HTTP ${res.status}: ${errBody.substring(0, 200)}`);
           }
-        );
-        if (!res.ok) {
-          const errBody = await res.text().catch(() => '');
-          throw new Error(`HTTP ${res.status}: ${errBody.substring(0, 200)}`);
+          const data = await res.json() as { token: string };
+          return { agentId, token: data.token };
+        } catch (err) {
+          clearTimeout(timeoutId);
+          throw err;
         }
-        const data = await res.json() as { token: string };
-        return { agentId, token: data.token };
       })
     );
 
@@ -1004,7 +1013,7 @@ export class SessionManager {
       if (r.status === 'fulfilled') {
         tokens[r.value.agentId] = r.value.token;
       } else {
-        console.error(`  Token creation failed for ${viewerId}: ${r.reason}`);
+        console.error(`  WebRTC token failed for ${viewerId}: ${(r.reason as Error)?.message || r.reason}`);
       }
     }
 
@@ -1261,10 +1270,15 @@ export class SessionManager {
       if (data?.state) this.handleTalkState(agentId, data.state);
     });
 
+    let audioChunksEmitted = 0;
     agent.on('audio_data', (data: { audio: string }) => {
       // Only forward audio from the current speaker (ignore pole-generation audio, etc.)
       if (this.turnManager?.getCurrentSpeaker() === agentId) {
         (this.io as any).emit('audio_chunk', { agentId, audio: data.audio });
+        audioChunksEmitted++;
+        if (audioChunksEmitted === 1) {
+          console.log(`  [Audio] First chunk emitted to viewers from ${this.getAgentName(agentId)} (size=${data.audio.length})`);
+        }
       }
     });
 

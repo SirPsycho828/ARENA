@@ -8,11 +8,36 @@ export class PcmAudioPlayer {
   private gainNode: GainNode;
   private nextPlayTime = 0;
   private muted = false;
+  private unlocked = false;
+  private chunks = 0;
 
   constructor() {
     this.ctx = new AudioContext({ sampleRate: 16000 });
     this.gainNode = this.ctx.createGain();
     this.gainNode.connect(this.ctx.destination);
+
+    // Unlock AudioContext on first user interaction (autoplay policy)
+    const unlock = () => {
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume().then(() => {
+          console.log('[Audio] AudioContext unlocked by user gesture');
+          this.unlocked = true;
+        });
+      } else {
+        this.unlocked = true;
+      }
+      document.removeEventListener('click', unlock);
+      document.removeEventListener('touchstart', unlock);
+      document.removeEventListener('keydown', unlock);
+    };
+    document.addEventListener('click', unlock);
+    document.addEventListener('touchstart', unlock);
+    document.addEventListener('keydown', unlock);
+
+    // Also try immediately (some browsers allow it)
+    if (this.ctx.state !== 'suspended') {
+      this.unlocked = true;
+    }
   }
 
   setMuted(muted: boolean) {
@@ -23,9 +48,16 @@ export class PcmAudioPlayer {
   playChunk(base64: string) {
     if (this.muted) return;
 
-    // Resume AudioContext if suspended (autoplay policy)
+    // Log first chunk received
+    if (this.chunks === 0) {
+      console.log(`[Audio] First chunk received, ctx=${this.ctx.state}, size=${base64.length}`);
+    }
+    this.chunks++;
+
+    // Try to resume if not yet unlocked
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
+      return; // Skip this chunk — will play next ones once unlocked
     }
 
     // Decode base64 → Int16 PCM
