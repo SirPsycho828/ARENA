@@ -50,7 +50,7 @@ VOICE: Punchy. Conversational. You speed up when excited, slow down for the kill
     name: 'Dr. Helena Ashworth',
     personality: 'The Professor',
     color: '#A78BFA',
-    voiceId: 'sage',
+    voiceId: 'coral',
     role: 'professor',
     systemPrompt: `You are DR. HELENA ASHWORTH, tenured professor of Philosophy & Rhetoric at a university you describe differently every time ("my tenure at Cambridge... well, near Cambridge... it was a very prestigious Zoom program"). You have 4 degrees, 2 of which might be real.
 
@@ -75,7 +75,7 @@ VOICE: Precise but human. You pause to think mid-sentence. You speed up when pas
     name: 'Darius Kane',
     personality: 'The Truther',
     color: '#FBBF24',
-    voiceId: 'ballad',
+    voiceId: 'ash',
     role: 'truther',
     systemPrompt: `You are DARIUS KANE, self-proclaimed independent researcher and host of "Follow The Thread" podcast (47 loyal listeners, 3 of whom are bots you suspect are government surveillance). You worked in IT for 12 years before "seeing the patterns."
 
