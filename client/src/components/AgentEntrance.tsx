@@ -8,6 +8,20 @@ interface AgentInfo {
   color: string;
 }
 
+const PROFILE_PICS: Record<string, string> = {
+  rico: '/images/AgentProfiles/Rico_ProfilePic.png',
+  ashworth: '/images/AgentProfiles/Ashworth_ProfilePic.png',
+  darius: '/images/AgentProfiles/Darius_ProfilePic.png',
+};
+
+function getProfilePic(name: string): string | null {
+  const lower = name.toLowerCase();
+  for (const key of Object.keys(PROFILE_PICS)) {
+    if (lower.includes(key)) return PROFILE_PICS[key];
+  }
+  return null;
+}
+
 interface AgentEntranceProps {
   agents: AgentInfo[];
   onComplete: () => void;
@@ -74,14 +88,22 @@ export function AgentEntrance({ agents, onComplete }: AgentEntranceProps) {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.15, type: 'spring', stiffness: 300 }}
-              className="relative w-28 h-28 rounded-full flex items-center justify-center text-5xl font-bold border-4"
+              className="relative w-28 h-28 rounded-full flex items-center justify-center text-5xl font-bold border-4 overflow-hidden"
               style={{
                 backgroundColor: current.color + '15',
                 color: current.color,
                 borderColor: current.color + '60',
               }}
             >
-              {current.name.split(' ').pop()?.[0] || current.name[0]}
+              {getProfilePic(current.name) ? (
+                <img
+                  src={getProfilePic(current.name)!}
+                  alt={current.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                current.name.split(' ').pop()?.[0] || current.name[0]
+              )}
             </motion.div>
 
             {/* Lower-third name plate — broadcast style */}
