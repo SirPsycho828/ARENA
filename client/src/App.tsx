@@ -19,6 +19,7 @@ import { ToolEffects } from './components/ToolEffects';
 import { TopicReveal } from './components/TopicReveal';
 import { sounds } from './lib/sounds';
 import { ConsensusNeedle } from './components/ConsensusNeedle';
+import { getModerationMessage } from './lib/moderation-messages';
 import { Zap, X } from 'lucide-react';
 
 type Phase = 'splash' | 'entrance' | 'arena';
@@ -42,6 +43,7 @@ function App() {
   const sendReaction = useArenaStore((s) => s.sendReaction);
   const victoryData = useArenaStore((s) => s.victoryData);
   const enableAudio = useArenaStore((s) => s.enableAudio);
+  const lastRejectionReason = useArenaStore((s) => s.lastRejectionReason);
 
   useEffect(() => {
     connect();
@@ -287,6 +289,20 @@ function App() {
             className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-sm bg-success text-white font-body font-semibold text-sm"
           >
             Credits added successfully!
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Moderation rejection toast */}
+      <AnimatePresence>
+        {lastRejectionReason && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-sm bg-destructive text-white font-body font-semibold text-sm max-w-sm text-center"
+          >
+            {getModerationMessage(lastRejectionReason) || `Submission rejected: ${lastRejectionReason}`}
           </motion.div>
         )}
       </AnimatePresence>

@@ -455,7 +455,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     socket.on('injection_rejected', ({ reason, remainingMs }) => {
       if (reason === 'cooldown') {
         set({ injectionCooldown: remainingMs });
-      } else if (reason === 'auth_required' || reason === 'insufficient_credits') {
+      } else {
         set({ lastRejectionReason: reason });
         setTimeout(() => set({ lastRejectionReason: null }), 4000);
       }
@@ -572,6 +572,17 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     (socket as any).on('callin_rejected', ({ reason }: { reason: string }) => {
       console.warn('Call-in rejected:', reason);
       set({ callInState: 'idle' as const, callInCallId: null, callInQueuePosition: 0 });
+    });
+
+    (socket as any).on('callin_moderated', ({ callId, reason }: { callId: string; reason: string }) => {
+      console.warn('Call-in moderated:', callId, reason);
+      set({
+        callInState: 'idle' as const,
+        callInCallId: null,
+        callInQueuePosition: 0,
+        lastRejectionReason: reason,
+      });
+      setTimeout(() => set({ lastRejectionReason: null }), 5000);
     });
 
     (socket as any).on('chaos_status', (data: { active: ChaosRuleStatus[]; justActivated: string[]; justExpired: string[] }) => {
