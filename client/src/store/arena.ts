@@ -107,6 +107,8 @@ interface ArenaState {
 
   // Sound
   soundMuted: boolean;
+  audioEnabled: boolean;
+  enableAudio: () => void;
   toggleSound: () => void;
   setVolume: (v: number) => void;
 
@@ -276,6 +278,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   challengerAgentId: null,
   challengerViewerName: null,
   soundMuted: false,
+  audioEnabled: false,
+  enableAudio: () => set({ audioEnabled: true }),
   lipSyncSpeaker: null,
   toggleSound: () => set((s) => {
     const newMuted = !s.soundMuted;
@@ -342,6 +346,12 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     // Word-by-word streaming transcript — buffer deltas and release at speech rate
     (socket as any).on('transcript_delta', (data: { agentId: string; agentName: string; content: string }) => {
+      // Pre-trigger lip-sync on first delta (text arrives before audio).
+      // This gives the avatar iframe a head start to begin animating while
+      // the 350ms jitter buffer fills, so lips and audio start together.
+      if (data.agentId === get().currentSpeaker && !get().lipSyncSpeaker) {
+        set({ lipSyncSpeaker: data.agentId });
+      }
       transcriptPacer.push(data.content, data.agentId, data.agentName, set);
     });
 
@@ -371,6 +381,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     pcmPlayer.setMuted(get().soundMuted);
     let lastAudioSpeaker: string | null = null;
     (socket as any).on('audio_chunk', ({ agentId, audio }: { agentId: string; audio: string }) => {
+      if (!get().audioEnabled) return;
       if (agentId !== lastAudioSpeaker) {
         pcmPlayer?.reset();
         lastAudioSpeaker = agentId;

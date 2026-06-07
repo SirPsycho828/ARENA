@@ -43,6 +43,7 @@ function App() {
   const startChallenge = useArenaStore((s) => s.startChallenge);
   const endChallenge = useArenaStore((s) => s.endChallenge);
   const victoryData = useArenaStore((s) => s.victoryData);
+  const enableAudio = useArenaStore((s) => s.enableAudio);
 
   useEffect(() => {
     connect();
@@ -70,6 +71,7 @@ function App() {
   }, []);
 
   const handleEnterArena = useCallback(() => {
+    enableAudio();
     sounds.arenaEnter();
     if (agents.length > 0) {
       setPhase('entrance');

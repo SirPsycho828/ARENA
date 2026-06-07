@@ -1,4 +1,10 @@
 import 'dotenv/config';
+
+// Prevent gRPC streaming errors (e.g. Firestore PERMISSION_DENIED) from crashing the process
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('  [FATAL] Unhandled rejection:', reason);
+});
+
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
