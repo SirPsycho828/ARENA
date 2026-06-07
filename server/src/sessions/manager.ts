@@ -182,6 +182,7 @@ export class SessionManager {
   // Order varies: sometimes talk:ended fires before speech_end, sometimes after.
   private turnTextComplete = false;
   private turnTalkEnded = false;
+  private turnAudioComplete = false; // set after turn_audio_complete emitted — stops forwarding chunks
   private lastAudioChunkAt = 0;
   // Consensus meter
   private consensusState: ConsensusState | null = null;
@@ -1215,36 +1216,36 @@ export class SessionManager {
     const name = this.getAgentName(agentId);
 
     if (state === 'ended') {
-      // Agent stopped talking — but might resume after a pause (mid-speech pauses
-      // can last 2-3s with LLM TTS). Wait 3s, then check if audio chunks are
-      // still arriving before marking the turn as audio-done.
+      // Agent stopped talking — poll until audio chunks stop arriving.
+      // Previous approach: one-shot 3s + 2s extension. This failed when audio
+      // trickled in beyond the single extension window.
+      // New approach: poll every 500ms, wait until 1.5s silence, max 10s total.
       if (this.talkEndedTimer) clearTimeout(this.talkEndedTimer);
-      console.log(`  [${name}] talk_state:ended — waiting 3s for trailing audio`);
-      this.talkEndedTimer = setTimeout(() => {
-        this.talkEndedTimer = null;
+      const drainStart = Date.now();
+      console.log(`  [${name}] talk_state:ended — polling for audio drain`);
+
+      const pollAudioDrain = () => {
         if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
 
-        // If audio chunks arrived within the last 1s, audio is still flowing — wait 2s more
+        const elapsed = Date.now() - drainStart;
         const msSinceAudio = this.lastAudioChunkAt > 0 ? Date.now() - this.lastAudioChunkAt : Infinity;
-        if (msSinceAudio < 1000) {
-          console.log(`  [${name}] talk ended timer fired but audio still flowing (${msSinceAudio}ms ago) — extending 2s`);
-          this.talkEndedTimer = setTimeout(() => {
-            this.talkEndedTimer = null;
-            if (this.turnManager?.getCurrentSpeaker() === agentId) {
-              this.turnTalkEnded = true;
-              this.maybeEmitTurnComplete(agentId);
-            }
-          }, 2000);
-          return;
-        }
 
-        this.turnTalkEnded = true;
-        this.maybeEmitTurnComplete(agentId);
-      }, 3000);
+        if (msSinceAudio >= 1500 || elapsed >= 10000) {
+          this.talkEndedTimer = null;
+          console.log(`  [${name}] audio drained (${msSinceAudio}ms silence, ${elapsed}ms elapsed)`);
+          this.turnTalkEnded = true;
+          this.maybeEmitTurnComplete(agentId);
+        } else {
+          this.talkEndedTimer = setTimeout(pollAudioDrain, 500);
+        }
+      };
+
+      // Initial 1.5s wait before first poll (give TTS time to send trailing chunks)
+      this.talkEndedTimer = setTimeout(pollAudioDrain, 1500);
     } else if (state === 'started' || state === 'preparing') {
-      // Agent resumed speaking — cancel the ended timer and reset flag
+      // Agent resumed speaking — cancel the drain poll and reset flag
       if (this.talkEndedTimer) {
-        console.log(`  [${name}] talk_state:${state} — still speaking, cancelling ended timer`);
+        console.log(`  [${name}] talk_state:${state} — still speaking, cancelling drain poll`);
         clearTimeout(this.talkEndedTimer);
         this.talkEndedTimer = null;
       }
@@ -1312,8 +1313,8 @@ export class SessionManager {
         const speaker = this.turnManager?.getCurrentSpeaker();
         console.log(`  [Audio] audio_data fired for ${this.getAgentName(agentId)}, speaker=${speaker === agentId ? 'MATCH' : speaker || 'none'}, size=${data.audio?.length || 0}`);
       }
-      // Only forward audio from the current speaker (ignore pole-generation audio, etc.)
-      if (this.turnManager?.getCurrentSpeaker() === agentId) {
+      // Only forward audio from the current speaker, and stop once turn_audio_complete sent
+      if (this.turnManager?.getCurrentSpeaker() === agentId && !this.turnAudioComplete) {
         this.lastAudioChunkAt = Date.now();
         (this.io as any).emit('audio_chunk', { agentId, audio: data.audio });
         audioChunksEmitted++;
@@ -1343,6 +1344,9 @@ export class SessionManager {
 
     // Cancel the no-response timeout
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
+
+    // Stop forwarding any more audio chunks from this agent
+    this.turnAudioComplete = true;
 
     // Signal clients that all audio has been sent — wait for playback to finish.
     // Socket.io ordering guarantees all audio_chunk events arrive before this.
@@ -1432,6 +1436,7 @@ export class SessionManager {
       // Reset turn state for new speaker
       this.turnTextComplete = false;
       this.turnTalkEnded = false;
+      this.turnAudioComplete = false;
       this.lastAudioChunkAt = 0;
       if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
       if (this.playbackTimer) { clearTimeout(this.playbackTimer); this.playbackTimer = null; }

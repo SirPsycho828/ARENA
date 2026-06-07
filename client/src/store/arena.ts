@@ -383,25 +383,37 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     socket.on('speaker_change', ({ agentId }) => {
       transcriptPacer.flush(set);
-      // Clear lip-sync immediately, set new speaker for UI (badge, ring)
+      // Kill any remaining audio from the previous speaker immediately
+      pcmPlayer?.reset();
+      lastAudioSpeaker = null;
       set({ currentSpeaker: agentId, lipSyncSpeaker: null });
     });
 
-    // Server signals all audio chunks sent (after 1.5s trailing-audio grace period).
-    // Wait for client playback buffer to drain, then tell server we're done.
+    // Server signals all audio chunks sent. Poll until client buffer actually
+    // drains, then tell server we're done. Previous snapshot approach sent
+    // playback_done too early when late chunks extended the buffer after the snapshot.
+    let playbackPollTimer: ReturnType<typeof setTimeout> | null = null;
     (socket as any).on('turn_audio_complete', ({ agentId, generation }: { agentId: string; generation: number }) => {
-      const remaining = pcmPlayer?.getRemainingTime() || 0;
-      // Server already waited 1.5s for trailing chunks, so all audio is buffered.
-      // Just wait for the buffer to finish + 500ms margin.
-      const delayMs = Math.max(500, remaining * 1000 + 500);
-      console.log(`[Audio] turn_audio_complete gen=${generation}, buffer=${remaining.toFixed(1)}s, waiting ${delayMs}ms`);
-      setTimeout(() => {
-        // Stop lip-sync when audio finishes — don't wait for turn advance
-        if (get().lipSyncSpeaker === agentId) {
-          set({ lipSyncSpeaker: null });
+      if (playbackPollTimer) { clearTimeout(playbackPollTimer); playbackPollTimer = null; }
+      const startedAt = Date.now();
+      console.log(`[Audio] turn_audio_complete gen=${generation}, buffer=${(pcmPlayer?.getRemainingTime() || 0).toFixed(1)}s — polling for drain`);
+
+      const poll = () => {
+        const remaining = pcmPlayer?.getRemainingTime() || 0;
+        const elapsed = Date.now() - startedAt;
+        if (remaining <= 0.05 || elapsed > 30000) {
+          playbackPollTimer = null;
+          // Stop lip-sync when audio actually finishes playing
+          if (get().lipSyncSpeaker === agentId) {
+            set({ lipSyncSpeaker: null });
+          }
+          (socket as any).emit('playback_done', { agentId, generation });
+        } else {
+          playbackPollTimer = setTimeout(poll, 150);
         }
-        (socket as any).emit('playback_done', { agentId, generation });
-      }, delayMs);
+      };
+      // Brief initial wait then start polling
+      playbackPollTimer = setTimeout(poll, 150);
     });
 
     socket.on('vote_update', (tallies) => {
