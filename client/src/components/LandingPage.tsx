@@ -251,68 +251,98 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           background: 'radial-gradient(ellipse at center, transparent 30%, rgba(13,17,23,0.85) 100%)',
         }} />
 
-        {/* Content */}
-        <div className="relative z-10 text-center max-w-4xl mx-auto">
-          {/* "Breaking" ticker above headline */}
+        {/* Two-column content: text left, image right on desktop */}
+        <div className="relative z-10 w-full max-w-7xl mx-auto lg:grid lg:grid-cols-[1fr,auto] lg:gap-12 lg:items-center">
+          {/* Text column */}
+          <div className="text-center lg:text-left">
+            {/* "Breaking" ticker above headline */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className="inline-flex items-center gap-2 px-3 py-1.5 mb-8 bg-primary/10 border border-primary/30 rounded-sm"
+            >
+              <Radio size={14} className="text-primary" />
+              <span className="text-xs font-body font-semibold text-primary tracking-wider uppercase">
+                {isLive ? 'Debate in Progress' : 'Now Streaming'}
+              </span>
+            </motion.div>
+
+            {/* Headline */}
+            <motion.h1
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.8 }}
+              className="font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl tracking-wider leading-none mb-4"
+            >
+              WHERE <span className="text-primary">AI</span> GOES{' '}
+              <br className="hidden sm:block" />
+              HEAD TO <span className="text-accent">HEAD</span>
+            </motion.h1>
+
+            {/* Acronym expansion */}
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6, duration: 0.6 }}
+              className="text-xs sm:text-sm font-mono text-muted-foreground tracking-[0.3em] uppercase mb-6"
+            >
+              <span className="text-primary">A</span>I{' '}
+              <span className="text-primary">R</span>ivalry{' '}
+              <span className="text-primary">E</span>xhibition of{' '}
+              <span className="text-primary">N</span>eural{' '}
+              <span className="text-primary">A</span>gents
+            </motion.p>
+
+            {/* Sub-headline */}
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7, duration: 0.6 }}
+              className="text-base sm:text-lg text-muted-foreground font-body max-w-2xl lg:max-w-xl mx-auto lg:mx-0 mb-10 leading-relaxed"
+            >
+              Watch AI personalities clash in real-time debates. Inject chaos rules.
+              Cast your vote. Challenge them with your own voice.
+            </motion.p>
+
+            {/* CTA */}
+            <motion.button
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 1, type: 'spring', stiffness: 200 }}
+              onClick={onEnter}
+              className="px-10 py-4 bg-primary text-primary-foreground font-body font-bold text-base tracking-widest uppercase rounded-sm hover:brightness-110 transition-all animate-button-pulse cursor-pointer"
+            >
+              {isLive ? 'Watch Live' : 'Enter the Arena'}
+            </motion.button>
+          </div>
+
+          {/* Image column — desktop only */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 mb-8 bg-primary/10 border border-primary/30 rounded-sm"
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.6, duration: 0.8 }}
+            className="hidden lg:block relative"
           >
-            <Radio size={14} className="text-primary" />
-            <span className="text-xs font-body font-semibold text-primary tracking-wider uppercase">
-              {isLive ? 'Debate in Progress' : 'Now Streaming'}
-            </span>
+            <img
+              src="/images/AgentProfiles/ARENA_landing_vertical.png"
+              alt="ARENA Agents"
+              className="max-h-[82vh] w-auto object-contain rounded-md opacity-85"
+            />
+            {/* Edge fade into background */}
+            <div className="absolute inset-0 rounded-md pointer-events-none" style={{
+              boxShadow: 'inset 0 0 60px 30px rgba(13,17,23,0.7)',
+            }} />
           </motion.div>
+        </div>
 
-          {/* Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.8 }}
-            className="font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl tracking-wider leading-none mb-4"
-          >
-            WHERE <span className="text-primary">AI</span> GOES{' '}
-            <br className="hidden sm:block" />
-            HEAD TO <span className="text-accent">HEAD</span>
-          </motion.h1>
-
-          {/* Acronym expansion */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6, duration: 0.6 }}
-            className="text-xs sm:text-sm font-mono text-muted-foreground tracking-[0.3em] uppercase mb-6"
-          >
-            <span className="text-primary">A</span>I{' '}
-            <span className="text-primary">R</span>ivalry{' '}
-            <span className="text-primary">E</span>xhibition of{' '}
-            <span className="text-primary">N</span>eural{' '}
-            <span className="text-primary">A</span>gents
-          </motion.p>
-
-          {/* Sub-headline */}
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7, duration: 0.6 }}
-            className="text-base sm:text-lg text-muted-foreground font-body max-w-2xl mx-auto mb-10 leading-relaxed"
-          >
-            Watch AI personalities clash in real-time debates. Inject chaos rules.
-            Cast your vote. Challenge them with your own voice.
-          </motion.p>
-
-          {/* CTA */}
-          <motion.button
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 1, type: 'spring', stiffness: 200 }}
-            onClick={onEnter}
-            className="px-10 py-4 bg-primary text-primary-foreground font-body font-bold text-base tracking-widest uppercase rounded-sm hover:brightness-110 transition-all animate-button-pulse cursor-pointer"
-          >
-            {isLive ? 'Watch Live' : 'Enter the Arena'}
-          </motion.button>
+        {/* Mobile background image — vertical, very transparent */}
+        <div className="lg:hidden absolute inset-0 z-[1] pointer-events-none opacity-25">
+          <img
+            src="/images/AgentProfiles/ARENA_landing_vertical.png"
+            alt=""
+            className="w-full h-full object-cover"
+          />
         </div>
 
         {/* Scroll indicator */}
@@ -321,7 +351,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           animate={{ opacity: 1 }}
           transition={{ delay: 1.5 }}
           onClick={scrollToContent}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer z-10"
         >
           <ChevronDown size={24} className="animate-bounce" />
         </motion.button>
@@ -331,15 +361,6 @@ export function LandingPage({ onEnter }: LandingPageProps) {
         <div className="absolute top-20 right-6 w-8 h-8 border-r-2 border-t-2 border-accent/20" />
         <div className="absolute bottom-16 left-6 w-8 h-8 border-l-2 border-b-2 border-primary/20" />
         <div className="absolute bottom-16 right-6 w-8 h-8 border-r-2 border-b-2 border-accent/20" />
-
-        {/* Landing image background */}
-        <div className="absolute inset-0 z-[1] pointer-events-none opacity-50">
-          <img
-            src="/images/AgentProfiles/ARENA_landing.png"
-            alt=""
-            className="w-full h-full object-cover"
-          />
-        </div>
       </section>
 
       {/* ─── THE SHOW — Bento Grid Features ─────────────────────────── */}
