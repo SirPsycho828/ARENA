@@ -331,6 +331,15 @@ export function LandingPage({ onEnter }: LandingPageProps) {
         <div className="absolute top-20 right-6 w-8 h-8 border-r-2 border-t-2 border-accent/20" />
         <div className="absolute bottom-16 left-6 w-8 h-8 border-l-2 border-b-2 border-primary/20" />
         <div className="absolute bottom-16 right-6 w-8 h-8 border-r-2 border-b-2 border-accent/20" />
+
+        {/* Landing image overlay */}
+        <div className="absolute inset-0 z-20 pointer-events-none opacity-50">
+          <img
+            src="/images/AgentProfiles/ARENA_landing.png"
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        </div>
       </section>
 
       {/* ─── THE SHOW — Bento Grid Features ─────────────────────────── */}
