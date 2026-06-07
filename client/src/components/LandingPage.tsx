@@ -252,7 +252,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
         }} />
 
         {/* Two-column content: text left, image right on desktop */}
-        <div className="relative z-10 w-full max-w-7xl mx-auto lg:grid lg:grid-cols-[1fr,auto] lg:gap-12 lg:items-center">
+        <div className="relative z-10 w-full max-w-7xl mx-auto lg:grid lg:grid-cols-[1fr_auto] lg:gap-12 lg:items-center">
           {/* Text column */}
           <div className="text-center lg:text-left">
             {/* "Breaking" ticker above headline */}
