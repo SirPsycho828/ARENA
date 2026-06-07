@@ -20,6 +20,8 @@ export class TurnManager extends EventEmitter {
   private paused = false;
   private recentSpeakers: string[] = [];
   private forcedNext: string | null = null;
+  private callInTurnsRemaining = 0;
+  private callInCallId: string | null = null;
 
   constructor(config: Partial<TurnManagerConfig> = {}) {
     super();
@@ -43,6 +45,8 @@ export class TurnManager extends EventEmitter {
     this.clearTimers();
     this.state = 'IDLE';
     this.currentSpeaker = null;
+    this.callInCallId = null;
+    this.callInTurnsRemaining = 0;
     this.emit('stopped');
   }
 
@@ -70,6 +74,22 @@ export class TurnManager extends EventEmitter {
     this.clearTimers();
     this.state = 'RELAYING';
     this.emit('turn_end', { agentId, transcript });
+
+    // If in call-in mode, decrement counter
+    if (this.callInCallId) {
+      this.callInTurnsRemaining--;
+      console.log(`  [TurnManager] Call-in turns remaining: ${this.callInTurnsRemaining}`);
+      if (this.callInTurnsRemaining <= 0) {
+        const callId = this.callInCallId;
+        this.callInCallId = null;
+        this.gapTimer = setTimeout(() => {
+          this.state = 'SELECTING_NEXT';
+          this.emit('callin_complete', { callId });
+          this.selectNext();
+        }, this.config.minTurnGap);
+        return;
+      }
+    }
 
     // Wait min gap, then select next
     this.gapTimer = setTimeout(() => {
@@ -101,6 +121,28 @@ export class TurnManager extends EventEmitter {
 
   /** Force a specific agent as the next speaker (used for pre-prompting). */
   forceNext(agentId: string) { this.forcedNext = agentId; }
+
+  /** Enter call-in mode: run exactly N turns of discussion, then emit 'callin_complete'. */
+  enterCallIn(callId: string, turns: number) {
+    this.callInCallId = callId;
+    this.callInTurnsRemaining = turns;
+    console.log(`  [TurnManager] Entered call-in mode: ${turns} turns for ${callId}`);
+  }
+
+  /** Exit call-in mode early (e.g., watchdog recovery). */
+  exitCallIn() {
+    const wasActive = this.callInCallId !== null;
+    this.callInCallId = null;
+    this.callInTurnsRemaining = 0;
+    if (wasActive) {
+      console.log('  [TurnManager] Exited call-in mode');
+      this.emit('callin_complete', {});
+    }
+  }
+
+  isInCallIn(): boolean { return this.callInCallId !== null; }
+  getCallInCallId(): string | null { return this.callInCallId; }
+  getCallInTurnsRemaining(): number { return this.callInTurnsRemaining; }
 
   private selectNext() {
     if (this.paused) return;
