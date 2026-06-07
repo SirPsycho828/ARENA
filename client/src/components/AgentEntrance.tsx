@@ -33,7 +33,7 @@ export function AgentEntrance({ agents, onComplete }: AgentEntranceProps) {
 
   useEffect(() => {
     if (currentIndex < agents.length) {
-      const timer = setTimeout(() => setCurrentIndex((i) => i + 1), 1500);
+      const timer = setTimeout(() => setCurrentIndex((i) => i + 1), 3000);
       return () => clearTimeout(timer);
     } else {
       const timer = setTimeout(() => setDone(true), 600);
