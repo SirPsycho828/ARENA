@@ -56,7 +56,7 @@ export interface TranscriptMessage {
   agentName: string;
   text: string;
   timestamp: number;
-  isChallenger?: boolean;
+  isCallIn?: boolean;
 }
 
 // ─── Audience Interaction ───────────────────────────────────────────────────
@@ -94,14 +94,19 @@ export interface ServerEvents {
   injection_active: (data: { text: string; timestamp: number }) => void;
   injection_rejected: (data: { reason: string; remainingMs: number }) => void;
   vote_update: (tallies: VoteTallies) => void;
-  challenger_active: (data: { viewerId: string; agentId: string; startedAt: number }) => void;
-  challenger_ended: (data: { viewerId: string }) => void;
   spectator_count: (data: { count: number }) => void;
   agent_disconnected: (data: { agentId: string; reason: string }) => void;
   agent_video_frame: (data: { agentId: string; frame: string }) => void;
   agent_video_tokens: (data: { tokens: Record<string, string> }) => void;
   session_ended: (data: { reason: string; results?: { winner: { id: string; name: string; color: string; votes: number } | null; voteTallies: Record<string, number>; totalMessages: number; duration: number } }) => void;
   consensus_update: (state: ConsensusState) => void;
+  callin_queued: (data: { position: number; callId: string }) => void;
+  callin_queue_update: (data: { position: number }) => void;
+  callin_starting: (data: { callId: string; displayName: string; topic: string; introducerAgentId: string }) => void;
+  callin_audio: (data: { callId: string; audioBlob: ArrayBuffer }) => void;
+  callin_discussion: (data: { callId: string; turnsRemaining: number }) => void;
+  callin_ended: (data: { callId: string }) => void;
+  callin_rejected: (data: { reason: string }) => void;
 }
 
 // ─── Socket Events (Client → Server) ───────────────────────────────────────
@@ -111,9 +116,7 @@ export interface ClientEvents {
   vote: (data: { agentId: string }) => void;
   topic_change: (data: { topic: string }) => void;
   reaction: (data: { emoji: string }) => void;
-  challenge_start: (data: { agentId: string }) => void;
-  challenge_audio: (data: { agentId: string; text: string }) => void;
-  challenge_end: (data?: Record<string, never>) => void;
+  callin_submit: (data: { audioBlob: ArrayBuffer; displayName: string; topic: string; durationMs: number; token: string }) => void;
   pole_vote: (data: { side: 'left' | 'right' }) => void;
 }
 
