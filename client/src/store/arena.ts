@@ -100,10 +100,18 @@ interface ArenaState {
   // Reactions
   incomingReactions: IncomingReaction[];
 
-  // Voice Challenger
-  challengerActive: boolean;
-  challengerAgentId: string | null;
-  challengerViewerName: string | null;
+  // Call-In
+  callInState: 'idle' | 'recording' | 'queued' | 'on_air';
+  callInCallId: string | null;
+  callInQueuePosition: number;
+  callInActive: {
+    callId: string;
+    displayName: string;
+    topic: string;
+    introducerAgentId: string;
+    turnsRemaining: number;
+  } | null;
+  callInAudioBlob: ArrayBuffer | null;
 
   // Sound
   soundMuted: boolean;
@@ -149,9 +157,8 @@ interface ArenaState {
   changeTopic: (topic: string, token?: string) => void;
   quickChaos: (preset: string, token?: string) => void;
   sendReaction: (emoji: string) => void;
-  startChallenge: (agentId: string, stream: MediaStream, viewerName?: string, token?: string) => void;
-  endChallenge: () => void;
-  sendChallengerText: (agentId: string, text: string) => void;
+  submitCallIn: (audioBlob: ArrayBuffer, displayName: string, topic: string, durationMs: number, token: string) => void;
+  resetCallInState: () => void;
   listenCredits: (uid: string) => void;
   stopListeningCredits: () => void;
 }
@@ -274,9 +281,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   injectionCooldown: 0,
   injectionQueue: [],
   incomingReactions: [],
-  challengerActive: false,
-  challengerAgentId: null,
-  challengerViewerName: null,
+  callInState: 'idle' as const,
+  callInCallId: null,
+  callInQueuePosition: 0,
+  callInActive: null,
+  callInAudioBlob: null,
   soundMuted: false,
   audioEnabled: false,
   enableAudio: () => set({ audioEnabled: true }),
@@ -517,12 +526,50 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       }, 2000);
     });
 
-    (socket as any).on('challenger_active', ({ agentId, viewerName }: { agentId: string; viewerName?: string }) => {
-      set({ challengerActive: true, challengerAgentId: agentId, challengerViewerName: viewerName || null });
+    (socket as any).on('callin_queued', ({ callId, position }: { callId: string; position: number }) => {
+      set({ callInState: 'queued' as const, callInCallId: callId, callInQueuePosition: position });
     });
 
-    (socket as any).on('challenger_ended', () => {
-      set({ challengerActive: false, challengerAgentId: null, challengerViewerName: null });
+    (socket as any).on('callin_queue_update', ({ position }: { position: number }) => {
+      set({ callInQueuePosition: position });
+    });
+
+    (socket as any).on('callin_starting', (data: { callId: string; displayName: string; topic: string; introducerAgentId: string }) => {
+      set({ callInActive: { ...data, turnsRemaining: 5 } });
+      const state = get();
+      if (state.callInCallId === data.callId) {
+        set({ callInState: 'on_air' as const });
+      }
+    });
+
+    (socket as any).on('callin_audio', (data: { callId: string; audioBlob: ArrayBuffer }) => {
+      set({ callInAudioBlob: data.audioBlob });
+      const blob = new Blob([data.audioBlob], { type: 'audio/webm;codecs=opus' });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.play().catch(err => console.warn('Call-in audio playback failed:', err));
+      audio.onended = () => URL.revokeObjectURL(url);
+    });
+
+    (socket as any).on('callin_discussion', (data: { callId: string; turnsRemaining: number }) => {
+      set(s => ({
+        callInActive: s.callInActive ? { ...s.callInActive, turnsRemaining: data.turnsRemaining } : null,
+      }));
+    });
+
+    (socket as any).on('callin_ended', () => {
+      set({
+        callInActive: null,
+        callInAudioBlob: null,
+        callInState: 'idle' as const,
+        callInCallId: null,
+        callInQueuePosition: 0,
+      });
+    });
+
+    (socket as any).on('callin_rejected', ({ reason }: { reason: string }) => {
+      console.warn('Call-in rejected:', reason);
+      set({ callInState: 'idle' as const, callInCallId: null, callInQueuePosition: 0 });
     });
 
     (socket as any).on('chaos_status', (data: { active: ChaosRuleStatus[]; justActivated: string[]; justExpired: string[] }) => {
@@ -575,22 +622,19 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     get().socket?.emit('reaction', { emoji });
   },
 
-  startChallenge: (agentId, _stream, viewerName, token) => {
+  submitCallIn: (audioBlob, displayName, topic, durationMs, token) => {
     const socket = get().socket;
     if (!socket) return;
-    socket.emit('challenge_start', { agentId, viewerName, token } as any);
-    set({ challengerActive: true, challengerAgentId: agentId, challengerViewerName: viewerName || null });
+    (socket as any).emit('callin_submit', { audioBlob, displayName, topic, durationMs, token });
+    set({ callInState: 'queued' as const });
   },
 
-  endChallenge: () => {
-    const socket = get().socket;
-    if (!socket) return;
-    socket.emit('challenge_end', {});
-    set({ challengerActive: false, challengerAgentId: null, challengerViewerName: null });
-  },
-
-  sendChallengerText: (agentId, text) => {
-    (get().socket as any)?.emit('challenge_audio', { agentId, text });
+  resetCallInState: () => {
+    set({
+      callInState: 'idle' as const,
+      callInCallId: null,
+      callInQueuePosition: 0,
+    });
   },
 
   listenCredits: (uid) => {
