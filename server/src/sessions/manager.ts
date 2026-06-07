@@ -1174,6 +1174,18 @@ export class SessionManager {
     this.watchdog?.markRealResponse();
     const cleaned = this.stripEmDashes(content);
     (this.io as any).emit('transcript_delta', { agentId, agentName: this.getAgentName(agentId), content: cleaned });
+    // Belt-and-suspenders: if response_start was missed, cancel the 15s no-response
+    // timeout here on the first delta. handleResponseStart should have done this already.
+    if (this.turnTimeoutTimer && !this.turnTextComplete) {
+      clearTimeout(this.turnTimeoutTimer);
+      this.turnTimeoutTimer = null;
+      this.turnTimeoutTimer = setTimeout(() => {
+        if (this.turnManager?.getCurrentSpeaker() === agentId) {
+          console.log(`  [${this.getAgentName(agentId)}] max turn duration (45s) — forcing advance`);
+          this.doAdvanceTurn(agentId);
+        }
+      }, 45000);
+    }
   }
 
   handleSpeechEnd(agentId: string, text: string) {
@@ -1254,6 +1266,21 @@ export class SessionManager {
   }
 
   handleResponseStart(agentId: string) {
+    if (agentId === this.turnManager?.getCurrentSpeaker()) {
+      // Agent started responding — cancel the 15s "no response" timeout.
+      // Without this, slow Napster API responses (8-12s latency) would get
+      // force-skipped at 15s even though the agent is actively speaking.
+      if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
+      // Replace with a generous max-turn-duration timeout (45s — enough for
+      // 80 words of TTS + LLM latency). Only fires if speech_end + talk_state
+      // never arrive (e.g. WebSocket hangs).
+      this.turnTimeoutTimer = setTimeout(() => {
+        if (this.turnManager?.getCurrentSpeaker() === agentId) {
+          console.log(`  [${this.getAgentName(agentId)}] max turn duration (45s) — forcing advance`);
+          this.doAdvanceTurn(agentId);
+        }
+      }, 45000);
+    }
     this.turnManager?.onResponseStarted(agentId);
   }
 
@@ -1378,6 +1405,7 @@ export class SessionManager {
 
   private doAdvanceTurn(agentId: string) {
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
+    this.turnAudioComplete = true; // Stop forwarding old agent's audio immediately
     this.lastTurnAdvanceTime = Date.now();
     const name = this.getAgentName(agentId);
     console.log(`  [${name}] advancing turn`);
@@ -1480,7 +1508,9 @@ export class SessionManager {
         chaosPrompt = this.chaosQueue.getActiveRulesPrompt(agentId);
       }
 
-      // Safety net: if agent doesn't produce any text within 15s, skip them.
+      // Safety net: if agent doesn't START responding within 15s, skip them.
+      // Once the agent starts (handleResponseStart), this is replaced with a
+      // longer 45s max-turn-duration timeout.
       this.turnTimeoutTimer = setTimeout(() => {
         if (this.turnManager?.getCurrentSpeaker() === agentId && !this.turnTextComplete) {
           console.log(`  [${turnAgentName}] no response after 15s — skipping`);
