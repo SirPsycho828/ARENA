@@ -39,9 +39,13 @@ export class ChaosQueue {
   private queue: QueuedItem[] = [];
   private topicQueue: string[] = [];
   private cooldowns: Map<string, number> = new Map();
+  private locked = false;
 
   // Called at the start of every turn by SessionManager
   onTurnStart(): { expired: ChaosRule[]; activated: ChaosRule[]; active: ChaosRule[] } {
+    if (this.locked) {
+      return { expired: [], activated: [], active: [...this.active] };
+    }
     // 1. Decrement turnsRemaining on all active rules
     for (const rule of this.active) {
       rule.turnsRemaining--;
@@ -142,6 +146,7 @@ export class ChaosQueue {
   }
 
   enqueueVoiceChallenge(viewerId: string, viewerName: string, targetAgentId: string, text: string) {
+    if (this.locked) return { ok: false as const, reason: 'callin_active' };
     // Voice challenges skip cooldown and queue size checks — they're special
     if (!text || text.trim().length === 0) return { ok: false as const, reason: 'empty' };
     if (text.length > 500) return { ok: false as const, reason: 'too_long' }; // longer limit for challenges
@@ -162,6 +167,7 @@ export class ChaosQueue {
   }
 
   enqueueTopic(viewerId: string, topic: string) {
+    if (this.locked) return { ok: false as const, reason: 'callin_active' };
     if (!topic || topic.trim().length === 0) return { ok: false as const, reason: 'empty' };
     if (topic.length > MAX_TEXT_LENGTH) return { ok: false as const, reason: 'too_long' };
     if (this.topicQueue.length >= 5) return { ok: false as const, reason: 'topic_queue_full' };
@@ -196,14 +202,20 @@ export class ChaosQueue {
     return [...this.active];
   }
 
+  lock() { this.locked = true; }
+  unlock() { this.locked = false; }
+  isLocked(): boolean { return this.locked; }
+
   stop() {
     this.active = [];
     this.queue = [];
     this.topicQueue = [];
     this.cooldowns.clear();
+    this.locked = false;
   }
 
   private validate(viewerId: string, text: string) {
+    if (this.locked) return { ok: false as const, reason: 'callin_active' };
     if (!text || text.trim().length === 0) return { ok: false as const, reason: 'empty' };
     if (text.length > MAX_TEXT_LENGTH) return { ok: false as const, reason: 'too_long' };
     if (this.queue.length >= MAX_QUEUE) return { ok: false as const, reason: 'queue_full' };
