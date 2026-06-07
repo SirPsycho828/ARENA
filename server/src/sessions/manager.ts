@@ -600,10 +600,11 @@ export class SessionManager {
     displayName: string,
     topic: string,
     durationMs: number,
+    onTranscribed?: (entry: import('./callin-queue.js').CallInEntry) => void,
   ): Promise<{ callId: string; position: number } | null> {
     if (!this.callInQueue || !this.session) return null;
 
-    const result = await this.callInQueue.submit(socketId, audioBuffer, displayName, topic, durationMs);
+    const result = await this.callInQueue.submit(socketId, audioBuffer, displayName, topic, durationMs, onTranscribed);
     if (!result) return null;
 
     console.log(`  [CallIn] Queued: "${displayName}" about "${topic}" (pos ${result.position})`);

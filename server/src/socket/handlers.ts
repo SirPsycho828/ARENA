@@ -223,6 +223,20 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
           data.displayName,
           data.topic,
           data.durationMs,
+          async (entry) => {
+            // Post-transcription moderation
+            if (!entry.transcript) return;
+            const modResult = await moderate(entry.transcript);
+            if (!modResult.ok) {
+              const queue = sessionManager.getCallInQueue();
+              if (queue && entry.status !== 'active') {
+                queue.eject(entry.callId);
+                await creditService.addCredits(user.uid, CREDIT_COSTS.call_in, `refund_moderation_${Date.now()}`);
+                (socket as any).emit('callin_moderated', { callId: entry.callId, reason: modResult.reason });
+                console.log(`  [CallIn] Ejected ${entry.callId} — moderation: ${modResult.reason}`);
+              }
+            }
+          },
         );
 
         if (!result) {

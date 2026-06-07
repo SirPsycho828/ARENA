@@ -28,6 +28,7 @@ export class CallInQueue {
     displayName: string,
     topic: string,
     durationMs: number,
+    onTranscribed?: (entry: CallInEntry) => void,
   ): Promise<{ entry: CallInEntry; position: number } | null> {
     if (this.queue.length >= MAX_QUEUED) return null;
 
@@ -50,10 +51,12 @@ export class CallInQueue {
       entry.transcript = transcript || `(Viewer "${displayName}" called in about: ${topic})`;
       entry.status = 'queued';
       console.log(`  [CallIn] Transcription ready for ${entry.callId}: "${entry.transcript.slice(0, 80)}"`);
+      if (onTranscribed) onTranscribed(entry);
     }).catch(err => {
       console.error(`  [CallIn] Transcription failed for ${entry.callId}:`, (err as Error).message);
       entry.transcript = `(Viewer "${displayName}" called in about: ${topic})`;
       entry.status = 'queued';
+      if (onTranscribed) onTranscribed(entry);
     });
 
     return { entry, position };
@@ -74,6 +77,17 @@ export class CallInQueue {
     this.active = this.queue.shift()!;
     this.active.status = 'active';
     return this.active;
+  }
+
+  /**
+   * Remove an entry from the queue (used when post-transcription moderation fails).
+   * Returns the ejected entry or null if not found / already active.
+   */
+  eject(callId: string): CallInEntry | null {
+    const idx = this.queue.findIndex(e => e.callId === callId);
+    if (idx === -1) return null;
+    const [ejected] = this.queue.splice(idx, 1);
+    return ejected;
   }
 
   /**
