@@ -3,6 +3,7 @@ import type { ServerEvents, ClientEvents } from '../../../shared/types.js';
 import type { SessionManager } from '../sessions/manager.js';
 import { adminAuth } from '../lib/firebase-admin.js';
 import { CreditService, CREDIT_COSTS } from '../lib/credits.js';
+import { moderate } from '../lib/moderation.js';
 
 export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sessionManager: SessionManager) {
   const creditService = new CreditService();
@@ -81,6 +82,13 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
           return socket.emit('injection_rejected', { reason: 'insufficient_credits', remainingMs: 0 });
         }
 
+        // Moderate user text
+        const modResult = await moderate(data.text);
+        if (!modResult.ok) {
+          await creditService.addCredits(user.uid, cost, `refund_moderation_${Date.now()}`);
+          return socket.emit('injection_rejected', { reason: modResult.reason, remainingMs: 0 });
+        }
+
         const result = sessionManager.handleChaosInject(socket.id, user.name, data.text, type, duration);
         if (!result.ok) {
           await creditService.addCredits(user.uid, cost, `refund_${Date.now()}`);
@@ -138,6 +146,13 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
           return socket.emit('injection_rejected', { reason: 'insufficient_credits', remainingMs: 0 });
         }
 
+        // Moderate user topic
+        const modResult = await moderate(data.topic);
+        if (!modResult.ok) {
+          await creditService.addCredits(user.uid, CREDIT_COSTS.topic_change, `refund_moderation_${Date.now()}`);
+          return socket.emit('injection_rejected', { reason: modResult.reason, remainingMs: 0 });
+        }
+
         const result = sessionManager.handleChaosInject(socket.id, user.name, data.topic, 'topic_change');
         if (!result.ok) {
           await creditService.addCredits(user.uid, CREDIT_COSTS.topic_change, `refund_${Date.now()}`);
@@ -181,6 +196,17 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
         const queue = sessionManager.getCallInQueue();
         if (!queue || queue.getQueueLength() >= 3) {
           return (socket as any).emit('callin_rejected', { reason: 'queue_full' });
+        }
+
+        // Reject audio over 60 seconds
+        if (data.durationMs > 60000) {
+          return (socket as any).emit('callin_rejected', { reason: 'too_long' });
+        }
+
+        // Moderate the typed topic field before charging
+        const topicMod = await moderate(data.topic);
+        if (!topicMod.ok) {
+          return (socket as any).emit('callin_rejected', { reason: topicMod.reason });
         }
 
         // Charge credits
