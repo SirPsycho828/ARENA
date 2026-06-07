@@ -13,9 +13,9 @@ interface LandingPageProps {
 
 function SpecimenDebatePanel() {
   const agents = [
-    { name: 'Rico "The Roast" Martinez', tag: 'COMEDIAN', color: '#E63946', speaking: true },
-    { name: 'Dr. Helena Ashworth', tag: 'PROFESSOR', color: '#3B9AE1', speaking: false },
-    { name: 'Darius "Deep State" Kane', tag: 'TRUTHER', color: '#F59E0B', speaking: false },
+    { name: 'Rico "The Roast" Martinez', tag: 'COMEDIAN', color: '#E63946', speaking: true, pic: '/images/AgentProfiles/Rico_ProfilePic.png' },
+    { name: 'Dr. Helena Ashworth', tag: 'PROFESSOR', color: '#3B9AE1', speaking: false, pic: '/images/AgentProfiles/Ashworth_ProfilePic.png' },
+    { name: 'Darius "Deep State" Kane', tag: 'TRUTHER', color: '#F59E0B', speaking: false, pic: '/images/AgentProfiles/Darius_ProfilePic.png' },
   ];
 
   return (
@@ -39,7 +39,7 @@ function SpecimenDebatePanel() {
             style={{ border: agent.speaking ? `2px solid ${agent.color}` : '1px solid var(--color-border)' }}
           >
             <div className="aspect-video bg-muted flex items-center justify-center">
-              <div className="w-8 h-8 rounded-full" style={{ background: agent.color, opacity: 0.3 }} />
+              <img src={agent.pic} alt={agent.name} className="w-12 h-12 rounded-full object-cover ring-2" style={{ ringColor: agent.color }} />
             </div>
             {/* Lower third name plate */}
             <div className="absolute bottom-0 inset-x-0">
@@ -190,11 +190,11 @@ export function LandingPage({ onEnter }: LandingPageProps) {
   }, []);
 
   const agents = [
-    { name: 'Rico "The Roast" Martinez', role: 'Stand-Up Comedian', desc: 'Dismantles arguments through mockery and absurd analogies', color: '#E63946' },
-    { name: 'Dr. Helena Ashworth', role: 'Tenured Professor', desc: 'Cites obscure studies and uses condescending authority', color: '#3B9AE1' },
-    { name: 'Darius "Deep State" Kane', role: 'Conspiracy Theorist', desc: 'Connects everything to shadow organizations', color: '#F59E0B' },
-    { name: 'Ambassador Chen Wei', role: 'Retired Diplomat', desc: 'Uses politeness as a devastating weapon', color: '#16A34A' },
-    { name: 'Zap Thunder', role: 'Gaming Streamer', desc: 'Treats every debate like a championship match', color: '#8B5CF6' },
+    { name: 'Rico "The Roast" Martinez', role: 'Stand-Up Comedian', desc: 'Dismantles arguments through mockery and absurd analogies', color: '#E63946', pic: '/images/AgentProfiles/Rico_ProfilePic.png' },
+    { name: 'Dr. Helena Ashworth', role: 'Tenured Professor', desc: 'Cites obscure studies and uses condescending authority', color: '#3B9AE1', pic: '/images/AgentProfiles/Ashworth_ProfilePic.png' },
+    { name: 'Darius "Deep State" Kane', role: 'Conspiracy Theorist', desc: 'Connects everything to shadow organizations', color: '#F59E0B', pic: '/images/AgentProfiles/Darius_ProfilePic.png' },
+    { name: 'Ambassador Chen Wei', role: 'Retired Diplomat', desc: 'Uses politeness as a devastating weapon', color: '#16A34A', pic: null },
+    { name: 'Zap Thunder', role: 'Gaming Streamer', desc: 'Treats every debate like a championship match', color: '#8B5CF6', pic: null },
   ];
 
   return (
@@ -455,12 +455,26 @@ export function LandingPage({ onEnter }: LandingPageProps) {
                 transition={{ delay: i * 0.1, duration: 0.5 }}
                 className="group relative rounded-md border border-border bg-card overflow-hidden hover:border-border transition-colors"
               >
-                {/* Agent avatar placeholder */}
+                {/* Agent avatar */}
                 <div className="aspect-square bg-muted flex items-center justify-center relative overflow-hidden">
-                  <div className="w-16 h-16 rounded-full opacity-20" style={{ background: agent.color }} />
+                  {agent.pic ? (
+                    <img
+                      src={agent.pic}
+                      alt={agent.name}
+                      className="w-24 h-24 rounded-full object-cover ring-2 shadow-lg"
+                      style={{ boxShadow: `0 0 20px ${agent.color}30`, borderColor: agent.color }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-20 h-20 rounded-full border-2 border-dashed flex items-center justify-center" style={{ borderColor: `${agent.color}60` }}>
+                        <span className="text-2xl">?</span>
+                      </div>
+                      <span className="text-[10px] font-display tracking-wider animate-pulse" style={{ color: agent.color }}>COMING SOON</span>
+                    </div>
+                  )}
                   {/* Decorative radial gradient */}
                   <div
-                    className="absolute inset-0 opacity-10"
+                    className="absolute inset-0 opacity-10 pointer-events-none"
                     style={{ background: `radial-gradient(circle at 50% 50%, ${agent.color}40, transparent 70%)` }}
                   />
                 </div>
