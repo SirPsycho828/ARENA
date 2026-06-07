@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, MessageSquare, Sparkles, Send, Lock } from 'lucide-react';
+import { Zap, MessageSquare, Sparkles, Send, Lock, Phone } from 'lucide-react';
 import { useArenaStore } from '../store/arena';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from './AuthModal';
@@ -16,8 +16,9 @@ export function ChaosPanel() {
   const activeRules = useArenaStore((s) => s.activeRules);
   const session = useArenaStore((s) => s.session);
   const credits = useArenaStore((s) => s.credits);
+  const callInActive = useArenaStore((s) => s.callInActive);
 
-  const isActive = session?.status === 'active';
+  const isActive = session?.status === 'active' && !callInActive;
   const cost = mode === 'topic_change' ? 5 : duration;
   const canAfford = credits !== null && credits >= cost;
 
@@ -47,6 +48,13 @@ export function ChaosPanel() {
         </div>
 
         <div className="p-4 space-y-4">
+          {callInActive && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-sm bg-accent/10 border border-accent/30">
+              <Phone size={14} className="text-accent" />
+              <span className="text-xs font-mono text-accent">Chaos paused during call-in</span>
+            </div>
+          )}
+
           {!user ? (
             <>
               <div className="flex flex-col items-center gap-2 py-3">

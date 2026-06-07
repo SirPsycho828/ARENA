@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Coins, Zap, Mic, MessageSquare } from 'lucide-react';
+import { X, Coins, Zap, Phone, MessageSquare } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useArenaStore } from '../store/arena';
 
@@ -20,7 +20,7 @@ const COSTS = [
   { icon: Zap, label: 'Chaos Rule', cost: '1/turn', color: 'text-primary' },
   { icon: Zap, label: 'Quick Chaos', cost: '3', color: 'text-primary' },
   { icon: MessageSquare, label: 'Topic', cost: '5', color: 'text-accent' },
-  { icon: Mic, label: 'Voice Challenge', cost: '3', color: 'text-accent' },
+  { icon: Phone, label: 'Call In', cost: '10', color: 'text-accent' },
 ];
 
 export function CreditShop({ open, onClose }: CreditShopProps) {

@@ -11,7 +11,8 @@ import { TranscriptFeed } from './components/TranscriptFeed';
 import { ChaosPanel } from './components/ChaosPanel';
 import { ChaosStatusBar } from './components/ChaosStatusBar';
 import { ReactionOverlay } from './components/ReactionOverlay';
-import { VoiceChallenger } from './components/VoiceChallenger';
+import { CallInPanel } from './components/CallInPanel';
+import { CallInBanner } from './components/CallInBanner';
 import { VictoryScreen } from './components/VictoryScreen';
 import { JudgePanel } from './components/JudgePanel';
 import { ToolEffects } from './components/ToolEffects';
@@ -39,9 +40,6 @@ function App() {
   const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
   const incomingReactions = useArenaStore((s) => s.incomingReactions);
   const sendReaction = useArenaStore((s) => s.sendReaction);
-  const challengerActive = useArenaStore((s) => s.challengerActive);
-  const startChallenge = useArenaStore((s) => s.startChallenge);
-  const endChallenge = useArenaStore((s) => s.endChallenge);
   const victoryData = useArenaStore((s) => s.victoryData);
   const enableAudio = useArenaStore((s) => s.enableAudio);
 
@@ -89,13 +87,6 @@ function App() {
     sounds.reaction();
   }, [sendReaction]);
 
-  const handleChallengeStart = useCallback((agentId: string, stream: MediaStream, viewerName?: string, token?: string) => {
-    startChallenge(agentId, stream, viewerName, token);
-  }, [startChallenge]);
-
-  const handleChallengeEnd = useCallback(() => {
-    endChallenge();
-  }, [endChallenge]);
 
   return (
     <>
@@ -196,14 +187,7 @@ function App() {
             </div>
             <div className="p-4 space-y-4">
               <ChaosPanel />
-              {session?.status === 'active' && (
-                <VoiceChallenger
-                  agents={agents}
-                  isActive={challengerActive}
-                  onStart={handleChallengeStart}
-                  onEnd={handleChallengeEnd}
-                />
-              )}
+              {session?.status === 'active' && <CallInPanel />}
             </div>
           </aside>
         </div>
@@ -257,19 +241,15 @@ function App() {
 
               <div className="p-4 space-y-4">
                 <ChaosPanel />
-                {session?.status === 'active' && (
-                  <VoiceChallenger
-                    agents={agents}
-                    isActive={challengerActive}
-                    onStart={handleChallengeStart}
-                    onEnd={handleChallengeEnd}
-                  />
-                )}
+                {session?.status === 'active' && <CallInPanel />}
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Call-in banner (visible to all viewers during active call-in) */}
+      {phase === 'arena' && <CallInBanner />}
 
       {/* Reaction overlay */}
       {phase === 'arena' && (
