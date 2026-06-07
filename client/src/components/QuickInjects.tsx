@@ -40,7 +40,7 @@ export function QuickInjects() {
           <Sparkles size={12} />
           Quick Chaos
         </div>
-        <span className="text-[10px] text-muted-foreground font-mono">3 credits each</span>
+        <span className="text-[10px] text-muted-foreground font-mono">3 credits · lasts 3 turns</span>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {PRESETS.map((preset) => (

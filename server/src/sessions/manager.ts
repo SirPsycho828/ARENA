@@ -1467,6 +1467,16 @@ export class SessionManager {
           justExpired: chaosUpdate.expired.map(r => r.id),
         });
 
+        // When rules expire, send explicit expiration notice to ALL agents
+        // so they stop continuing the style from conversation context
+        if (chaosUpdate.expired.length > 0 && this.session) {
+          const notice = this.chaosQueue.getExpirationNotice(chaosUpdate.expired);
+          for (const id of this.session.agentIds) {
+            this.omniagent.sendMessage(id, 'system', notice, false);
+          }
+          console.log(`  [Chaos] Expired ${chaosUpdate.expired.length} rule(s) — notified all agents`);
+        }
+
         chaosPrompt = this.chaosQueue.getActiveRulesPrompt(agentId);
       }
 

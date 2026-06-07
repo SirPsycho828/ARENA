@@ -73,22 +73,31 @@ export class ChaosQueue {
     return { expired, activated, active: [...this.active] };
   }
 
+  // Build a message to tell agents that specific rules have expired
+  getExpirationNotice(expired: ChaosRule[]): string {
+    if (expired.length === 0) return '';
+    const names = expired.map(r => `"${r.text}"`).join(', ');
+    return `CHAOS RULE EXPIRED: ${names}. This rule is OVER. IMMEDIATELY return to your normal speaking style and personality. Do NOT continue the expired style in any way.`;
+  }
+
   // Format active rules for injection into agent prompts
   getActiveRulesPrompt(agentId?: string): string {
     // Filter: include rules that target all agents OR this specific agent
     const relevant = this.active.filter(r =>
       r.targetAgentId === null || r.targetAgentId === agentId
     );
-    if (relevant.length === 0) return '';
+    if (relevant.length === 0) {
+      return '\nNO CHAOS RULES ARE ACTIVE. Speak in your normal style and personality. Do NOT continue any previous chaos rule styles (pirate, rhyming, Shakespearean, etc.) — those have ended.\n';
+    }
 
     const lines = relevant.map((r, i) => {
       if (r.source === 'voice_challenge' && r.viewerName) {
         return `${i + 1}. VIEWER CHALLENGE from ${r.viewerName}: "${r.text}" — Address ${r.viewerName} by name in your response. (this turn only)`;
       }
-      return `${i + 1}. "${r.text}" (${r.turnsRemaining} turn${r.turnsRemaining !== 1 ? 's' : ''} remaining)`;
+      return `${i + 1}. "${r.text}" (${r.turnsRemaining} turn${r.turnsRemaining !== 1 ? 's' : ''} remaining — when turns reach 0, STOP this style immediately)`;
     });
 
-    return `\nACTIVE CHAOS RULES — you MUST follow these:\n${lines.join('\n')}\n`;
+    return `\nACTIVE CHAOS RULES — you MUST follow these (and ONLY these — if a previous rule is not listed here, it has EXPIRED and you must STOP following it):\n${lines.join('\n')}\n`;
   }
 
   enqueueRule(viewerId: string, viewerName: string | null, text: string, duration: number) {
