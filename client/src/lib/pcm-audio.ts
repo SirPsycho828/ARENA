@@ -18,12 +18,12 @@ export class PcmAudioPlayer {
   private lastSample = 0;
 
   static readonly STORAGE_KEY = 'arena-pcm-volume';
-  static readonly DEFAULT_VOLUME = 0.75;
+  static readonly DEFAULT_VOLUME = 0.50;
 
   constructor() {
     this.ctx = new AudioContext();
 
-    // Restore persisted volume (default 75% — gives headroom for sibilant peaks)
+    // Restore persisted volume (default 50%)
     this._volume = PcmAudioPlayer.DEFAULT_VOLUME;
     try {
       const saved = localStorage.getItem(PcmAudioPlayer.STORAGE_KEY);
