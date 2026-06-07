@@ -5,7 +5,7 @@ export const CREDIT_COSTS = {
   rule_per_turn: 1,
   quick_chaos: 3,
   topic_change: 5,
-  voice_challenge: 3,
+  call_in: 10,
 } as const;
 
 const STARTER_CREDITS = 10;
