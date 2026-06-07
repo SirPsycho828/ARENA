@@ -87,6 +87,7 @@ export class CallInQueue {
   }
 
   getActive(): CallInEntry | null { return this.active; }
+  hasActive(): boolean { return this.active !== null; }
 
   getQueuePositions(): Array<{ callId: string; socketId: string; position: number }> {
     return this.queue.map((e, i) => ({ callId: e.callId, socketId: e.socketId, position: i + 1 }));

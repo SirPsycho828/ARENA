@@ -472,6 +472,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
           session: s.session ? { ...s.session, status: 'ended' } : null,
           currentSpeaker: null,
           streamingTranscript: null,
+          callInActive: null,
         });
         return;
       }
@@ -493,6 +494,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         session: s.session ? { ...s.session, status: 'ended' } : null,
         currentSpeaker: null,
         victoryData,
+        callInActive: null,
       });
     });
 

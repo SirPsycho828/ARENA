@@ -430,6 +430,12 @@ export class SessionManager {
     this.session.status = 'ended';
     this.session.endedAt = Date.now();
 
+    // Clean up active call-in before stopping (so clients clear banner)
+    if (this.callInQueue?.hasActive() || this.turnManager?.isInCallIn()) {
+      const callId = this.turnManager?.getCallInCallId() || 'unknown';
+      (this.io as any).emit('callin_ended', { callId });
+    }
+
     this.turnManager?.stop();
     this.chaosQueue?.stop();
     this.callInQueue?.stop();
@@ -657,6 +663,9 @@ export class SessionManager {
   }
 
   private playCallInAudio(entry: CallInEntry) {
+    // Pause turn advancement so agents don't talk over the caller's audio
+    this.turnManager?.pause();
+
     (this.io as any).emit('callin_audio', {
       callId: entry.callId,
       audioBlob: entry.audioBuffer,
@@ -678,13 +687,16 @@ export class SessionManager {
     for (const agentId of this.session.agentIds) {
       this.omniagent.sendMessage(
         agentId, 'system',
-        `The caller said: "${transcript}". Discuss this for the next 5 turns. Address the caller by name (${entry.displayName}). Be entertaining.`,
+        `A viewer named ${entry.displayName} just called in and said: "${transcript}". React to what they said. You can mention their name once but don't keep repeating it every turn. Be entertaining.`,
         false
       );
     }
 
     this.turnManager.enterCallIn(entry.callId, 5);
     (this.io as any).emit('callin_discussion', { callId: entry.callId, turnsRemaining: 5 });
+
+    // Resume turn advancement now that discussion begins
+    this.turnManager.resume();
   }
 
   private handleCallInComplete(callId: string) {
@@ -987,6 +999,12 @@ export class SessionManager {
 
   private async rotateTopic() {
     if (!this.session || this.session.status !== 'active') return;
+
+    // Don't rotate topic during an active call-in (audio playback or discussion)
+    if (this.turnManager?.isInCallIn() || this.callInQueue?.hasActive()) {
+      console.log('  [Topic Rotation] Skipped — call-in active');
+      return;
+    }
 
     try {
       // Check viewer-submitted topic queue first
