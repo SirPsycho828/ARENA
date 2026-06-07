@@ -4,6 +4,7 @@ import { OmniagentManager, type AgentInstance } from '../omniagent/manager.js';
 import { TurnManager } from '../orchestration/turn-manager.js';
 import { TranscriptRelay } from '../orchestration/transcript-relay.js';
 import { ChaosQueue } from './chaos-queue.js';
+import { CallInQueue, type CallInEntry } from './callin-queue.js';
 import { db } from '../db/index.js';
 import type {
   AgentConfig,
@@ -209,6 +210,7 @@ export class SessionManager {
   private restartRetryCount = 0;
   private isRestarting = false;
   private watchdog: { pause(): void; resume(): void; markRealResponse(): void } | null = null;
+  private callInQueue: CallInQueue | null = null;
 
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
@@ -385,6 +387,7 @@ export class SessionManager {
     this.turnManager = new TurnManager({ mode: 'dynamic' });
     this.relay = new TranscriptRelay(this.omniagent);
     this.chaosQueue = new ChaosQueue();
+    this.callInQueue = new CallInQueue();
 
     this.wireTurnManagerEvents();
 
@@ -429,6 +432,7 @@ export class SessionManager {
 
     this.turnManager?.stop();
     this.chaosQueue?.stop();
+    this.callInQueue?.stop();
     this.omniagent.disconnectAll();
 
     // Delete agents from Napster API to free connection pool (WebRTC slots)
@@ -460,6 +464,7 @@ export class SessionManager {
     this.turnManager = null;
     this.relay = null;
     this.chaosQueue = null;
+    this.callInQueue = null;
 
     if (reason !== 'shutdown') {
       this.restartWithRetry();
@@ -579,82 +584,125 @@ export class SessionManager {
     this.io.emit('vote_update', this.voteTallies);
   }
 
-  // ─── Voice Challenger ─────────────────────────────────────────────────
+  // ─── Call-In System ───────────────────────────────────────────────────
 
-  private activeChallenger: { viewerId: string; agentId: string; viewerName: string } | null = null;
+  getCallInQueue(): CallInQueue | null { return this.callInQueue; }
 
-  handleChallengerStart(viewerId: string, agentId: string, viewerName?: string) {
-    if (!this.session) return;
+  async handleCallInSubmit(
+    socketId: string,
+    audioBuffer: Buffer,
+    displayName: string,
+    topic: string,
+    durationMs: number,
+  ): Promise<{ callId: string; position: number } | null> {
+    if (!this.callInQueue || !this.session) return null;
 
-    const name = viewerName || 'Challenger';
-    this.activeChallenger = { viewerId, agentId, viewerName: name };
+    const result = await this.callInQueue.submit(socketId, audioBuffer, displayName, topic, durationMs);
+    if (!result) return null;
 
-    // Pause turn manager during challenge
-    this.turnManager?.pause();
-
-    // Notify the agent that a human challenger has entered
-    const agentName = this.agentConfigs.get(agentId)?.name || 'Agent';
-    this.omniagent.sendMessage(
-      agentId, 'system',
-      `A LIVE HUMAN CHALLENGER named "${name}" has entered the arena to debate you directly! Address them by name. The audience is watching. Be entertaining, engage with them, and don't hold back. You have 60 seconds.`,
-      false
-    );
-
-    // Notify other agents
-    for (const otherId of this.session.agentIds) {
-      if (otherId !== agentId) {
-        this.omniagent.sendMessage(
-          otherId, 'system',
-          `A human challenger named "${name}" has entered the arena to take on ${agentName}! Watch and react. You may get a chance to comment.`,
-          false
-        );
-      }
-    }
-
-    this.emitDebug('challenger', agentId, agentName, `Challenger "${name}" entered`);
-    console.log(`  CHALLENGER ACTIVE: ${viewerId} (${name}) → ${agentName}`);
+    console.log(`  [CallIn] Queued: "${displayName}" about "${topic}" (pos ${result.position})`);
+    return { callId: result.entry.callId, position: result.position };
   }
 
-  handleChallengerAudio(agentId: string, text: string) {
-    if (!this.activeChallenger || !this.session) return;
+  private checkCallInQueue() {
+    if (!this.callInQueue || !this.turnManager || !this.session) return;
+    if (this.turnManager.isInCallIn()) return;
+    if (!this.callInQueue.hasReady()) return;
 
-    // Send the challenger's transcribed speech to the target agent
-    this.omniagent.sendMessage(agentId, 'user', `[HUMAN CHALLENGER said]: "${text}"`, true);
+    const entry = this.callInQueue.popNext();
+    if (!entry) return;
 
-    // Also broadcast as a transcript for viewers
-    const viewerName = this.activeChallenger.viewerName || 'Challenger';
-    const msg: TranscriptMessage = {
-      agentId: 'challenger',
-      agentName: viewerName,
-      text,
-      timestamp: Date.now(),
-    };
-    this.recentTranscripts.push(msg);
-    this.io.emit('transcript', msg);
+    this.startCallIn(entry);
   }
 
-  handleChallengerEnd(viewerId: string) {
-    if (!this.activeChallenger) return;
+  private startCallIn(entry: CallInEntry) {
+    if (!this.session || !this.turnManager || !this.chaosQueue) return;
 
-    const agentId = this.activeChallenger.agentId;
-    const agentName = this.agentConfigs.get(agentId)?.name || 'Agent';
-    this.activeChallenger = null;
+    console.log(`  [CallIn] Starting: "${entry.displayName}" about "${entry.topic}"`);
 
-    // Resume turn manager
-    this.turnManager?.resume();
+    // Lock chaos
+    this.chaosQueue.lock();
 
-    // Notify agents
-    if (this.session) {
-      for (const id of this.session.agentIds) {
-        this.omniagent.sendMessage(
-          id, 'system',
-          `The human challenger has left the arena. Resume the debate.`,
-          false
-        );
+    // Pick random introducer
+    const introducerIdx = Math.floor(Math.random() * this.session.agentIds.length);
+    const introducerId = this.session.agentIds[introducerIdx];
+    const introducerName = this.agentConfigs.get(introducerId)?.name || 'Agent';
+
+    // Notify all viewers
+    (this.io as any).emit('callin_starting', {
+      callId: entry.callId,
+      displayName: entry.displayName,
+      topic: entry.topic,
+      introducerAgentId: introducerId,
+    });
+
+    // Force introducer as next speaker and store pending state
+    this.turnManager.forceNext(introducerId);
+    (this as any)._pendingCallIn = entry;
+    (this as any)._pendingCallInIntroducerId = introducerId;
+
+    this.emitDebug('callin', introducerId, introducerName, `Call-in from "${entry.displayName}": ${entry.topic}`);
+    this.emitQueueUpdates();
+  }
+
+  private emitQueueUpdates() {
+    if (!this.callInQueue) return;
+    for (const pos of this.callInQueue.getQueuePositions()) {
+      const sockets = (this.io as any).sockets?.sockets;
+      if (sockets) {
+        const s = sockets.get(pos.socketId);
+        if (s) s.emit('callin_queue_update', { position: pos.position });
       }
     }
+  }
 
-    console.log(`  CHALLENGER LEFT: ${viewerId}`);
+  private playCallInAudio(entry: CallInEntry) {
+    (this.io as any).emit('callin_audio', {
+      callId: entry.callId,
+      audioBlob: entry.audioBuffer,
+    });
+
+    const waitMs = entry.durationMs + 1000;
+    console.log(`  [CallIn] Broadcasting audio (${entry.durationMs}ms), waiting ${waitMs}ms before discussion`);
+
+    setTimeout(() => {
+      this.startCallInDiscussion(entry);
+    }, waitMs);
+  }
+
+  private startCallInDiscussion(entry: CallInEntry) {
+    if (!this.session || !this.turnManager) return;
+
+    const transcript = entry.transcript || `(called in about: ${entry.topic})`;
+
+    for (const agentId of this.session.agentIds) {
+      this.omniagent.sendMessage(
+        agentId, 'system',
+        `The caller said: "${transcript}". Discuss this for the next 5 turns. Address the caller by name (${entry.displayName}). Be entertaining.`,
+        false
+      );
+    }
+
+    this.turnManager.enterCallIn(entry.callId, 5);
+    (this.io as any).emit('callin_discussion', { callId: entry.callId, turnsRemaining: 5 });
+  }
+
+  private handleCallInComplete(callId: string) {
+    if (!this.callInQueue || !this.chaosQueue || !this.session) return;
+
+    console.log(`  [CallIn] Discussion complete for ${callId}`);
+
+    this.callInQueue.completeActive();
+    this.chaosQueue.unlock();
+    (this.io as any).emit('callin_ended', { callId });
+
+    for (const agentId of this.session.agentIds) {
+      this.omniagent.sendMessage(
+        agentId, 'system',
+        'The call-in discussion is over. Resume the normal debate.',
+        false
+      );
+    }
   }
 
   // ─── State Accessors ───────────────────────────────────────────────────
@@ -1438,6 +1486,11 @@ export class SessionManager {
       this.generatePolesFromTranscript();
     }
 
+    // Check for queued call-ins at turn boundary
+    if (!this.turnManager?.isInCallIn()) {
+      setTimeout(() => this.checkCallInQueue(), 100);
+    }
+
     this.turnManager?.onSpeechEnd(agentId, '');
   }
 
@@ -1498,6 +1551,35 @@ export class SessionManager {
       this.emitDebug('turn_start', agentId, turnAgentName, 'Turn started');
       console.log(`  [Turn] ${turnAgentName}'s turn`);
 
+      // ── Call-in introduction turn ──
+      const pendingCallIn = (this as any)._pendingCallIn as CallInEntry | undefined;
+      const pendingIntroducerId = (this as any)._pendingCallInIntroducerId as string | undefined;
+      if (pendingCallIn && pendingIntroducerId === agentId) {
+        (this as any)._pendingCallIn = undefined;
+        (this as any)._pendingCallInIntroducerId = undefined;
+
+        const introPrompt = `A viewer named ${pendingCallIn.displayName} has called in about: ${pendingCallIn.topic}. Introduce them to the audience enthusiastically, then say "Let's hear from them!" Do NOT discuss the topic yet, just introduce.`;
+        this.omniagent.sendMessage(agentId, 'user', introPrompt, true);
+
+        // After this turn completes, play the caller's audio
+        const entry = pendingCallIn;
+        const introPlaybackHandler = () => {
+          this.turnManager!.removeListener('turn_end', introPlaybackHandler);
+          setTimeout(() => this.playCallInAudio(entry), 500);
+        };
+        this.turnManager!.on('turn_end', introPlaybackHandler);
+
+        // Set the no-response timeout for the introduction turn
+        this.turnTimeoutTimer = setTimeout(() => {
+          if (this.turnManager?.getCurrentSpeaker() === agentId && !this.turnTextComplete) {
+            console.log(`  [${turnAgentName}] no response to intro after 15s — skipping`);
+            this.turnManager?.onSpeechEnd(agentId, '');
+          }
+        }, 15000);
+
+        return; // Skip normal prompt
+      }
+
       // Process chaos queue at turn start
       let chaosPrompt = '';
       if (this.chaosQueue) {
@@ -1529,6 +1611,15 @@ export class SessionManager {
         }
 
         chaosPrompt = this.chaosQueue.getActiveRulesPrompt(agentId);
+      }
+
+      // ── Call-in discussion turn tracking ──
+      if (this.turnManager?.isInCallIn()) {
+        const remaining = this.turnManager.getCallInTurnsRemaining();
+        const callId = this.turnManager.getCallInCallId();
+        if (callId) {
+          (this.io as any).emit('callin_discussion', { callId, turnsRemaining: remaining });
+        }
       }
 
       // Safety net: if agent doesn't START responding within 15s, skip them.
@@ -1574,6 +1665,11 @@ export class SessionManager {
 
     this.turnManager.on('turn_interrupted', ({ byAgentId }: { byAgentId: string }) => {
       console.log(`  [Turn] Interrupted by ${this.agentConfigs.get(byAgentId)?.name}`);
+    });
+
+    this.turnManager.on('callin_complete', ({ callId }: { callId?: string }) => {
+      if (callId) this.handleCallInComplete(callId);
+      setTimeout(() => this.checkCallInQueue(), 1000);
     });
   }
 }

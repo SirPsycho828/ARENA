@@ -160,48 +160,56 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
       });
     });
 
-    // ─── Voice Challenger ───────────────────────────────────────────────────
+    // ─── Call-In ───────────────────────────────────���────────────────────────
 
-    socket.on('challenge_start', async (data) => {
+    (socket as any).on('callin_submit', async (data: {
+      audioBlob: ArrayBuffer;
+      displayName: string;
+      topic: string;
+      durationMs: number;
+      token: string;
+    }) => {
       try {
-        const token = (data as any).token;
-        const user = await verifyToken(token);
+        const user = await verifyToken(data.token);
         if (!user) {
-          return socket.emit('injection_rejected', { reason: 'auth_required', remainingMs: 0 });
+          return (socket as any).emit('callin_rejected', { reason: 'auth_required' });
         }
 
         await creditService.ensureUser(user.uid, user.name);
-        const charged = await creditService.deductCredits(user.uid, CREDIT_COSTS.voice_challenge, 'voice_challenge', data.agentId);
-        if (!charged) {
-          return socket.emit('injection_rejected', { reason: 'insufficient_credits', remainingMs: 0 });
+
+        // Check queue capacity BEFORE charging
+        const queue = sessionManager.getCallInQueue();
+        if (!queue || queue.getQueueLength() >= 3) {
+          return (socket as any).emit('callin_rejected', { reason: 'queue_full' });
         }
 
-        const viewerName = user.name || (data as any).viewerName || 'Challenger';
-        console.log(`  CHALLENGER APPROACHING! ${socket.id} (${viewerName}) → ${data.agentId}`);
+        // Charge credits
+        const charged = await creditService.deductCredits(user.uid, CREDIT_COSTS.call_in, 'call_in', data.topic);
+        if (!charged) {
+          return (socket as any).emit('callin_rejected', { reason: 'insufficient_credits' });
+        }
 
-        io.emit('challenger_active' as any, {
-          viewerId: socket.id,
-          agentId: data.agentId,
-          viewerName,
-          startedAt: Date.now(),
-        });
+        // Submit to queue
+        const audioBuffer = Buffer.from(data.audioBlob);
+        const result = await sessionManager.handleCallInSubmit(
+          socket.id,
+          audioBuffer,
+          data.displayName,
+          data.topic,
+          data.durationMs,
+        );
 
-        sessionManager.handleChallengerStart(socket.id, data.agentId, viewerName);
+        if (!result) {
+          await creditService.addCredits(user.uid, CREDIT_COSTS.call_in, `refund_${Date.now()}`);
+          return (socket as any).emit('callin_rejected', { reason: 'queue_full' });
+        }
+
+        (socket as any).emit('callin_queued', { callId: result.callId, position: result.position });
+        console.log(`  [CallIn] ${data.displayName} queued (pos ${result.position})`);
       } catch (err) {
-        console.error('  [challenge_start] Firestore error:', (err as Error).message);
-        socket.emit('injection_rejected', { reason: 'server_error', remainingMs: 0 });
+        console.error('  [callin_submit] Error:', (err as Error).message);
+        (socket as any).emit('callin_rejected', { reason: 'server_error' });
       }
-    });
-
-    socket.on('challenge_audio', ((data: { agentId: string; text: string }) => {
-      // Relay transcribed text from challenger to the target agent
-      sessionManager.handleChallengerAudio(data.agentId, data.text);
-    }) as any);
-
-    socket.on('challenge_end', () => {
-      console.log(`  Challenge ended by ${socket.id}`);
-      io.emit('challenger_ended' as any, { viewerId: socket.id });
-      sessionManager.handleChallengerEnd(socket.id);
     });
 
     (socket as any).on('playback_done', (data: { agentId: string; generation: number }) => {
