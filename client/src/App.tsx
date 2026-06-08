@@ -19,6 +19,7 @@ import { ToolEffects } from './components/ToolEffects';
 import { TopicReveal } from './components/TopicReveal';
 import { sounds } from './lib/sounds';
 import { ConsensusNeedle } from './components/ConsensusNeedle';
+import { VideoSyncOverlay } from './components/VideoSyncOverlay';
 import { getModerationMessage } from './lib/moderation-messages';
 import { Zap, X } from 'lucide-react';
 
@@ -149,24 +150,27 @@ function App() {
             {session && (
               <>
                 {/* Agent video grid */}
-                <div className={`grid gap-2 ${
-                  agents.length <= 2
-                    ? 'grid-cols-1 sm:grid-cols-2'
-                    : agents.length === 3
-                    ? 'grid-cols-1 sm:grid-cols-3'
-                    : agents.length === 4
-                    ? 'grid-cols-2 lg:grid-cols-4'
-                    : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
-                }`}>
-                  {agents.map((agent) => (
-                    <AgentPanel
-                      key={agent.id}
-                      id={agent.id}
-                      name={agent.name}
-                      personality={agent.personality}
-                      color={agent.color}
-                    />
-                  ))}
+                <div className="relative">
+                  <div className={`grid gap-2 ${
+                    agents.length <= 2
+                      ? 'grid-cols-1 sm:grid-cols-2'
+                      : agents.length === 3
+                      ? 'grid-cols-1 sm:grid-cols-3'
+                      : agents.length === 4
+                      ? 'grid-cols-2 lg:grid-cols-4'
+                      : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+                  }`}>
+                    {agents.map((agent) => (
+                      <AgentPanel
+                        key={agent.id}
+                        id={agent.id}
+                        name={agent.name}
+                        personality={agent.personality}
+                        color={agent.color}
+                      />
+                    ))}
+                  </div>
+                  <VideoSyncOverlay />
                 </div>
 
                 <ConsensusNeedle />
