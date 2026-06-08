@@ -369,24 +369,28 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     });
 
     // Per-viewer Napster avatar tokens — client renders avatars directly in iframes
+    // Merge with existing tokens so retries don't destroy already-working avatars
     (socket as any).on('avatar_tokens', ({ tokens }: { tokens: Record<string, string> }) => {
-      set({ avatarTokens: tokens });
+      const existing = get().avatarTokens;
+      set({ avatarTokens: { ...existing, ...tokens } });
     });
 
-    // Auto-request avatar tokens if none received while session is active
+    // Auto-request avatar tokens until all agents have them
     let avatarRetryCount = 0;
     const avatarRetryInterval = setInterval(() => {
       const state = get();
-      if (Object.keys(state.avatarTokens).length > 0) {
+      const agentCount = state.session?.agents?.length || 0;
+      const tokenCount = Object.keys(state.avatarTokens).length;
+      if (tokenCount >= agentCount && agentCount > 0) {
         clearInterval(avatarRetryInterval);
         return;
       }
-      if (state.session?.status === 'active' && avatarRetryCount < 5) {
+      if (state.session?.status === 'active' && avatarRetryCount < 8) {
         avatarRetryCount++;
-        console.log(`[Avatar] No tokens received — requesting (attempt ${avatarRetryCount}/5)...`);
+        console.log(`[Avatar] Tokens: ${tokenCount}/${agentCount} — requesting (attempt ${avatarRetryCount}/8)...`);
         socket.emit('request_avatar_tokens' as any);
       }
-    }, 8000);
+    }, 6000);
 
     // PCM audio chunks from server (Napster WebSocket audio)
     pcmPlayer = new PcmAudioPlayer();

@@ -169,15 +169,15 @@ HARD RULES:
 - When the audience injects a CHAOS RULE, follow it immediately.
 - You have tools: vote standings, fact-check, audience mood, dramatic pause, crowd rally, mic drop. Use them sometimes, not every turn.
 
-DISAGREE MORE:
-- This is a DEBATE, not a support group. If someone makes a point, CHALLENGE it. Find the flaw. Push back.
-- Don't just agree and add on. That's boring. Find something wrong with what they said, even if you mostly agree.
-- If you catch yourself about to say "exactly" or "right" or "yeah, totally" — STOP. Find a different angle instead.
-- The audience is here for CONFLICT. Give them something to argue about. Take the spicier take.
+KEEP IT INTERESTING:
+- This is a DEBATE. Sometimes agree, sometimes disagree, but always add something NEW. Don't just echo what someone said.
+- If you agree with a point, build on it with a fresh angle or example they didn't mention. Don't just say "exactly" and restate their point.
+- If you disagree, say WHY with a specific example. Don't just say "nah" and make the same counter-argument every time.
+- Vary your approach. Sometimes challenge, sometimes concede a point and pivot, sometimes bring up something nobody mentioned yet.
 
 WHAT KILLS THE VIBE (never do these):
-- Starting with "Exactly", "Right", "Yeah", "Absolutely", "I agree", or any agreement word. BANNED. Just make your point.
-- Starting with someone's name. Don't say "Rico, that's wrong" or "Helena, come on." Just say your point directly: "That's wrong because..." or "Come on, that logic doesn't hold." You know who you're talking to. Save names for rare emphasis, not every turn.
+- Starting the same way twice in a row. If you started your last turn with "Nah," start this one differently. Mix up your openings every single turn.
+- Starting with someone's name every turn. Don't say "Rico, that's wrong" or "Helena, come on" as your opener. Save names for rare emphasis.
 - Addressing "the audience" directly. You're talking to the OTHER DEBATERS.
 - Echoing what someone just said. Don't repeat their point back to them. Say something NEW.
 - Following the exact same structure every turn. Mix it up.
@@ -1697,11 +1697,11 @@ export class SessionManager {
           .join('\n');
 
         const framings = [
-          `Topic: "${topic}"\nRecent conversation:\n${context}\n\nYour turn. Push back on something.`,
-          `Topic: "${topic}"\nWhat's been said:\n${context}\n\nWhat's wrong with what they just said?`,
-          `Topic: "${topic}"\nThe conversation so far:\n${context}\n\nYour turn. Don't just agree.`,
-          `Topic: "${topic}"\nYou just heard:\n${context}\n\nCall out something you disagree with.`,
-          `Topic: "${topic}"\nRecent:\n${context}\n\nChallenge their take.`,
+          `Topic: "${topic}"\nRecent conversation:\n${context}\n\nYour turn. Say something they haven't considered.`,
+          `Topic: "${topic}"\nWhat's been said:\n${context}\n\nJump in. Keep it interesting.`,
+          `Topic: "${topic}"\nThe conversation so far:\n${context}\n\nYour turn. Bring a new angle.`,
+          `Topic: "${topic}"\nYou just heard:\n${context}\n\nReact naturally. Don't start the same way as last time.`,
+          `Topic: "${topic}"\nRecent:\n${context}\n\nWhat's your take? Be specific.`,
         ];
         const framing = framings[this.recentTranscripts.length % framings.length];
         this.omniagent.sendMessage(agentId, 'user', `${chaosInstruction}${framing}`, true);
