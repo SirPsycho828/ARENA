@@ -1062,52 +1062,40 @@ export class SessionManager {
     const API_KEY = process.env.OMNIAGENT_API_KEY!;
     const tokens: Record<string, string> = {};
 
-    // Use the old per-session POST /public/connections endpoint for video tokens.
-    // This creates standalone WebRTC connections NOT tied to any agent's pool,
-    // avoiding NoAvailableConnections when the debate WebSocket already occupies the slot.
-    const results = await Promise.allSettled(
-      this.session.agentIds.map(async (agentId) => {
-        const config = this.agentConfigs.get(agentId);
-        const companionId = config?.companionId;
-        if (!companionId) throw new Error(`No companionId for ${config?.name || agentId}`);
+    // Create tokens SEQUENTIALLY with delays to avoid 429 rate limits.
+    // Uses the agent-scoped endpoint (same as debate WebSocket — agents support
+    // multiple concurrent connections: 1 WebSocket + N WebRTC).
+    for (const agentId of this.session.agentIds) {
+      const config = this.agentConfigs.get(agentId);
+      try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
-        try {
-          const res = await fetch(
-            'https://companion-api.napster.com/public/connections',
-            {
-              method: 'POST',
-              headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                companionId,
-                externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}${(config?.name || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`.slice(0, 32),
-                providerConfig: {
-                  voiceId: config?.voiceId || 'verse',
-                  settings: { temperature: 0.7 },
-                },
-              }),
-              signal: controller.signal,
-            }
-          );
-          clearTimeout(timeoutId);
-          if (!res.ok) {
-            const errBody = await res.text().catch(() => '');
-            throw new Error(`HTTP ${res.status} for ${config?.name || agentId}: ${errBody.substring(0, 200)}`);
+        const res = await fetch(
+          `https://companion-api.napster.com/public/agents/${agentId}/connections`,
+          {
+            method: 'POST',
+            headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              channelType: 'webrtc',
+              externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}${(config?.name || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`.slice(0, 32),
+            }),
+            signal: controller.signal,
           }
+        );
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => '');
+          console.error(`  WebRTC token failed for ${config?.name || agentId}: HTTP ${res.status}: ${errBody.substring(0, 200)}`);
+        } else {
           const data = await res.json() as { token: string };
-          return { agentId, token: data.token };
-        } catch (err) {
-          clearTimeout(timeoutId);
-          throw err;
+          tokens[agentId] = data.token;
         }
-      })
-    );
-
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        tokens[r.value.agentId] = r.value.token;
-      } else {
-        console.error(`  WebRTC token failed for ${viewerId}: ${(r.reason as Error)?.message || r.reason}`);
+      } catch (err) {
+        console.error(`  WebRTC token failed for ${config?.name || agentId}: ${(err as Error).message}`);
+      }
+      // 1.5s gap between requests to avoid rate limiting
+      if (this.session.agentIds.indexOf(agentId) < this.session.agentIds.length - 1) {
+        await new Promise(r => setTimeout(r, 1500));
       }
     }
 

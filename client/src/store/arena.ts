@@ -375,22 +375,16 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set({ avatarTokens: { ...existing, ...tokens } });
     });
 
-    // Auto-request avatar tokens until all agents have them
-    let avatarRetryCount = 0;
-    const avatarRetryInterval = setInterval(() => {
+    // Single delayed retry for avatar tokens — avoid hammering the API
+    const avatarRetryTimer = setTimeout(() => {
       const state = get();
       const agentCount = state.agents?.length || 0;
       const tokenCount = Object.keys(state.avatarTokens).length;
-      if (tokenCount >= agentCount && agentCount > 0) {
-        clearInterval(avatarRetryInterval);
-        return;
-      }
-      if (state.session?.status === 'active' && avatarRetryCount < 4) {
-        avatarRetryCount++;
-        console.log(`[Avatar] Tokens: ${tokenCount}/${agentCount} — requesting (attempt ${avatarRetryCount}/4)...`);
+      if (tokenCount < agentCount && state.session?.status === 'active') {
+        console.log(`[Avatar] Tokens: ${tokenCount}/${agentCount} — requesting retry...`);
         socket.emit('request_avatar_tokens' as any);
       }
-    }, 10000);
+    }, 20000);
 
     // PCM audio chunks from server (Napster WebSocket audio)
     pcmPlayer = new PcmAudioPlayer();

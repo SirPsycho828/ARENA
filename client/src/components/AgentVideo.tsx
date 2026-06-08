@@ -67,21 +67,15 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
     }
   }, [token, agentId]);
 
-  // Timeout: if avatar not ready in 15s, retry once with fresh tokens, then fall back
+  // Timeout: if avatar not ready in 20s, fall back to static image
   useEffect(() => {
     if (!token || avatarReady || avatarFailed) return;
     const timer = setTimeout(() => {
-      if (!avatarReady && !retriedRef.current) {
-        console.warn(`[Avatar] ${agentName} timed out — requesting fresh tokens...`);
-        retriedRef.current = true;
-        initedRef.current = false;
-        const socket = useArenaStore.getState().socket;
-        if (socket) socket.emit('request_avatar_tokens');
-      } else if (!avatarReady) {
-        console.warn(`[Avatar] ${agentName} retry timed out — falling back to static image`);
+      if (!avatarReady) {
+        console.warn(`[Avatar] ${agentName} timed out — falling back to static image`);
         setAvatarFailed(true);
       }
-    }, 15000);
+    }, 20000);
     return () => clearTimeout(timer);
   }, [token, avatarReady, avatarFailed, agentName]);
 
