@@ -379,7 +379,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     let avatarRetryCount = 0;
     const avatarRetryInterval = setInterval(() => {
       const state = get();
-      const agentCount = state.session?.agents?.length || 0;
+      const agentCount = state.agents?.length || 0;
       const tokenCount = Object.keys(state.avatarTokens).length;
       if (tokenCount >= agentCount && agentCount > 0) {
         clearInterval(avatarRetryInterval);
