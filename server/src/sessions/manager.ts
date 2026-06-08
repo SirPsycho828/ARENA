@@ -1065,11 +1065,15 @@ export class SessionManager {
     const results = await Promise.allSettled(
       this.session.agentIds.map(async (agentId) => {
         const config = this.agentConfigs.get(agentId);
+        // Use the persistent COMPANION for WebRTC video tokens, not the per-session
+        // debate agent. Debate agents already consume their connection pool slot via
+        // the WebSocket used for text/audio. Companions have no active connections.
+        const videoAgentId = config?.companionId || agentId;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         try {
           const res = await fetch(
-            `https://companion-api.napster.com/public/agents/${agentId}/connections`,
+            `https://companion-api.napster.com/public/agents/${videoAgentId}/connections`,
             {
               method: 'POST',
               headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
@@ -1083,7 +1087,7 @@ export class SessionManager {
           clearTimeout(timeoutId);
           if (!res.ok) {
             const errBody = await res.text().catch(() => '');
-            throw new Error(`HTTP ${res.status}: ${errBody.substring(0, 200)}`);
+            throw new Error(`HTTP ${res.status} for ${config?.name || videoAgentId}: ${errBody.substring(0, 200)}`);
           }
           const data = await res.json() as { token: string };
           return { agentId, token: data.token };
