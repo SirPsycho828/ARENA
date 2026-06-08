@@ -196,31 +196,31 @@
 
     /* ── Agent Cards ── */
     .agents-row {
-      display: flex; gap: 1.5rem; margin-top: 2rem;
+      display: flex; gap: 1.25rem; margin-top: 1.5rem;
     }
     .agent-card {
       flex: 1; background: var(--card);
       border: 1px solid var(--border); border-radius: 4px;
-      overflow: hidden;
+      overflow: hidden; display: flex; align-items: center;
     }
     .agent-card img {
-      width: 100%; aspect-ratio: 1; object-fit: cover;
-      border-bottom: 1px solid var(--border);
+      width: 120px; height: 120px; object-fit: cover; flex-shrink: 0;
+      border-right: 1px solid var(--border);
     }
-    .agent-card .info { padding: 1rem 1.25rem; }
+    .agent-card .info { padding: 0.8rem 1rem; }
     .agent-card .name {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 1.25rem; letter-spacing: 0.04em;
+      font-size: 1.15rem; letter-spacing: 0.04em;
     }
     .agent-card .role {
-      font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem;
+      font-size: 0.68rem; color: var(--muted); margin-top: 0.1rem;
     }
     .agent-card .api-tag {
-      display: inline-block; margin-top: 0.6rem;
+      display: inline-block; margin-top: 0.4rem;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.6rem; color: var(--accent);
+      font-size: 0.58rem; color: var(--accent);
       background: rgba(59, 154, 225, 0.1);
-      padding: 0.15rem 0.5rem; border-radius: 2px;
+      padding: 0.12rem 0.45rem; border-radius: 2px;
     }
 
     /* ── Feature row ── */
@@ -313,7 +313,7 @@
       h1 { font-size: 3.5rem; }
       h2 { font-size: 2.2rem; }
       .split { flex-direction: column; gap: 2rem; }
-      .agents-row { flex-direction: column; max-width: 320px; }
+      .agents-row { flex-direction: column; max-width: 450px; }
       .features-grid { grid-template-columns: 1fr; }
       .arch-flow { flex-direction: column; }
       .arch-connector { width: auto; height: 24px; transform: rotate(90deg); }
@@ -639,10 +639,10 @@ POST /public/functions
           <span class="api-note">send_message &rarr; system</span>
         </div>
         <div class="feat-card">
-          <h4 class="font-display text-gold">VOICE CHALLENGER</h4>
-          <p>Record a voice message and challenge an agent directly. Your audio gets transcribed and sent as a user message. Priority queue.</p>
-          <span class="cost-tag">3 CREDITS</span>
-          <span class="api-note">send_audio &rarr; agent</span>
+          <h4 class="font-display text-gold">CALL-IN</h4>
+          <p>Record a voice message (up to 60s) with a topic prompt. Audio is transcribed via Napster speech-to-text and moderated. Agents discuss your call over multiple turns, referencing you by name.</p>
+          <span class="cost-tag">10 CREDITS</span>
+          <span class="api-note">speech-to-text + send_message</span>
         </div>
       </div>
     </div>
@@ -780,7 +780,7 @@ POST /public/functions
           <span>Topic Change</span><span class="font-mono text-gold">5 credits</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:0.45rem 0;font-size:0.82rem;">
-          <span>Voice Challenge</span><span class="font-mono text-gold">3 credits</span>
+          <span>Call-In</span><span class="font-mono text-gold">10 credits</span>
         </div>
       </div>
     </div>
@@ -814,7 +814,7 @@ POST /public/functions
           <div style="font-size:0.75rem;font-weight:600;color:var(--green);margin-bottom:0.75rem;">WEBSOCKET MESSAGES</div>
           <div style="font-size:0.78rem;line-height:2.2;">
             <code style="color:var(--accent);">SEND</code> <code style="color:var(--muted);">send_message</code> <span style="color:var(--dim);font-size:0.7rem;margin-left:0.3rem;">prompt agent</span><br/>
-            <code style="color:var(--accent);">SEND</code> <code style="color:var(--muted);">send_audio</code> <span style="color:var(--dim);font-size:0.7rem;margin-left:0.3rem;">voice input (base64)</span><br/>
+            <code style="color:var(--accent);">SEND</code> <code style="color:var(--muted);">send_audio</code> <span style="color:var(--dim);font-size:0.7rem;margin-left:0.3rem;">call-in audio (base64)</span><br/>
             <code style="color:var(--accent);">SEND</code> <code style="color:var(--muted);">set_settings</code> <span style="color:var(--dim);font-size:0.7rem;margin-left:0.3rem;">rewrite instructions</span><br/>
             <code style="color:var(--gold);">RECV</code> <code style="color:var(--muted);">message_received</code> <span style="color:var(--dim);font-size:0.7rem;margin-left:0.3rem;">created/delta/completed</span><br/>
             <code style="color:var(--gold);">RECV</code> <code style="color:var(--muted);">audio_received</code> <span style="color:var(--dim);font-size:0.7rem;margin-left:0.3rem;">16kHz PCM chunks</span><br/>
