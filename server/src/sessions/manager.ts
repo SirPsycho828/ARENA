@@ -383,9 +383,13 @@ export class SessionManager {
       return;
     }
 
-    // Avatar tokens are sent per-viewer on socket connect (handlers.ts),
-    // so no broadcast needed here. Removing eliminates duplicate API calls
-    // that trigger 429 rate limits on the Napster API.
+    if (!USE_MOCK) {
+      // Send avatar tokens to already-connected viewers (they connected before debate was active).
+      // Safe now: requests are serialized via videoTokenLock with 429 cooldown protection.
+      this.sendAvatarTokensToAll().catch(err => {
+        console.error('  Avatar token broadcast failed:', (err as Error).message);
+      });
+    }
 
     // Initialize orchestration
     this.turnManager = new TurnManager({ mode: 'dynamic' });
