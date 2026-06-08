@@ -100,7 +100,7 @@ app.use(express.static(clientDist));
 const contentDir = path.resolve(__dirname, 'content');
 app.use('/static', express.static(contentDir));
 
-// Serve avatar host pages for Puppeteer headless browser
+// Serve avatar host pages for WebRTC avatar iframes
 const avatarHostDir = path.resolve(__dirname, 'avatar-host');
 app.use('/avatar-host', express.static(avatarHostDir));
 

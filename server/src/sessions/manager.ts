@@ -2,7 +2,6 @@ import { v4 as uuid } from 'uuid';
 import { Server } from 'socket.io';
 import { OmniagentManager, type AgentInstance } from '../omniagent/manager.js';
 import { TurnManager } from '../orchestration/turn-manager.js';
-import { TranscriptRelay } from '../orchestration/transcript-relay.js';
 import { ChaosQueue } from './chaos-queue.js';
 import { CallInQueue, type CallInEntry } from './callin-queue.js';
 import { db } from '../db/index.js';
@@ -184,7 +183,6 @@ export class SessionManager {
   private io: Server<ClientEvents, ServerEvents>;
   private session: DebateSession | null = null;
   private turnManager: TurnManager | null = null;
-  private relay: TranscriptRelay | null = null;
   private chaosQueue: ChaosQueue | null = null;
   private voteTallies: VoteTallies = {};
   private voterRecord: Set<string> = new Set(); // tracks "viewerId:agentId" per topic
@@ -385,7 +383,6 @@ export class SessionManager {
 
     // Initialize orchestration
     this.turnManager = new TurnManager({ mode: 'dynamic' });
-    this.relay = new TranscriptRelay(this.omniagent);
     this.chaosQueue = new ChaosQueue();
     this.callInQueue = new CallInQueue();
 
@@ -468,7 +465,6 @@ export class SessionManager {
     }
 
     this.turnManager = null;
-    this.relay = null;
     this.chaosQueue = null;
     this.callInQueue = null;
 

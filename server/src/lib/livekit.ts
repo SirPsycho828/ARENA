@@ -27,25 +27,6 @@ export function logLiveKitStatus(): void {
   }
 }
 
-export async function createPublisherToken(roomName: string): Promise<string> {
-  const at = new AccessToken(API_KEY(), API_SECRET(), {
-    identity: 'arena-host',
-    ttl: '2h',
-  });
-  at.addGrant({ room: roomName, roomJoin: true, canPublish: true, canSubscribe: false });
-  return await at.toJwt();
-}
-
-/** Per-agent publisher token — each agent is a separate LiveKit participant. */
-export async function createAgentPublisherToken(roomName: string, agentId: string): Promise<string> {
-  const at = new AccessToken(API_KEY(), API_SECRET(), {
-    identity: `host-${agentId}`,
-    ttl: '2h',
-  });
-  at.addGrant({ room: roomName, roomJoin: true, canPublish: true, canSubscribe: false });
-  return await at.toJwt();
-}
-
 export async function createViewerToken(roomName: string, viewerId: string): Promise<string> {
   const at = new AccessToken(API_KEY(), API_SECRET(), {
     identity: `viewer-${viewerId}`,
