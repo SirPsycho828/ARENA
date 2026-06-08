@@ -50,7 +50,7 @@ The core technical challenge of ARENA is multi-agent real-time orchestration —
 - You need to bypass the default SDK widget and manage raw WebRTC connections yourself to compose a multi-panel layout
 - Connection lifecycle management (establishing, maintaining, reconnecting) multiplied by 3-4x
 
-**What AI coding tools won't tell you:**
+**Non-obvious gotchas:**
 - The SDK may not expose the raw WebRTC MediaStream directly — you may need to extract it from the widget's DOM or use the lower-level API endpoints to establish connections manually
 - WebRTC peer connections each consume significant browser resources (bandwidth, CPU for decoding). Four simultaneous streams may exceed 10Mbps download on some connections
 - ICE candidate negotiation for 4 connections simultaneously can create race conditions
@@ -79,7 +79,7 @@ The core technical challenge of ARENA is multi-agent real-time orchestration —
 - Turn management is a state machine problem: who speaks next? What if an agent takes too long? What if two agents try to speak simultaneously?
 - The system must feel like a natural conversation, not a round-robin robot show
 
-**What AI coding tools won't tell you:**
+**Non-obvious gotchas:**
 - The `message_received` event may fire multiple times per utterance (partial transcripts vs. final). You need to debounce and wait for the complete transcript before relaying
 - If you relay too quickly, Agent B starts responding before Agent A finishes — creating overlapping speech
 - Turn management gets exponentially harder with more agents. 2 agents = ping-pong (easy). 4 agents = who goes next? Do they all respond? Only the one addressed?
@@ -108,7 +108,7 @@ The core technical challenge of ARENA is multi-agent real-time orchestration —
 - Color variance in the green-screen (lighting, compression artifacts) creates imperfect edges
 - You're fighting video compression — green pixels bleed into edge pixels at low bitrates
 
-**What AI coding tools won't tell you:**
+**Non-obvious gotchas:**
 - CSS `mix-blend-mode` hacks work for solid backgrounds but not for compositing one video onto another
 - Canvas-based solutions work but eat CPU. WebGL shaders are the performant path
 - The chroma-key quality depends entirely on how clean the Omniagent API's green-screen output is — if it's a perfect green with no gradient, a simple threshold shader works. If there's variance, you need edge softening
@@ -138,7 +138,7 @@ The core technical challenge of ARENA is multi-agent real-time orchestration —
 - The conversation feels dead if there's more than 500ms of silence between speakers
 - This is a fundamental physics-of-the-system problem, not a code quality issue
 
-**What AI coding tools won't tell you:**
+**Non-obvious gotchas:**
 - The "obvious" solution (parallel processing) doesn't work for sequential debate — Agent C can't respond to Agent B until B has spoken
 - However, you CAN relay the transcript to all agents simultaneously and let the turn manager decide whose response to surface first
 - The real trick: have all non-speaking agents "think" in parallel (they all receive the transcript), but only unmute them in sequence. This hides latency behind the previous speaker
@@ -168,7 +168,7 @@ The core technical challenge of ARENA is multi-agent real-time orchestration —
 - The caller exists outside your web UI — they can't see what's happening on screen
 - Audio quality over phone lines is inherently lower than WebRTC
 
-**What AI coding tools won't tell you:**
+**Non-obvious gotchas:**
 - You need a SIP trunk provider (Twilio SIP) that can bridge to the Omniagent API's SIP endpoint
 - The caller's audio becomes input to ONE agent, but you need the other agents to hear the exchange (relay the caller's transcript to non-targeted agents)
 - Phone call state management (ringing, answered, hangup) must integrate with your turn management system
@@ -196,7 +196,7 @@ The core technical challenge of ARENA is multi-agent real-time orchestration —
 - You're using the API in an unprecedented way (4 agents concurrently from one server)
 - If there's a hidden limit of 1-2 connections, the entire project concept is at risk
 
-**What AI coding tools won't tell you:**
+**Non-obvious gotchas:**
 - Test this IMMEDIATELY — before building anything else. If the API caps at 1-2 concurrent connections, you need to contact Napster support or redesign
 - The limit might be per-API-key, per-IP, or per-account — and it might not be documented
 - Even if 4 connections work, they might degrade in quality (lower video bitrate per connection to share bandwidth)
@@ -223,7 +223,7 @@ The core technical challenge of ARENA is multi-agent real-time orchestration —
 - System prompt injection mid-conversation needs careful timing (don't inject while agent is mid-sentence)
 - Content moderation of audience input (prevent abuse)
 
-**What AI coding tools won't tell you:**
+**Non-obvious gotchas:**
 - The `send_message` API with role "system" injects context, but if you inject too frequently, the agent's context window fills with audience noise and response quality degrades
 - You need to batch/debounce injections — pick one per 30-second window
 
@@ -241,7 +241,7 @@ The core technical challenge of ARENA is multi-agent real-time orchestration —
 - Agents need to remember EACH OTHER (not just the human user) — so memory must be structured as agent-to-agent relationships
 - Memory recall can be inaccurate or inappropriate (agent references something from 5 debates ago that's not relevant)
 
-**What AI coding tools won't tell you:**
+**Non-obvious gotchas:**
 - The `externalClientId` creates a memory channel between a "user" and an "agent." For agent-to-agent memory, you'd need to treat Agent A as the "user" when talking to Agent B — meaning the memory IDs need careful namespace planning
 - If an agent recalls something embarrassing or wrong, there's no way to "edit" the memory retroactively — you'd need to inject a correction via system prompt
 - Memory quality degrades if sessions are too frequent with too much content — the signal-to-noise ratio matters
