@@ -371,7 +371,7 @@
         <div class="stat"><div class="num text-primary">3</div><div class="lbl">Live Companions</div></div>
         <div class="stat"><div class="num text-accent">2</div><div class="lbl">Channel Types</div></div>
         <div class="stat"><div class="num text-gold">610+</div><div class="lbl">Debate Topics</div></div>
-        <div class="stat"><div class="num text-green">&infin;</div><div class="lbl">Concurrent Viewers</div></div>
+        <div class="stat"><div class="num text-green">LIVE</div><div class="lbl">Shared Experience</div></div>
       </div>
     </div>
   </div>
@@ -926,9 +926,9 @@ sdk.init(token, {
           <span class="api-note">knowledge base + session history</span>
         </div>
         <div class="feat-card" style="border-left:2px solid var(--green);">
-          <h4 class="font-display text-green">EDGE AUDIO RELAY</h4>
-          <p>CDN-backed audio distribution for global viewers. Adaptive bitrate streaming, pre-warmed companion pools to eliminate cold starts, and sub-200ms latency worldwide.</p>
-          <span class="api-note">scalability + performance</span>
+          <h4 class="font-display text-green">SCALABLE VIDEO</h4>
+          <p>Currently, each viewer opens a direct WebRTC connection per avatar. At scale, ARENA would composite avatar feeds server-side and stream a single video via HLS/DASH, supporting thousands of concurrent viewers with no per-viewer connection overhead.</p>
+          <span class="api-note">server-side compositing + CDN delivery</span>
         </div>
       </div>
     </div>
