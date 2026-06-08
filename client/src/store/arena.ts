@@ -331,14 +331,6 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set({ connected: true });
     });
 
-    socket.on('reconnect_attempt', (attempt) => {
-      console.log(`Reconnecting... attempt ${attempt}`);
-    });
-
-    socket.on('reconnect_failed', () => {
-      console.log('Reconnection failed');
-    });
-
     socket.on('session_state', (state) => {
       set({
         session: state.session,
@@ -371,17 +363,13 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     // Connect to LiveKit room for audio
     (socket as any).on('livekit_token', ({ token, url }: { token: string; url: string }) => {
-      console.log(`[LiveKit] Received token, connecting to ${url}...`);
       connectLiveKit(url, token, (tracks) => {
-        const count = Object.values(tracks).reduce((n, t) => n + (t.video ? 1 : 0) + (t.audio ? 1 : 0), 0);
-        console.log(`[LiveKit] Tracks updated: ${count} total`, Object.keys(tracks));
         set({ livekitTracks: tracks });
       }).catch((err) => console.error('[LiveKit] Connect failed:', err));
     });
 
     // Per-viewer Napster avatar tokens — client renders avatars directly in iframes
     (socket as any).on('avatar_tokens', ({ tokens }: { tokens: Record<string, string> }) => {
-      console.log(`[Avatars] Received ${Object.keys(tokens).length} WebRTC tokens`);
       set({ avatarTokens: tokens });
     });
 
@@ -416,7 +404,6 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     (socket as any).on('turn_audio_complete', ({ agentId, generation }: { agentId: string; generation: number }) => {
       if (playbackPollTimer) { clearTimeout(playbackPollTimer); playbackPollTimer = null; }
       const startedAt = Date.now();
-      console.log(`[Audio] turn_audio_complete gen=${generation}, buffer=${(pcmPlayer?.getRemainingTime() || 0).toFixed(1)}s — polling for drain`);
 
       const poll = () => {
         const remaining = pcmPlayer?.getRemainingTime() || 0;
@@ -661,15 +648,12 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       const userRef = doc(db, 'users', uid);
       getDoc(userRef).then((snap) => {
         if (!snap.exists()) {
-          console.log('[Auth] Creating user doc with 10 starter credits');
           return setDoc(userRef, {
             displayName: currentUser.displayName || null,
             credits: 10,
             createdAt: serverTimestamp(),
           });
         }
-      }).then(() => {
-        console.log('[Auth] User doc ready');
       }).catch((err) => console.error('[Auth] ensureUser failed:', err));
     }
 

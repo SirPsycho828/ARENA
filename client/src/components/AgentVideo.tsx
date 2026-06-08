@@ -31,7 +31,6 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
     }
 
     if (e.data?.type === 'avatar-ready' && e.data.agentId === agentId) {
-      console.log(`[Avatar] ${agentName} ready`);
       setAvatarReady(true);
     }
 

@@ -16,7 +16,6 @@ function parseTrackName(name: string): { agentId: string; kind: 'video' | 'audio
 }
 
 function updateTrack(track: RemoteTrack, publication: RemoteTrackPublication, subscribed: boolean) {
-  console.log(`[LiveKit] Track ${subscribed ? 'subscribed' : 'unsubscribed'}: name="${publication.trackName}" kind=${track.kind} sid=${publication.trackSid}`);
   const parsed = parseTrackName(publication.trackName);
   if (!parsed) {
     console.warn(`[LiveKit] Could not parse track name: "${publication.trackName}"`);
@@ -38,7 +37,6 @@ export async function connectLiveKit(url: string, token: string, onChange: (trac
   // Skip reconnection if already connected with tracks — prevents
   // duplicate livekit_token events from causing disruptive cycling
   if (room?.state === 'connected' && Object.keys(trackMap).length > 0) {
-    console.log('[LiveKit] Already connected with tracks — skipping reconnection');
     onTracksChanged = onChange;
     return;
   }
@@ -57,12 +55,7 @@ export async function connectLiveKit(url: string, token: string, onChange: (trac
     updateTrack(track, publication, false);
   });
 
-  room.on(RoomEvent.Disconnected, () => {
-    console.log('[LiveKit] Disconnected');
-  });
-
   await room.connect(url, token);
-  console.log('[LiveKit] Connected to room');
 }
 
 export function disconnectLiveKit() {

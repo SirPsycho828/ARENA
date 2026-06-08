@@ -37,7 +37,6 @@ export class PcmAudioPlayer {
     const unlock = () => {
       if (this.ctx.state === 'suspended') {
         this.ctx.resume().then(() => {
-          console.log('[Audio] AudioContext unlocked by user gesture');
           this.unlocked = true;
         });
       } else {
@@ -69,9 +68,6 @@ export class PcmAudioPlayer {
   playChunk(base64: string) {
     if (this.muted) return;
 
-    if (this.chunks === 0) {
-      console.log(`[Audio] First chunk, ctx=${this.ctx.state}, size=${base64.length}, ctxRate=${this.ctx.sampleRate}`);
-    }
     this.chunks++;
 
     if (this.ctx.state === 'suspended') {
