@@ -135,27 +135,32 @@ app.get('/api/status', (_req, res) => {
 });
 
 app.post('/api/sessions', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
   try {
     const { topic, agentCount } = req.body;
     if (!topic) return res.status(400).json({ error: 'topic is required' });
     const session = await sessionManager.createSession(topic, agentCount || 3);
     res.json(session);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    console.error('  [API] POST /api/sessions error:', (err as Error).message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.post('/api/sessions/start', async (_req, res) => {
+app.post('/api/sessions/start', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
   try {
     await sessionManager.startDebate();
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    console.error('  [API] POST /api/sessions/start error:', (err as Error).message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Combined create + start (for easy demo launch)
 app.post('/api/sessions/launch', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
   try {
     const { topic, agentCount } = req.body;
     if (!topic) return res.status(400).json({ error: 'topic is required' });
@@ -163,16 +168,19 @@ app.post('/api/sessions/launch', async (req, res) => {
     await sessionManager.startDebate();
     res.json({ session, started: true });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    console.error('  [API] POST /api/sessions/launch error:', (err as Error).message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.post('/api/sessions/end', async (_req, res) => {
+app.post('/api/sessions/end', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
   try {
     await sessionManager.endDebate('manual');
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    console.error('  [API] POST /api/sessions/end error:', (err as Error).message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -234,8 +242,8 @@ app.post('/api/credits/checkout', async (req, res) => {
         quantity: 1,
       }],
       mode: 'payment',
-      success_url: `${req.headers.origin || 'https://arenaserver-production-f84b.up.railway.app'}/?credits=success`,
-      cancel_url: `${req.headers.origin || 'https://arenaserver-production-f84b.up.railway.app'}/?credits=cancel`,
+      success_url: `${process.env.CLIENT_URL || 'https://arenaserver-production-f84b.up.railway.app'}/?credits=success`,
+      cancel_url: `${process.env.CLIENT_URL || 'https://arenaserver-production-f84b.up.railway.app'}/?credits=cancel`,
       metadata: { uid: decoded.uid, credits: pkg.credits.toString() },
     });
 
@@ -281,8 +289,14 @@ const proxyAttempts = new Map<string, number>();
 httpServer.on('upgrade', (req, socket, head) => {
   if (!req.url?.startsWith('/signaling-proxy/')) return;
 
+  const proxyPath = req.url!.replace('/signaling-proxy/', '');
+  if (!/^ws\/connections\/[a-f0-9-]+\/signaling$/.test(proxyPath)) {
+    socket.destroy();
+    return;
+  }
+
   signalingWss.handleUpgrade(req, socket, head, (clientWs) => {
-    const targetPath = req.url!.replace('/signaling-proxy/', '');
+    const targetPath = proxyPath;
     const targetUrl = `wss://avatar-signaling.touchcastmaas.com/${targetPath}`;
 
     // Extract connection ID for logging
