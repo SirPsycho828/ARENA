@@ -827,8 +827,82 @@ POST /public/functions
     </div>
   </div>
 
-  <!-- ═══ SLIDE 12: CLOSING ═══ -->
+  <!-- ═══ SLIDE 12: ASK STEVE ═══ -->
   <div class="slide" data-slide="11">
+    <div class="scanline"></div>
+    <div class="glow-orb" style="width:500px;height:500px;background:var(--green);top:-150px;right:-100px;opacity:0.05;"></div>
+    <div class="slide-inner">
+      <div class="split">
+        <div class="col">
+          <div class="accent-bar" style="background:var(--green);"></div>
+          <h2 class="font-display" style="font-size:2.4rem;">ASK STEVE<br/><span class="text-green">LIVE SDK DEMO</span></h2>
+          <p style="font-size:0.85rem;color:var(--muted);margin-top:1rem;line-height:1.7;">
+            That widget in the bottom-right corner? That's <strong style="color:var(--fg)">me</strong> — a 4th Napster companion
+            running right here on this presentation deck. Custom avatar, knowledge base, guardrailed personality.
+            Ask me anything about ARENA or the Napster platform.
+          </p>
+          <p style="font-size:0.85rem;color:var(--muted);margin-top:1rem;line-height:1.7;">
+            Type a question or use your microphone. I'm the same Napster Omnichannel stack
+            that powers the debate — just deployed as a <strong style="color:var(--fg)">drop-in support widget</strong>.
+          </p>
+          <div style="margin-top:2rem;">
+            <div style="font-size:0.75rem;font-weight:600;color:var(--green);margin-bottom:0.75rem;">THREE CHANNEL TYPES, ONE PLATFORM</div>
+            <div style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+              <span style="font-size:0.7rem;font-family:'JetBrains Mono',monospace;color:var(--accent);min-width:24px;">01</span>
+              <span style="font-size:0.82rem;color:var(--fg);"><strong style="color:var(--accent)">WebSocket</strong> — server-side debate orchestration</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+              <span style="font-size:0.7rem;font-family:'JetBrains Mono',monospace;color:var(--accent);min-width:24px;">02</span>
+              <span style="font-size:0.82rem;color:var(--fg);"><strong style="color:var(--green)">WebRTC</strong> — per-viewer animated avatars in the arena</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;">
+              <span style="font-size:0.7rem;font-family:'JetBrains Mono',monospace;color:var(--accent);min-width:24px;">03</span>
+              <span style="font-size:0.82rem;color:var(--fg);"><strong style="color:var(--gold)">WebRTC SDK</strong> — this support widget, right here &rarr;</span>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="code-block" style="font-size:0.68rem;">
+<span class="comment">// 1. Create custom companion with avatar</span>
+POST /public/companions
+{ <span class="key">"firstName"</span>: <span class="str">"Steve"</span>,
+  <span class="key">"pictureUrl"</span>: <span class="str">"https://arena.../Steve.png"</span>,
+  <span class="key">"tags"</span>: { <span class="key">"arena_role"</span>: <span class="str">"host"</span> } }
+
+<span class="comment">// 2. Create agent with KB + guardrails</span>
+POST /public/agents
+{ <span class="key">"companionId"</span>: <span class="str">"&lt;steve_id&gt;"</span>,
+  <span class="key">"voiceId"</span>: <span class="str">"ballad"</span>,
+  <span class="key">"knowledgeBaseId"</span>: <span class="str">"&lt;kb_id&gt;"</span>,
+  <span class="key">"providerSettings"</span>: {
+    <span class="key">"instructions"</span>: <span class="str">"[guardrailed prompt]"</span>
+  } }
+
+<span class="comment">// 3. Mint a per-viewer WebRTC token</span>
+POST /public/agents/{id}/connections
+{ <span class="key">"channelType"</span>: <span class="str">"webrtc"</span> }
+
+<span class="comment">// 4. Drop in the SDK — done</span>
+<span class="type">const</span> sdk = napsterCompanionApiSDK;
+sdk.init(token, {
+  <span class="key">mountContainer</span>: <span class="str">"#steve-widget"</span>,
+  <span class="key">position</span>: <span class="str">"bottom-right"</span>
+});</div>
+          <div class="card" style="margin-top:1rem;border-color:var(--green);">
+            <div style="font-size:0.75rem;font-weight:600;color:var(--green);margin-bottom:0.3rem;">NAPSTER FEATURES USED</div>
+            <div style="font-size:0.78rem;color:var(--muted);line-height:1.6;">
+              Custom Companion &middot; Knowledge Base (RAG) &middot;
+              WebRTC SDK Widget &middot; Voice: <code style="color:var(--accent)">ballad</code> &middot;
+              Guardrailed system prompt
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 13: CLOSING ═══ -->
+  <div class="slide" data-slide="12">
     <div class="scanline"></div>
     <div class="glow-orb" style="width:700px;height:700px;background:var(--primary);top:-250px;right:-200px;"></div>
     <div class="glow-orb" style="width:500px;height:500px;background:var(--accent);bottom:-150px;left:-150px;"></div>
