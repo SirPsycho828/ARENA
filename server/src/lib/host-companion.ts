@@ -131,9 +131,14 @@ async function createKnowledgeBase(apiKey: string, serverUrl: string): Promise<s
     url: `${serverUrl}/static/playbooks/steve-arena-knowledge.md`,
   }, apiKey);
 
-  await napsterPatch(`/public/knowledge-bases/${kbId}/files/${fileRes.id}/summary`, {
-    summary: 'ARENA project overview, Napster Omnichannel API usage, chaos engine, credit system, architecture decisions',
-  }, apiKey);
+  // Summary is optional — don't let it block the whole setup
+  try {
+    await napsterPatch(`/public/knowledge-bases/${kbId}/files/${fileRes.id}/summary`, {
+      summary: 'ARENA platform reference',
+    }, apiKey);
+  } catch (err) {
+    console.warn(`  [Host] KB summary failed (non-fatal): ${(err as Error).message}`);
+  }
 
   console.log(`  [Host] Knowledge base created (${kbId})`);
   return kbId;
