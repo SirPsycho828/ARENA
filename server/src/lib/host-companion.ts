@@ -151,6 +151,13 @@ async function createAgent(apiKey: string, companionId: string, kbId: string): P
     providerSettings: {
       instructions: STEVE_INSTRUCTIONS,
       temperature: 0.85,
+      turnDetection: {
+        threshold: 0.9,
+        silence_duration_ms: 2000,
+      },
+      noiseReduction: {
+        type: 'nearField',
+      },
     },
     knowledgeBaseId: kbId,
     name: 'ARENA Host - Steve',
