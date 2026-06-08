@@ -1062,22 +1062,33 @@ export class SessionManager {
     const API_KEY = process.env.OMNIAGENT_API_KEY!;
     const tokens: Record<string, string> = {};
 
-    // Create tokens SEQUENTIALLY with delays to avoid 429 rate limits.
-    // Uses the agent-scoped endpoint (same as debate WebSocket — agents support
-    // multiple concurrent connections: 1 WebSocket + N WebRTC).
+    // Use the old per-session POST /public/connections endpoint.
+    // Agent-scoped endpoint shares pool with debate WebSocket (1 connection limit),
+    // so WebRTC always fails with NoAvailableConnections. The per-session endpoint
+    // creates standalone connections not tied to any agent pool.
+    // Sequential with 1.5s delays to avoid 429 rate limits.
     for (const agentId of this.session.agentIds) {
       const config = this.agentConfigs.get(agentId);
+      const companionId = config?.companionId;
+      if (!companionId) {
+        console.error(`  WebRTC token failed for ${config?.name || agentId}: no companionId`);
+        continue;
+      }
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         const res = await fetch(
-          `https://companion-api.napster.com/public/agents/${agentId}/connections`,
+          'https://companion-api.napster.com/public/connections',
           {
             method: 'POST',
             headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              channelType: 'webrtc',
+              companionId,
               externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}${(config?.name || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`.slice(0, 32),
+              providerConfig: {
+                voiceId: config?.voiceId || 'verse',
+                settings: { temperature: 0.7 },
+              },
             }),
             signal: controller.signal,
           }
@@ -1089,6 +1100,7 @@ export class SessionManager {
         } else {
           const data = await res.json() as { token: string };
           tokens[agentId] = data.token;
+          console.log(`  WebRTC token OK for ${config?.name} (companion ${companionId})`);
         }
       } catch (err) {
         console.error(`  WebRTC token failed for ${config?.name || agentId}: ${(err as Error).message}`);
