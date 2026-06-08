@@ -44,6 +44,20 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
       });
     }
 
+    // Allow clients to request fresh avatar tokens (e.g. after timeout/retry)
+    (socket as any).on('request_avatar_tokens', () => {
+      const sess = sessionManager.getActiveSession();
+      if (!sess || sess.status !== 'active') return;
+      sessionManager.createVideoTokensForViewer(socket.id).then((tokens) => {
+        if (Object.keys(tokens).length > 0) {
+          console.log(`  Re-sent avatar_tokens to ${socket.id}: ${Object.keys(tokens).length} agents`);
+          (socket as any).emit('avatar_tokens', { tokens });
+        }
+      }).catch((err) => {
+        console.warn(`  Avatar token retry failed for ${socket.id}:`, (err as Error).message);
+      });
+    });
+
     // ─── Auth: create user doc + starter credits on first sign-in ────────
 
     (socket as any).on('authenticate', async (data: { token: string }) => {

@@ -101,9 +101,11 @@
       if (e.data?.type === 'init-avatar') {
         if (instance) return;
         agentId = e.data.agentId;
+        console.log(`[AvatarFrame] init-avatar received for ${agentId}, starting SDK...`);
 
         try {
           const sdk = window.napsterCompanionApiSDK;
+          if (!sdk) { console.error('[AvatarFrame] SDK not loaded!'); return; }
           instance = await sdk.init(e.data.token, {
             mountContainer: '#container',
             avatarStyle: { view: 'rectangle' },
@@ -118,6 +120,7 @@
             style: { width: '100%', height: '100%', position: 'absolute', top: '0', left: '0' },
             onData: handleSdkEvent,
             onAvatarReady: () => {
+              console.log(`[AvatarFrame] ${agentId} avatar READY`);
               instance.muteMic();
               instance.showAvatar();
               // Mute avatar audio — debate audio comes from server PCM stream
@@ -136,6 +139,7 @@
               window.parent.postMessage({ type: 'avatar-ready', agentId }, '*');
             },
             onError: (err) => {
+              console.error(`[AvatarFrame] ${agentId} SDK error:`, err?.message || err);
               window.parent.postMessage({ type: 'avatar-error', agentId, error: err?.message || String(err) }, '*');
             },
           });
