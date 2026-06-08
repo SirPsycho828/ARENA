@@ -23,8 +23,20 @@ import { adminAuth } from './lib/firebase-admin.js';
 import { CreditService } from './lib/credits.js';
 import { initNapsterResources } from './lib/napster-resources.js';
 import { ensureCustomCompanions } from './lib/companions.js';
+import { initHostCompanion, createSteveToken } from './lib/host-companion.js';
 import { createToolRoutes } from './routes/tools.js';
 import { logLiveKitStatus } from './lib/livekit.js';
+
+function requireAdmin(req: express.Request, res: express.Response): boolean {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) return true; // No secret configured = no auth required (dev mode)
+  const provided = req.headers.authorization?.replace('Bearer ', '');
+  if (provided !== secret) {
+    res.status(403).json({ error: 'Forbidden' });
+    return false;
+  }
+  return true;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,7 +46,7 @@ const httpServer = createServer(app);
 
 const io = new Server<ClientEvents, ServerEvents>(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || '*',
+    origin: process.env.CLIENT_URL || true,
     methods: ['GET', 'POST'],
   },
 });
@@ -234,6 +246,22 @@ app.post('/api/credits/checkout', async (req, res) => {
   }
 });
 
+// ─── Host Companion Token (Ask Steve widget) ────────────────────────────────
+
+app.get('/api/steve-token', async (_req, res) => {
+  try {
+    const token = await createSteveToken();
+    if (!token) {
+      res.status(503).json({ error: 'Host companion not ready' });
+      return;
+    }
+    res.json({ token });
+  } catch (err) {
+    console.error('  [Host] Token error:', (err as Error).message);
+    res.status(500).json({ error: 'Failed to create token' });
+  }
+});
+
 // ─── SPA Catch-All (after API routes, before socket) ────────────────────────
 
 app.get('*', (_req, res) => {
@@ -342,6 +370,7 @@ httpServer.listen(PORT, () => {
       await Promise.all([
         ensureCustomCompanions(serverUrl),
         initNapsterResources(serverUrl),
+        initHostCompanion(serverUrl),
       ]);
 
       // Clean up stale agents from previous sessions to free WebRTC pool
