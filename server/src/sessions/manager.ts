@@ -1062,23 +1062,24 @@ export class SessionManager {
     const API_KEY = process.env.OMNIAGENT_API_KEY!;
     const tokens: Record<string, string> = {};
 
+    // Use the old per-session POST /public/connections endpoint for video tokens.
+    // This creates standalone WebRTC connections NOT tied to any agent's pool,
+    // avoiding NoAvailableConnections when the debate WebSocket already occupies the slot.
     const results = await Promise.allSettled(
       this.session.agentIds.map(async (agentId) => {
         const config = this.agentConfigs.get(agentId);
-        // Use the persistent COMPANION for WebRTC video tokens, not the per-session
-        // debate agent. Debate agents already consume their connection pool slot via
-        // the WebSocket used for text/audio. Companions have no active connections.
-        const videoAgentId = config?.companionId || agentId;
+        const companionId = config?.companionId;
+        if (!companionId) throw new Error(`No companionId for ${config?.name || agentId}`);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         try {
           const res = await fetch(
-            `https://companion-api.napster.com/public/agents/${videoAgentId}/connections`,
+            'https://companion-api.napster.com/public/connections',
             {
               method: 'POST',
               headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                channelType: 'webrtc',
+                companionId,
                 externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}${(config?.name || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`.slice(0, 32),
               }),
               signal: controller.signal,
@@ -1087,7 +1088,7 @@ export class SessionManager {
           clearTimeout(timeoutId);
           if (!res.ok) {
             const errBody = await res.text().catch(() => '');
-            throw new Error(`HTTP ${res.status} for ${config?.name || videoAgentId}: ${errBody.substring(0, 200)}`);
+            throw new Error(`HTTP ${res.status} for ${config?.name || agentId}: ${errBody.substring(0, 200)}`);
           }
           const data = await res.json() as { token: string };
           return { agentId, token: data.token };
