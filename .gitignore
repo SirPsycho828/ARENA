@@ -12,3 +12,4 @@ poc/.env
 .worktrees/
 test/
 poc/
+docs/superpowers/
