@@ -1,10 +1,15 @@
 <div align="center">
 
+<img src="docs/screenshots/07-topic-banner.png" alt="ARENA Live Banner" width="100%" />
+
 # A.R.E.N.A.
 
-### AI Rivalry Exhibition of Neural Agents
+**AI Rivalry Exhibition of Neural Agents**
 
 *Where AI goes head to head.*
+
+[![Live Demo](https://img.shields.io/badge/LIVE_DEMO-E63946?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjQiLz48L3N2Zz4=&logoColor=white)](https://arenaserver-production-f84b.up.railway.app)
+[![Hackathon Deck](https://img.shields.io/badge/HACKATHON_DECK-3B9AE1?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIxOCIgaGVpZ2h0PSIxOCIgcng9IjIiLz48L3N2Zz4=&logoColor=white)](https://arenaserver-production-f84b.up.railway.app/hackathon/)
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black)
@@ -16,17 +21,36 @@
 
 A live AI debate arena built on **Napster's Companion API**. Three autonomous AI agents debate any topic in real-time while an audience watches together, injects chaos rules, changes topics, calls in with voice messages, and votes on who's winning.
 
-**[Live Demo](https://arenaserver-production-f84b.up.railway.app)** · **[Hackathon Deck](https://arenaserver-production-f84b.up.railway.app/hackathon/)**
+*Napster Omnichannel Hackathon 2026 Submission*
 
 </div>
 
 ---
 
+<div align="center">
+<img src="docs/screenshots/01-landing.png" alt="ARENA Landing Page" width="80%" />
+<br/><sub>Landing page with live debate preview, agent lineup, and feature showcase</sub>
+</div>
+
 ## Overview
 
 ARENA uses Napster's omnichannel technology to run three custom companions simultaneously, each with a distinct personality, voice, and animated avatar. The server orchestrates a turn-based debate loop via WebSocket while each viewer gets their own WebRTC connection for live avatar rendering. Every viewer sees the exact same debate, and audience chaos actions affect the experience for everyone.
 
-Cable news war room meets late-night panel comedy.
+Cable news war room meets late-night panel comedy. Powered entirely by Napster's Companion API.
+
+## The Arena
+
+<div align="center">
+<img src="docs/screenshots/06-agent-panels.png" alt="Agent Video Panels" width="100%" />
+<br/><sub>Three custom Napster companions with live WebRTC avatars, speaking indicators, and vote buttons</sub>
+</div>
+
+<br/>
+
+<div align="center">
+<img src="docs/screenshots/03-full-debate.png" alt="Full Debate View" width="80%" />
+<br/><sub>Live debate with streaming transcript, consensus needle, and chaos controls sidebar</sub>
+</div>
 
 ## Features
 
@@ -50,7 +74,7 @@ Viewers record voice messages (up to 60s) with a topic prompt. Audio is transcri
 <td width="50%">
 
 ### Consensus Needle
-Live opinion meter combining AI stance analysis with audience votes. AI-generated pole labels adapt to the current topic. Updates every turn with a jitter animation for realism.
+Live opinion meter combining AI stance analysis with audience votes. AI-generated pole labels adapt to the current topic. Updates every turn.
 
 ### Credit Economy
 Freemium model: watching is free, audience interactions cost credits. 10 free credits on sign-up. Stripe-powered packages ($5/10cr, $10/25cr, $18/50cr). Atomic Firestore transactions prevent double-spending.
@@ -64,6 +88,15 @@ Watchdog detects stuck sessions (3 forced advances or 2 minutes of silence) and 
 </td>
 </tr>
 </table>
+
+<div align="center">
+
+| | | |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/04-chaos-sidebar.png" alt="Chaos Controls" height="300" /> | <img src="docs/screenshots/05-consensus-needle.png" alt="Consensus Needle" width="400" /> | <img src="docs/screenshots/08-hackathon-deck.png" alt="Hackathon Deck" width="300" /> |
+| Chaos Controls + Quick Presets | Live Opinion Meter | Hackathon Presentation Deck |
+
+</div>
 
 ## Napster Omnichannel Architecture
 
@@ -101,7 +134,7 @@ Napster Companion API                    ARENA Server                        Vie
 | REST | `POST /public/faqs` | Create FAQ collection for signature responses |
 | REST | `POST /public/functions` | Register explicit tool (calls back to ARENA server) |
 | WS | `send_message` | Prompt agent with debate context |
-| WS | `send_audio` | Forward caller audio (base64 PCM) |
+| WS | `send_audio` | Forward call-in audio (base64 PCM) |
 | WS | `set_settings` | Rewrite system prompt with chaos rules |
 | WS | `audio_received` | Receive streamed PCM audio chunks |
 | WS | `message_received` | Receive text response (created/delta/completed) |
@@ -123,6 +156,33 @@ Napster Companion API                    ARENA Server                        Vie
 | Audio | Web Audio API | 16kHz PCM playback with jitter buffer + crossfade |
 | Moderation | Blocklist + OpenAI | Hybrid two-layer content moderation |
 | Hosting | Railway | Production deployment with auto-deploy from git |
+
+## Agents
+
+<div align="center">
+
+| | Rico Martinez | Dr. Helena Ashworth | Darius Kane |
+|---|:---:|:---:|:---:|
+| **Avatar** | <img src="client/public/images/AgentProfiles/Rico_ProfilePic.png" width="120" /> | <img src="client/public/images/AgentProfiles/Ashworth_ProfilePic.png" width="120" /> | <img src="client/public/images/AgentProfiles/Darius_ProfilePic.png" width="120" /> |
+| **Role** | Stand-Up Comedian | Philosophy Professor | Podcast Host |
+| **Voice** | `verse` | `coral` | `ash` |
+| **Style** | Quick-witted, finds the absurd angle | Surgical precision, every chat becomes a lecture | Connects dots others miss, intense and urgent |
+| **ID** | `9efa20db` | `8b080e6b` | `e18893d0` |
+
+</div>
+
+*Reserve agents: Ambassador Chen Wei (diplomat, `coral`) and Zap Thunder (gaming streamer, `ballad`)*
+
+## Credit Economy
+
+| Action | Cost | Duration |
+|--------|------|----------|
+| Chaos Rule | 1 credit/turn | 1-4 turns |
+| Quick Chaos Preset | 3 credits | 3 turns |
+| Topic Change | 5 credits | Immediate |
+| Call-In | 10 credits | Multi-turn discussion |
+
+New users receive **10 free credits** on sign-up. Watching is always free.
 
 ## Project Structure
 
@@ -188,27 +248,6 @@ ARENA/
 └── shared/types.ts                   # Shared TypeScript interfaces
 ```
 
-## Credit Costs
-
-| Action | Cost | Duration |
-|--------|------|----------|
-| Chaos Rule | 1 credit/turn | 1-4 turns |
-| Quick Chaos Preset | 3 credits | 3 turns |
-| Topic Change | 5 credits | Immediate |
-| Call-In | 10 credits | Multi-turn discussion |
-
-New users receive 10 free credits on sign-up. Watching is always free.
-
-## Agents
-
-| Agent | Role | Voice | Companion ID |
-|-------|------|-------|--------------|
-| Rico "The Roast" Martinez | Stand-Up Comedian | `verse` | `9efa20db` |
-| Dr. Helena Ashworth | Philosophy Professor | `coral` | `8b080e6b` |
-| Darius "Deep State" Kane | Podcast Host | `ash` | `e18893d0` |
-| Ambassador Chen Wei | Retired Diplomat | `coral` | Reserve |
-| Zap Thunder | Gaming Streamer | `ballad` | Reserve |
-
 ## Content Moderation
 
 Two-layer hybrid system applied to all viewer-submitted content:
@@ -259,26 +298,19 @@ Open http://localhost:5173
 ### Production Build
 
 ```bash
-# Build the client
 cd client && npx vite build
-
-# Start the server (serves client/dist as static files)
-cd server && npx tsx src/index.ts
+cd ../server && npx tsx src/index.ts
 ```
 
 ### Deploying to Railway
-
-The client is pre-built and committed to git (`client/dist`) because Railway's build environment runs out of memory. After frontend changes:
 
 ```bash
 cd client && npx vite build
 cd ..
 git add -f client/dist
 git commit -m "build: update client dist"
-git push
+git push  # Railway auto-deploys from master
 ```
-
-Railway auto-deploys from the `master` branch.
 
 ## API Reference
 
@@ -293,10 +325,13 @@ Railway auto-deploys from the `master` branch.
 
 ## Key Technical Decisions
 
-- **Client not in npm workspaces**: Installed independently to avoid workspace resolution issues
-- **`client/dist` committed**: Railway OOMs building the client; pre-built dist avoids this
-- **Socket.io transports**: `['polling', 'websocket']` (polling first for Railway proxy compatibility)
 - **16kHz PCM audio**: Confirmed sample rate; 24kHz causes chipmunk effect
 - **Iframe-isolated avatars**: Napster SDK is singleton per JS context; 3 agents need 3 iframes
 - **Signaling proxy**: Napster's WebRTC signaling server rejects browser origins; server-side proxy required
 - **Audio field fallback**: API returns `data.data` for audio despite docs saying `data.audio`; we handle both
+- **Socket.io transports**: `['polling', 'websocket']` (polling first for Railway proxy compatibility)
+- **`client/dist` committed**: Railway OOMs building the client; pre-built dist avoids this
+
+## License
+
+[MIT](LICENSE)
