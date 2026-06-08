@@ -385,12 +385,12 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         clearInterval(avatarRetryInterval);
         return;
       }
-      if (state.session?.status === 'active' && avatarRetryCount < 8) {
+      if (state.session?.status === 'active' && avatarRetryCount < 4) {
         avatarRetryCount++;
-        console.log(`[Avatar] Tokens: ${tokenCount}/${agentCount} — requesting (attempt ${avatarRetryCount}/8)...`);
+        console.log(`[Avatar] Tokens: ${tokenCount}/${agentCount} — requesting (attempt ${avatarRetryCount}/4)...`);
         socket.emit('request_avatar_tokens' as any);
       }
-    }, 6000);
+    }, 10000);
 
     // PCM audio chunks from server (Napster WebSocket audio)
     pcmPlayer = new PcmAudioPlayer();

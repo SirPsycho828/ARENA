@@ -1081,6 +1081,10 @@ export class SessionManager {
               body: JSON.stringify({
                 companionId,
                 externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}${(config?.name || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`.slice(0, 32),
+                providerConfig: {
+                  voiceId: config?.voiceId || 'verse',
+                  settings: { temperature: 0.7 },
+                },
               }),
               signal: controller.signal,
             }
