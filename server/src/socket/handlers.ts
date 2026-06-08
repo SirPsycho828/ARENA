@@ -35,10 +35,8 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
     const session = sessionManager.getActiveSession();
     if (session?.status === 'active') {
       sessionManager.createVideoTokensForViewer(socket.id).then((tokens) => {
-        if (Object.keys(tokens).length > 0) {
-          console.log(`  Sent avatar_tokens to ${socket.id}: ${Object.keys(tokens).length} agents`);
-          (socket as any).emit('avatar_tokens', { tokens });
-        }
+        console.log(`  Sent avatar_tokens to ${socket.id}: ${Object.keys(tokens).length} agents`);
+        (socket as any).emit('avatar_tokens', { tokens });
       }).catch((err) => {
         console.warn(`  Avatar token creation failed for ${socket.id}:`, (err as Error).message);
       });
@@ -49,10 +47,9 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
       const sess = sessionManager.getActiveSession();
       if (!sess || sess.status !== 'active') return;
       sessionManager.createVideoTokensForViewer(socket.id).then((tokens) => {
-        if (Object.keys(tokens).length > 0) {
-          console.log(`  Re-sent avatar_tokens to ${socket.id}: ${Object.keys(tokens).length} agents`);
-          (socket as any).emit('avatar_tokens', { tokens });
-        }
+        // Always emit, even if empty — client needs to know the attempt happened
+        console.log(`  Re-sent avatar_tokens to ${socket.id}: ${Object.keys(tokens).length} agents`);
+        (socket as any).emit('avatar_tokens', { tokens });
       }).catch((err) => {
         console.warn(`  Avatar token retry failed for ${socket.id}:`, (err as Error).message);
       });
