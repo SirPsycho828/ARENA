@@ -147,7 +147,7 @@ async function createKnowledgeBase(apiKey: string, serverUrl: string): Promise<s
 async function createAgent(apiKey: string, companionId: string, kbId: string): Promise<string> {
   const agent = await napsterPost('/public/agents', {
     companionId,
-    voiceId: 'ballad',
+    voiceId: 'echo',
     providerSettings: {
       instructions: STEVE_INSTRUCTIONS,
       temperature: 0.85,
