@@ -91,12 +91,22 @@ Watchdog detects stuck sessions (3 forced advances or 2 minutes of silence) and 
 
 <div align="center">
 
-| | | |
-|:---:|:---:|:---:|
-| <img src="docs/screenshots/04-chaos-sidebar.png" alt="Chaos Controls" height="300" /> | <img src="docs/screenshots/05-consensus-needle.png" alt="Consensus Needle" width="400" /> | <img src="docs/screenshots/08-hackathon-deck.png" alt="Hackathon Deck" width="300" /> |
-| Chaos Controls + Quick Presets | Live Opinion Meter | Hackathon Presentation Deck |
+| | |
+|:---:|:---:|
+| <img src="docs/screenshots/09-chaos-controls.png" alt="Chaos Controls" height="420" /> | <img src="docs/screenshots/10-credit-shop.png" alt="Credit Shop" height="420" /> |
+| **Chaos Controls** | **Credit Shop** |
+| Custom rules, quick presets, and Call-In | Stripe-powered credit economy |
 
 </div>
+
+<div align="center">
+<img src="docs/screenshots/05-consensus-needle.png" alt="Consensus Needle" width="70%" />
+<br/><sub>Live opinion meter with AI-generated pole labels and audience voting</sub>
+</div>
+
+<p align="center">
+<a href="https://arenaserver-production-f84b.up.railway.app/hackathon/"><img src="https://img.shields.io/badge/View_Hackathon_Presentation_Deck_%E2%86%92-3B9AE1?style=for-the-badge" alt="Hackathon Deck" /></a>
+</p>
 
 ## Napster Omnichannel Architecture
 
