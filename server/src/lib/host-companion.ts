@@ -132,7 +132,7 @@ async function createKnowledgeBase(apiKey: string, serverUrl: string): Promise<s
   }, apiKey);
 
   await napsterPatch(`/public/knowledge-bases/${kbId}/files/${fileRes.id}/summary`, {
-    summary: 'Comprehensive knowledge about ARENA (AI debate arena), the Napster Omnichannel API, chaos engine features, credit economy, technical architecture, and hackathon context.',
+    summary: 'ARENA project overview, Napster Omnichannel API usage, chaos engine, credit system, architecture decisions',
   }, apiKey);
 
   console.log(`  [Host] Knowledge base created (${kbId})`);
