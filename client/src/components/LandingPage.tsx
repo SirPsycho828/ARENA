@@ -567,7 +567,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           <div className="flex items-center gap-2 text-sm font-body text-muted-foreground">
             <span className="font-display text-foreground tracking-wider">A.R.E.N.A.</span>
             <span className="text-border">|</span>
-            <span>Napster Hackathon 2025</span>
+            <span>Napster Hackathon 2026</span>
           </div>
           <div className="flex items-center gap-4 text-xs font-body text-muted-foreground">
             <span>Powered by Napster Omniagent</span>
