@@ -215,6 +215,9 @@ export class SessionManager {
   private isRestarting = false;
   private watchdog: { pause(): void; resume(): void; markRealResponse(): void } | null = null;
   private callInQueue: CallInQueue | null = null;
+  // Rate limit protection for WebRTC token creation
+  private videoTokenRateLimitUntil = 0; // timestamp — skip requests until this clears
+  private videoTokenLock: Promise<void> = Promise.resolve(); // serialize viewer requests
 
 
   constructor(omniagent: OmniagentManager, io: Server<ClientEvents, ServerEvents>) {
@@ -380,12 +383,9 @@ export class SessionManager {
       return;
     }
 
-    if (!USE_MOCK) {
-      // Send per-viewer WebRTC tokens for avatar rendering (non-critical)
-      this.sendAvatarTokensToAll().catch(err => {
-        console.error('  Avatar token broadcast failed:', (err as Error).message);
-      });
-    }
+    // Avatar tokens are sent per-viewer on socket connect (handlers.ts),
+    // so no broadcast needed here. Removing eliminates duplicate API calls
+    // that trigger 429 rate limits on the Napster API.
 
     // Initialize orchestration
     this.turnManager = new TurnManager({ mode: 'dynamic' });
@@ -1059,14 +1059,37 @@ export class SessionManager {
   async createVideoTokensForViewer(viewerId: string): Promise<Record<string, string>> {
     if (process.env.USE_MOCK === 'true' || !this.session) return {};
 
+    // If we're in a rate limit cooldown, skip entirely
+    if (Date.now() < this.videoTokenRateLimitUntil) {
+      const waitSec = Math.ceil((this.videoTokenRateLimitUntil - Date.now()) / 1000);
+      console.warn(`  WebRTC tokens skipped for ${viewerId} — rate limited (${waitSec}s remaining)`);
+      return {};
+    }
+
+    // Serialize requests across viewers to prevent parallel API storms
+    const result = new Promise<Record<string, string>>((resolve) => {
+      this.videoTokenLock = this.videoTokenLock.then(async () => {
+        // Re-check rate limit (may have been set by previous viewer's request)
+        if (Date.now() < this.videoTokenRateLimitUntil) {
+          const waitSec = Math.ceil((this.videoTokenRateLimitUntil - Date.now()) / 1000);
+          console.warn(`  WebRTC tokens skipped for ${viewerId} (rate limit hit during queue, ${waitSec}s remaining)`);
+          resolve({});
+          return;
+        }
+
+        const tokens = await this._createVideoTokensForViewerInner(viewerId);
+        resolve(tokens);
+      });
+    });
+
+    return result;
+  }
+
+  private async _createVideoTokensForViewerInner(viewerId: string): Promise<Record<string, string>> {
     const API_KEY = process.env.OMNIAGENT_API_KEY!;
     const tokens: Record<string, string> = {};
+    if (!this.session) return tokens;
 
-    // Use the old per-session POST /public/connections endpoint.
-    // Agent-scoped endpoint shares pool with debate WebSocket (1 connection limit),
-    // so WebRTC always fails with NoAvailableConnections. The per-session endpoint
-    // creates standalone connections not tied to any agent pool.
-    // Sequential with 1.5s delays to avoid 429 rate limits.
     for (const agentId of this.session.agentIds) {
       const config = this.agentConfigs.get(agentId);
       const companionId = config?.companionId;
@@ -1076,7 +1099,7 @@ export class SessionManager {
       }
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
         const res = await fetch(
           'https://companion-api.napster.com/public/connections',
           {
@@ -1094,6 +1117,14 @@ export class SessionManager {
           }
         );
         clearTimeout(timeoutId);
+
+        if (res.status === 429) {
+          // Rate limited — set global cooldown and stop immediately
+          this.videoTokenRateLimitUntil = Date.now() + 90_000; // 90s cooldown
+          console.error(`  WebRTC 429 rate limit — backing off 90s (got ${Object.keys(tokens).length} tokens before limit)`);
+          break;
+        }
+
         if (!res.ok) {
           const errBody = await res.text().catch(() => '');
           console.error(`  WebRTC token failed for ${config?.name || agentId}: HTTP ${res.status}: ${errBody.substring(0, 200)}`);
@@ -1105,9 +1136,9 @@ export class SessionManager {
       } catch (err) {
         console.error(`  WebRTC token failed for ${config?.name || agentId}: ${(err as Error).message}`);
       }
-      // 1.5s gap between requests to avoid rate limiting
+      // 2s gap between requests to avoid rate limiting
       if (this.session.agentIds.indexOf(agentId) < this.session.agentIds.length - 1) {
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 2000));
       }
     }
 

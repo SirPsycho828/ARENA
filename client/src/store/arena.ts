@@ -375,7 +375,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set({ avatarTokens: { ...existing, ...tokens } });
     });
 
-    // Single delayed retry for avatar tokens — avoid hammering the API
+    // Single delayed retry for avatar tokens — long delay to let rate limits clear
     const avatarRetryTimer = setTimeout(() => {
       const state = get();
       const agentCount = state.agents?.length || 0;
@@ -384,7 +384,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         console.log(`[Avatar] Tokens: ${tokenCount}/${agentCount} — requesting retry...`);
         socket.emit('request_avatar_tokens' as any);
       }
-    }, 20000);
+    }, 45000);
 
     // PCM audio chunks from server (Napster WebSocket audio)
     pcmPlayer = new PcmAudioPlayer();
