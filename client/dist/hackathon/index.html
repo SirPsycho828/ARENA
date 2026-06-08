@@ -837,27 +837,27 @@ POST /public/functions
           <div class="accent-bar" style="background:var(--green);"></div>
           <h2 class="font-display" style="font-size:2.4rem;">ASK STEVE<br/><span class="text-green">LIVE SDK DEMO</span></h2>
           <p style="font-size:0.85rem;color:var(--muted);margin-top:1rem;line-height:1.7;">
-            That widget in the bottom-right corner? That's <strong style="color:var(--fg)">me</strong> — a 4th Napster companion
+            That widget in the bottom-right corner? That's <strong style="color:var(--fg)">me</strong>, a 4th Napster companion
             running right here on this presentation deck. Custom avatar, knowledge base, guardrailed personality.
             Ask me anything about ARENA or the Napster platform.
           </p>
           <p style="font-size:0.85rem;color:var(--muted);margin-top:1rem;line-height:1.7;">
-            Type a question or use your microphone. I'm the same Napster Omnichannel stack
-            that powers the debate — just deployed as a <strong style="color:var(--fg)">drop-in support widget</strong>.
+            Click the mic and ask a question. I'm the same Napster Omnichannel stack
+            that powers the debate, just deployed as a <strong style="color:var(--fg)">drop-in support widget</strong>.
           </p>
           <div style="margin-top:2rem;">
             <div style="font-size:0.75rem;font-weight:600;color:var(--green);margin-bottom:0.75rem;">THREE CHANNEL TYPES, ONE PLATFORM</div>
             <div style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
               <span style="font-size:0.7rem;font-family:'JetBrains Mono',monospace;color:var(--accent);min-width:24px;">01</span>
-              <span style="font-size:0.82rem;color:var(--fg);"><strong style="color:var(--accent)">WebSocket</strong> — server-side debate orchestration</span>
+              <span style="font-size:0.82rem;color:var(--fg);"><strong style="color:var(--accent)">WebSocket</strong> / server-side debate orchestration</span>
             </div>
             <div style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
               <span style="font-size:0.7rem;font-family:'JetBrains Mono',monospace;color:var(--accent);min-width:24px;">02</span>
-              <span style="font-size:0.82rem;color:var(--fg);"><strong style="color:var(--green)">WebRTC</strong> — per-viewer animated avatars in the arena</span>
+              <span style="font-size:0.82rem;color:var(--fg);"><strong style="color:var(--green)">WebRTC</strong> / per-viewer animated avatars in the arena</span>
             </div>
             <div style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;">
               <span style="font-size:0.7rem;font-family:'JetBrains Mono',monospace;color:var(--accent);min-width:24px;">03</span>
-              <span style="font-size:0.82rem;color:var(--fg);"><strong style="color:var(--gold)">WebRTC SDK</strong> — this support widget, right here &rarr;</span>
+              <span style="font-size:0.82rem;color:var(--fg);"><strong style="color:var(--gold)">WebRTC SDK</strong> / this support widget, right here &rarr;</span>
             </div>
           </div>
         </div>
@@ -882,7 +882,7 @@ POST /public/agents
 POST /public/agents/{id}/connections
 { <span class="key">"channelType"</span>: <span class="str">"webrtc"</span> }
 
-<span class="comment">// 4. Drop in the SDK — done</span>
+<span class="comment">// 4. Drop in the SDK, done</span>
 <span class="type">const</span> sdk = napsterCompanionApiSDK;
 sdk.init(token, {
   <span class="key">mountContainer</span>: <span class="str">"#steve-widget"</span>,
