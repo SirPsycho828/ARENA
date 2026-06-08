@@ -163,6 +163,11 @@
       }
     });
 
+    // Clean up WebRTC connection on page unload (refresh/close)
+    window.addEventListener('beforeunload', () => {
+      if (instance) { try { instance.destroy(); } catch {} instance = null; }
+    });
+
     // Signal parent that frame is loaded and ready for token
     window.parent.postMessage({ type: 'frame-ready' }, '*');
   </script>
