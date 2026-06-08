@@ -70,7 +70,10 @@ async function napsterPatch(path: string, body: any, apiKey: string): Promise<an
 // ─── Companion + Agent Setup ────────────────────────────────────────────────
 
 let cachedAgentId: string | null = null;
+let cachedCompanionId: string | null = null;
+let cachedServerUrl: string | null = null;
 let lastError: string | null = null;
+let isRecreating = false;
 
 async function findExistingCompanion(apiKey: string): Promise<string | null> {
   const data = await napsterGet('/public/companions?pageSize=50', apiKey);
@@ -202,6 +205,10 @@ export async function initHostCompanion(serverUrl: string): Promise<void> {
         console.log(`  [Host] Using existing Steve companion (${companionId})`);
       }
 
+      // Cache for auto-recovery
+      cachedCompanionId = companionId;
+      cachedServerUrl = serverUrl;
+
       // Create KB and agent (fresh each startup — agents are ephemeral)
       console.log('  [Host] Creating knowledge base...');
       const kbId = await createKnowledgeBase(apiKey, serverUrl);
@@ -230,8 +237,30 @@ export function getHostStatus(): { ready: boolean; agentId: string | null; error
 }
 
 /**
+ * Recreate the agent (fresh KB + agent) when connection pool is exhausted.
+ */
+async function recreateAgent(): Promise<void> {
+  if (isRecreating || !cachedCompanionId || !cachedServerUrl) return;
+  isRecreating = true;
+
+  const apiKey = process.env.OMNIAGENT_API_KEY!;
+  try {
+    console.log('  [Host] Recreating agent (connection pool exhausted)...');
+    const kbId = await createKnowledgeBase(apiKey, cachedServerUrl);
+    cachedAgentId = await createAgent(apiKey, cachedCompanionId, kbId);
+    console.log('  [Host] Agent recreated successfully');
+  } catch (err) {
+    console.error('  [Host] Agent recreation failed:', (err as Error).message);
+    cachedAgentId = null;
+  } finally {
+    isRecreating = false;
+  }
+}
+
+/**
  * Create a fresh WebRTC token for a viewer to connect to Steve.
  * Returns null if the host agent hasn't been initialized.
+ * Auto-recreates the agent if the connection pool is exhausted.
  */
 export async function createSteveToken(): Promise<string | null> {
   if (!cachedAgentId) return null;
@@ -239,9 +268,22 @@ export async function createSteveToken(): Promise<string | null> {
   const apiKey = process.env.OMNIAGENT_API_KEY;
   if (!apiKey) return null;
 
-  const res = await napsterPost(`/public/agents/${cachedAgentId}/connections`, {
-    channelType: 'webrtc',
-  }, apiKey);
-
-  return res.token;
+  try {
+    const res = await napsterPost(`/public/agents/${cachedAgentId}/connections`, {
+      channelType: 'webrtc',
+    }, apiKey);
+    return res.token;
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg.includes('NoAvailableConnections') || msg.includes('400')) {
+      // Connection pool exhausted — recreate agent and retry once
+      await recreateAgent();
+      if (!cachedAgentId) return null;
+      const res = await napsterPost(`/public/agents/${cachedAgentId}/connections`, {
+        channelType: 'webrtc',
+      }, apiKey);
+      return res.token;
+    }
+    throw err;
+  }
 }
