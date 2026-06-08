@@ -23,7 +23,7 @@ import { adminAuth } from './lib/firebase-admin.js';
 import { CreditService } from './lib/credits.js';
 import { initNapsterResources } from './lib/napster-resources.js';
 import { ensureCustomCompanions } from './lib/companions.js';
-import { initHostCompanion, createSteveToken } from './lib/host-companion.js';
+import { initHostCompanion, createSteveToken, getHostStatus } from './lib/host-companion.js';
 import { createToolRoutes } from './routes/tools.js';
 import { logLiveKitStatus } from './lib/livekit.js';
 
@@ -260,14 +260,19 @@ app.get('/api/steve-token', async (_req, res) => {
   try {
     const token = await createSteveToken();
     if (!token) {
-      res.status(503).json({ error: 'Host companion not ready' });
+      const status = getHostStatus();
+      res.status(503).json({ error: 'Host companion not ready', detail: status.error });
       return;
     }
     res.json({ token });
   } catch (err) {
     console.error('  [Host] Token error:', (err as Error).message);
-    res.status(500).json({ error: 'Failed to create token' });
+    res.status(500).json({ error: 'Failed to create token', detail: (err as Error).message });
   }
+});
+
+app.get('/api/steve-status', (_req, res) => {
+  res.json(getHostStatus());
 });
 
 // ─── SPA Catch-All (after API routes, before socket) ────────────────────────

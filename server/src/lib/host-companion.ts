@@ -70,6 +70,7 @@ async function napsterPatch(path: string, body: any, apiKey: string): Promise<an
 // ─── Companion + Agent Setup ────────────────────────────────────────────────
 
 let cachedAgentId: string | null = null;
+let lastError: string | null = null;
 
 async function findExistingCompanion(apiKey: string): Promise<string | null> {
   const data = await napsterGet('/public/companions?pageSize=50', apiKey);
@@ -176,23 +177,44 @@ export async function initHostCompanion(serverUrl: string): Promise<void> {
 
   console.log('\n  Setting up host companion (Ask Steve)...');
 
-  try {
-    // Find or create companion
-    let companionId = await findExistingCompanion(apiKey);
-    if (!companionId) {
-      companionId = await createCompanion(apiKey, serverUrl);
-    } else {
-      console.log(`  [Host] Using existing Steve companion (${companionId})`);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      lastError = null;
+
+      // Find or create companion
+      let companionId = await findExistingCompanion(apiKey);
+      if (!companionId) {
+        console.log(`  [Host] Creating Steve companion (attempt ${attempt})...`);
+        companionId = await createCompanion(apiKey, serverUrl);
+      } else {
+        console.log(`  [Host] Using existing Steve companion (${companionId})`);
+      }
+
+      // Create KB and agent (fresh each startup — agents are ephemeral)
+      console.log('  [Host] Creating knowledge base...');
+      const kbId = await createKnowledgeBase(apiKey, serverUrl);
+      console.log('  [Host] Creating agent...');
+      cachedAgentId = await createAgent(apiKey, companionId, kbId);
+
+      console.log('  [Host] Ask Steve ready!\n');
+      return;
+    } catch (err) {
+      lastError = (err as Error).message;
+      console.error(`  [Host] Setup attempt ${attempt} failed:`, lastError);
+      if (attempt < 2) {
+        console.log('  [Host] Retrying in 10s...');
+        await new Promise((r) => setTimeout(r, 10_000));
+      }
     }
-
-    // Create KB and agent (fresh each startup — agents are ephemeral)
-    const kbId = await createKnowledgeBase(apiKey, serverUrl);
-    cachedAgentId = await createAgent(apiKey, companionId, kbId);
-
-    console.log('  [Host] Ask Steve ready!\n');
-  } catch (err) {
-    console.error('  [Host] Setup failed (non-fatal):', (err as Error).message);
   }
+  console.error('  [Host] Setup failed after 2 attempts (non-fatal)');
+}
+
+/**
+ * Get the host companion status for diagnostics.
+ */
+export function getHostStatus(): { ready: boolean; agentId: string | null; error: string | null } {
+  return { ready: !!cachedAgentId, agentId: cachedAgentId, error: lastError };
 }
 
 /**
