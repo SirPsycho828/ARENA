@@ -200,8 +200,6 @@ export class SessionManager {
   // Consensus meter
   private consensusState: ConsensusState | null = null;
   private poleVoterRecord: Set<string> = new Set();
-  private pendingPoleGeneration: string | null = null; // agentId awaiting pole response
-  private poleGenerationTimeout: ReturnType<typeof setTimeout> | null = null;
   private completedTurns = 0;
   private polesGenerated = false;
   private lastTurnAdvanceTime: number = Date.now();
@@ -1266,14 +1264,6 @@ export class SessionManager {
   }
 
   handleSpeechEnd(agentId: string, text: string) {
-    // Intercept pole generation responses
-    if (this.pendingPoleGeneration === agentId) {
-      this.pendingPoleGeneration = null;
-      if (this.poleGenerationTimeout) { clearTimeout(this.poleGenerationTimeout); this.poleGenerationTimeout = null; }
-      this.parsePoleResponse(text);
-      return;
-    }
-
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
     if (this.turnTextComplete) return;
 
@@ -1515,43 +1505,75 @@ export class SessionManager {
     this.turnManager?.onSpeechEnd(agentId, '');
   }
 
-  /** After hearing from all 3 agents, ask one to identify the two main positions */
-  private generatePolesFromTranscript() {
+  /** After hearing from all 3 agents, ask OpenAI to identify the two main positions */
+  private async generatePolesFromTranscript() {
     if (!this.session || this.session.agentIds.length === 0) return;
     this.polesGenerated = true;
 
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_API_KEY) {
+      console.log('  [Consensus] No OPENAI_API_KEY — using template fallback');
+      if (this.consensusState) {
+        const fallback = this.generatePoles(this.session.topic);
+        this.consensusState.leftPole = fallback.left;
+        this.consensusState.rightPole = fallback.right;
+        (this.io as any).emit('consensus_update', this.consensusState);
+      }
+      return;
+    }
+
     // Build transcript summary from the first round
     const transcript = this.recentTranscripts
-      .slice(-6) // last 3-6 messages covers the first round
+      .slice(-6)
       .map(m => `${m.agentName}: ${m.text}`)
       .join('\n');
 
-    // Pick a non-speaking agent
-    const currentSpeaker = this.turnManager?.getCurrentSpeaker();
-    const poleAgentId = this.session.agentIds.find(id => id !== currentSpeaker)
-      || this.session.agentIds[this.session.agentIds.length - 1];
-
-    this.pendingPoleGeneration = poleAgentId;
-    if (this.poleGenerationTimeout) clearTimeout(this.poleGenerationTimeout);
-    this.poleGenerationTimeout = setTimeout(() => {
-      if (this.pendingPoleGeneration) {
-        console.log('  [Consensus] Pole generation timed out — using fallback');
-        this.pendingPoleGeneration = null;
-        // Fall back to template-based poles
-        if (this.consensusState && this.session) {
-          const fallback = this.generatePoles(this.session.topic);
-          this.consensusState.leftPole = fallback.left;
-          this.consensusState.rightPole = fallback.right;
-          (this.io as any).emit('consensus_update', this.consensusState);
-        }
-      }
-    }, 10000);
-
     const topic = this.session.topic;
-    const prompt = `SYSTEM TASK (not a debate prompt — reply ONLY in the exact format below, nothing else):\n\nDebate transcript:\n${transcript}\n\nTopic: "${topic}"\n\nWhat are the TWO opposing positions? Write two short vote-button labels (2-5 words each).\nReply EXACTLY: LEFT: [label] | RIGHT: [label]\nExample: LEFT: PINEAPPLE BELONGS | RIGHT: KEEP IT CLASSIC`;
 
-    this.omniagent.sendMessage(poleAgentId, 'system', prompt, true);
-    console.log(`  [Consensus] Generating poles from transcript via ${this.agentConfigs.get(poleAgentId)?.name || poleAgentId}`);
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          max_tokens: 40,
+          temperature: 0.7,
+          messages: [
+            {
+              role: 'system',
+              content: 'You generate short vote-button labels for a live debate opinion meter. Reply ONLY in the exact format: LEFT: [label] | RIGHT: [label]. Labels must be 2-5 words, uppercase, punchy, and clearly opposing. No quotes, no explanation.',
+            },
+            {
+              role: 'user',
+              content: `Topic: "${topic}"\n\nTranscript:\n${transcript}\n\nWhat are the two opposing positions viewers should vote on?`,
+            },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        console.warn(`  [Consensus] OpenAI API returned ${res.status} — using fallback`);
+        throw new Error(`OpenAI ${res.status}`);
+      }
+
+      const data = await res.json() as {
+        choices: Array<{ message: { content: string } }>;
+      };
+      const reply = data.choices?.[0]?.message?.content || '';
+      console.log(`  [Consensus] OpenAI poles raw: "${reply}"`);
+      this.parsePoleResponse(reply);
+    } catch (err) {
+      console.warn('  [Consensus] OpenAI pole generation failed — using fallback:', (err as Error).message);
+      if (this.consensusState && this.session) {
+        const fallback = this.generatePoles(this.session.topic);
+        this.consensusState.leftPole = fallback.left;
+        this.consensusState.rightPole = fallback.right;
+        (this.io as any).emit('consensus_update', this.consensusState);
+      }
+    }
   }
 
   private wireTurnManagerEvents() {
