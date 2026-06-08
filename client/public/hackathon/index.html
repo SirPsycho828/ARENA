@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@touchcastllc/napster-companion-api@latest/lib/index.css" />
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -897,6 +898,34 @@ POST /public/functions
     if (x > 0.65) goTo(current + 1);
     else if (x < 0.35) goTo(current - 1);
   });
+</script>
+
+<!-- ═══ ASK STEVE — Napster SDK Widget ═══ -->
+<div id="steve-widget"></div>
+<script src="https://cdn.jsdelivr.net/npm/@touchcastllc/napster-companion-api@latest/lib/index.standalone.js"></script>
+<script>
+  (async () => {
+    try {
+      const res = await fetch('/api/steve-token');
+      if (!res.ok) {
+        console.warn('Steve widget: token endpoint returned', res.status);
+        return;
+      }
+      const { token } = await res.json();
+      const sdk = window.napsterCompanionApiSDK;
+      if (!sdk) {
+        console.warn('Steve widget: SDK not loaded');
+        return;
+      }
+      const instance = await sdk.init(token, {
+        mountContainer: '#steve-widget',
+        position: 'bottom-right',
+      });
+      console.log('Steve widget initialized');
+    } catch (err) {
+      console.error('Steve widget failed to init:', err);
+    }
+  })();
 </script>
 
 </body>
