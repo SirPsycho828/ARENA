@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useArenaStore } from '../store/arena';
 
@@ -25,6 +25,8 @@ export function TranscriptFeed() {
   const currentSpeaker = useArenaStore((s) => s.currentSpeaker);
   const session = useArenaStore((s) => s.session);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
 
   const getAgentColor = (agentId: string) => {
     if (agentId === 'challenger') return '#E63946';
@@ -33,13 +35,23 @@ export function TranscriptFeed() {
 
   const debateStart = session?.startedAt || Date.now();
 
-  // Auto-scroll only within the transcript container itself, never the page
+  // Detect if user has scrolled away from the bottom
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    // "Near bottom" = within 80px of the bottom
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    setUserScrolledUp(!atBottom);
+  }, []);
+
+  // Auto-scroll only if the user hasn't scrolled up
   useEffect(() => {
-    const el = bottomRef.current?.parentElement;
+    if (userScrolledUp) return;
+    const el = scrollContainerRef.current;
     if (el) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [transcripts.length, streamingTranscript?.text]);
+  }, [transcripts.length, streamingTranscript?.text, userScrolledUp]);
 
   return (
     <div className="flex flex-col h-full">
@@ -56,7 +68,7 @@ export function TranscriptFeed() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-2 pb-16 space-y-0.5">
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-3 py-2 pb-16 space-y-0.5">
         {transcripts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 gap-2">
             <div className="flex items-center gap-1.5">

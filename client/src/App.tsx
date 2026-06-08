@@ -177,7 +177,7 @@ function App() {
                 <ChaosStatusBar />
 
                 {/* Transcript feed — min-height ensures it's usable on mobile */}
-                <div className="flex-1 min-h-[300px] sm:min-h-0 bg-card rounded-md border border-border overflow-hidden">
+                <div className="flex-1 min-h-[600px] sm:min-h-0 bg-card rounded-md border border-border overflow-hidden">
                   <TranscriptFeed />
                 </div>
               </>
