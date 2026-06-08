@@ -129,6 +129,7 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
     });
 
     (socket as any).on('pole_vote', (data: { side: 'left' | 'right' }) => {
+      if (data.side !== 'left' && data.side !== 'right') return;
       sessionManager.handlePoleVote(socket.id, data.side);
     });
 
@@ -167,6 +168,8 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
     // ─── Reactions ──────────────────────────────────────────────────────────
 
     socket.on('reaction', (data) => {
+      // Validate emoji is a short string (max 10 chars)
+      if (!data.emoji || typeof data.emoji !== 'string' || data.emoji.length > 10) return;
       // Broadcast to all OTHER viewers with sender position info
       socket.broadcast.emit('reaction' as any, {
         emoji: data.emoji,
@@ -191,6 +194,18 @@ export function setupSocketHandlers(io: Server<ClientEvents, ServerEvents>, sess
         }
 
         await creditService.ensureUser(user.uid, user.name);
+
+        // Validate input lengths
+        if (!data.displayName || typeof data.displayName !== 'string' || data.displayName.length > 50) {
+          return (socket as any).emit('callin_rejected', { reason: 'invalid_input' });
+        }
+        if (!data.topic || typeof data.topic !== 'string' || data.topic.length > 200) {
+          return (socket as any).emit('callin_rejected', { reason: 'invalid_input' });
+        }
+        // Reject oversized audio (10 MB max)
+        if (!data.audioBlob || data.audioBlob.byteLength > 10_000_000) {
+          return (socket as any).emit('callin_rejected', { reason: 'audio_too_large' });
+        }
 
         // Check queue capacity BEFORE charging
         const queue = sessionManager.getCallInQueue();
