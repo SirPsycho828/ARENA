@@ -46,12 +46,26 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
     return () => window.removeEventListener('message', handleMessage);
   }, [handleMessage]);
 
-  // Reset state when token changes
+  // Reset state when token changes — also re-send init-avatar since iframe won't re-fire frame-ready
   useEffect(() => {
     initedRef.current = false;
     setAvatarReady(false);
     setAvatarFailed(false);
-  }, [token]);
+    // If iframe is already loaded and we got a new token, send init-avatar directly
+    if (token && iframeRef.current?.contentWindow) {
+      const timer = setTimeout(() => {
+        if (!initedRef.current && token && iframeRef.current?.contentWindow) {
+          initedRef.current = true;
+          iframeRef.current.contentWindow.postMessage({
+            type: 'init-avatar',
+            token,
+            agentId,
+          }, '*');
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [token, agentId]);
 
   // Timeout: if avatar not ready in 15s, retry once with fresh tokens, then fall back
   useEffect(() => {

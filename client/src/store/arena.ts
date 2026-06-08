@@ -373,6 +373,21 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set({ avatarTokens: tokens });
     });
 
+    // Auto-request avatar tokens if none received while session is active
+    let avatarRetryCount = 0;
+    const avatarRetryInterval = setInterval(() => {
+      const state = get();
+      if (Object.keys(state.avatarTokens).length > 0) {
+        clearInterval(avatarRetryInterval);
+        return;
+      }
+      if (state.session?.status === 'active' && avatarRetryCount < 5) {
+        avatarRetryCount++;
+        console.log(`[Avatar] No tokens received — requesting (attempt ${avatarRetryCount}/5)...`);
+        socket.emit('request_avatar_tokens' as any);
+      }
+    }, 8000);
+
     // PCM audio chunks from server (Napster WebSocket audio)
     pcmPlayer = new PcmAudioPlayer();
     pcmPlayer.setMuted(get().soundMuted);

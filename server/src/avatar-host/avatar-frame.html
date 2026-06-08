@@ -99,7 +99,12 @@
 
     window.addEventListener('message', async (e) => {
       if (e.data?.type === 'init-avatar') {
-        if (instance) return;
+        // Destroy previous instance if re-initializing with a new token
+        if (instance) {
+          console.log(`[AvatarFrame] Destroying previous instance for re-init`);
+          try { instance.destroy(); } catch {}
+          instance = null;
+        }
         agentId = e.data.agentId;
         console.log(`[AvatarFrame] init-avatar received for ${agentId}, starting SDK...`);
 
