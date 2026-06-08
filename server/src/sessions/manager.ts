@@ -1371,7 +1371,13 @@ export class SessionManager {
   }
 
   handleToolEffect(agentId: string, toolName: string, argsJson: string, callId: string) {
-    const args = JSON.parse(argsJson);
+    let args: any;
+    try {
+      args = JSON.parse(argsJson);
+    } catch {
+      console.warn(`  [Tool] Invalid JSON from ${toolName}: ${argsJson.slice(0, 100)}`);
+      return;
+    }
     (this.io as any).emit('tool_effect', {
       agentId, agentName: this.getAgentName(agentId), tool: toolName, args,
     });
