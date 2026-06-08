@@ -1691,17 +1691,24 @@ export class SessionManager {
         .filter(m => m.agentId !== agentId)
         .slice(-3);
 
+      // Find this agent's last opening words to prevent repetitive starts
+      const myLastMsg = [...this.recentTranscripts].reverse().find(m => m.agentId === agentId);
+      const myLastOpener = myLastMsg?.text?.split(/[.,!?]/)[0]?.trim().slice(0, 40) || '';
+      const antiRepeat = myLastOpener
+        ? `\n(Your last turn started with "${myLastOpener}..." — start COMPLETELY differently this time.)`
+        : '';
+
       if (recentMsgs.length > 0) {
         const context = recentMsgs
           .map(m => `${m.agentName}: "${m.text}"`)
           .join('\n');
 
         const framings = [
-          `Topic: "${topic}"\nRecent conversation:\n${context}\n\nYour turn. Say something they haven't considered.`,
-          `Topic: "${topic}"\nWhat's been said:\n${context}\n\nJump in. Keep it interesting.`,
-          `Topic: "${topic}"\nThe conversation so far:\n${context}\n\nYour turn. Bring a new angle.`,
-          `Topic: "${topic}"\nYou just heard:\n${context}\n\nReact naturally. Don't start the same way as last time.`,
-          `Topic: "${topic}"\nRecent:\n${context}\n\nWhat's your take? Be specific.`,
+          `Topic: "${topic}"\nRecent conversation:\n${context}\n\nYour turn.${antiRepeat}`,
+          `Topic: "${topic}"\nWhat's been said:\n${context}\n\nJump in.${antiRepeat}`,
+          `Topic: "${topic}"\nThe conversation so far:\n${context}\n\nBring a new angle.${antiRepeat}`,
+          `Topic: "${topic}"\nYou just heard:\n${context}\n\nReact naturally.${antiRepeat}`,
+          `Topic: "${topic}"\nRecent:\n${context}\n\nWhat's your take?${antiRepeat}`,
         ];
         const framing = framings[this.recentTranscripts.length % framings.length];
         this.omniagent.sendMessage(agentId, 'user', `${chaosInstruction}${framing}`, true);
