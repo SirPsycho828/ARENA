@@ -2,6 +2,8 @@ node_modules/
 server/dist/
 .env
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 .DS_Store
 poc/node_modules/

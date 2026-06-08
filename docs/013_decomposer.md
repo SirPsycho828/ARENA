@@ -2,7 +2,7 @@
 
 ## Decomposition Overview
 
-16 implementation files, ordered by build sequence. Each is a focused specification that can be handed to an AI coding agent to implement independently (within its dependency chain).
+16 implementation files, ordered by build sequence. Each is a focused specification that can be implemented independently (within its dependency chain).
 
 ### File Map
 

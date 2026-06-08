@@ -1,7 +1,7 @@
 # Technical Landmine Report: A.R.E.N.A.
 
 ## Executive Summary
-The core technical challenge of ARENA is multi-agent real-time orchestration — coordinating 3-4 simultaneous WebRTC video connections, relaying transcripts between agents, managing conversational turn-taking, and compositing green-screen video into a unified layout. AI coding tools will happily generate WebRTC boilerplate, but they won't flag the systemic timing issues, the undocumented concurrent connection limits, or the cascading latency problem that makes sequential multi-agent conversation feel slow. The second major risk is that the Napster Omniagent API is new and the documentation may not cover edge cases you'll hit when pushing it beyond single-agent use cases.
+The core technical challenge of ARENA is multi-agent real-time orchestration — coordinating 3-4 simultaneous WebRTC video connections, relaying transcripts between agents, managing conversational turn-taking, and compositing green-screen video into a unified layout. Standard WebRTC boilerplate won't flag the systemic timing issues, the undocumented concurrent connection limits, or the cascading latency problem that makes sequential multi-agent conversation feel slow. The second major risk is that the Napster Omniagent API is new and the documentation may not cover edge cases you'll hit when pushing it beyond single-agent use cases.
 
 ---
 

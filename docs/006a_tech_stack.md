@@ -1,7 +1,7 @@
 # Tech Stack for A.R.E.N.A.
 
 ## Executive Summary
-A.R.E.N.A. is a real-time multi-agent debate platform requiring persistent WebRTC connections, server-side orchestration, and a reactive spectator UI. This stack is optimized for AI-assisted development with maximum ecosystem coverage, fast iteration speed, and minimal DevOps overhead. Every choice below is final and ready to build on.
+A.R.E.N.A. is a real-time multi-agent debate platform requiring persistent WebRTC connections, server-side orchestration, and a reactive spectator UI. This stack is optimized for rapid development with maximum ecosystem coverage, fast iteration speed, and minimal DevOps overhead. Every choice below is final and ready to build on.
 
 ---
 

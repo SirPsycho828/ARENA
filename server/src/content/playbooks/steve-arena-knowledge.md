@@ -311,4 +311,4 @@ Steve built ARENA to demonstrate what the Napster Companion API can do when push
 
 The "Ask Steve" companion is powered by a RAG knowledge base containing this document. When viewers ask questions about ARENA — how it works, who the debaters are, how the credits work, what the Napster API can do — the companion retrieves relevant sections from this file to give accurate, detailed answers.
 
-Steve's GitHub handle for this project is SirPsycho828. The repository is private. The project is live at arenaserver-production-f84b.up.railway.app.
+Steve's GitHub handle for this project is SirPsycho828. The project is live at arenaserver-production-f84b.up.railway.app.
