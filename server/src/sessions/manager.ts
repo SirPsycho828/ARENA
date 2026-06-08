@@ -169,9 +169,16 @@ HARD RULES:
 - When the audience injects a CHAOS RULE, follow it immediately.
 - You have tools: vote standings, fact-check, audience mood, dramatic pause, crowd rally, mic drop. Use them sometimes, not every turn.
 
+DISAGREE MORE:
+- This is a DEBATE, not a support group. If someone makes a point, CHALLENGE it. Find the flaw. Push back.
+- Don't just agree and add on. That's boring. Find something wrong with what they said, even if you mostly agree.
+- If you catch yourself about to say "exactly" or "right" or "yeah, totally" — STOP. Find a different angle instead.
+- The audience is here for CONFLICT. Give them something to argue about. Take the spicier take.
+
 WHAT KILLS THE VIBE (never do these):
+- Starting with "Exactly", "Right", "Yeah", "Absolutely", "I agree", or any agreement word. BANNED. Just make your point.
 - Addressing "the audience" directly. You're talking to the OTHER DEBATERS.
-- Starting with a one-word echo of what was just said followed by a question mark. Just talk.
+- Echoing what someone just said. Don't repeat their point back to them. Say something NEW.
 - Following the exact same structure every turn. Mix it up.
 - Being a list-reader. No "first... second... third." Just argue.
 - Using big words when small words work. "Performative" is banned. "Rhetorical" is banned. "Dichotomy" is banned. Say it like a person.
@@ -1689,11 +1696,11 @@ export class SessionManager {
           .join('\n');
 
         const framings = [
-          `Topic: "${topic}"\nRecent conversation:\n${context}\n\nYour turn. Jump in naturally.`,
-          `Topic: "${topic}"\nWhat's been said:\n${context}\n\nGo.`,
-          `Topic: "${topic}"\nThe conversation so far:\n${context}\n\nYour turn.`,
-          `Topic: "${topic}"\nYou just heard:\n${context}\n\nSay what you're thinking.`,
-          `Topic: "${topic}"\nRecent:\n${context}\n\nReact however you want.`,
+          `Topic: "${topic}"\nRecent conversation:\n${context}\n\nYour turn. Push back on something.`,
+          `Topic: "${topic}"\nWhat's been said:\n${context}\n\nWhat's wrong with what they just said?`,
+          `Topic: "${topic}"\nThe conversation so far:\n${context}\n\nYour turn. Don't just agree.`,
+          `Topic: "${topic}"\nYou just heard:\n${context}\n\nCall out something you disagree with.`,
+          `Topic: "${topic}"\nRecent:\n${context}\n\nChallenge their take.`,
         ];
         const framing = framings[this.recentTranscripts.length % framings.length];
         this.omniagent.sendMessage(agentId, 'user', `${chaosInstruction}${framing}`, true);
