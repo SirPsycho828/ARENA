@@ -10,3 +10,5 @@ poc/.env
 .playwright-mcp/
 .claude/
 .worktrees/
+test/
+poc/
