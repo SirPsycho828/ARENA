@@ -215,8 +215,9 @@ export class SessionManager {
   private isRestarting = false;
   private watchdog: { pause(): void; resume(): void; markRealResponse(): void } | null = null;
   private callInQueue: CallInQueue | null = null;
-  // Rate limit protection for WebRTC token creation
-  private videoTokenRateLimitUntil = 0; // timestamp — skip requests until this clears
+  // Video-only agents: one per debate agent, dedicated to WebRTC (no WebSocket)
+  // Map: debateAgentId -> videoAgentId
+  private videoAgents: Map<string, string> = new Map();
   private videoTokenLock: Promise<void> = Promise.resolve(); // serialize viewer requests
 
 
@@ -1063,25 +1064,10 @@ export class SessionManager {
   async createVideoTokensForViewer(viewerId: string): Promise<Record<string, string>> {
     if (process.env.USE_MOCK === 'true' || !this.session) return {};
 
-    // If we're in a rate limit cooldown, skip entirely
-    if (Date.now() < this.videoTokenRateLimitUntil) {
-      const waitSec = Math.ceil((this.videoTokenRateLimitUntil - Date.now()) / 1000);
-      console.warn(`  WebRTC tokens skipped for ${viewerId} — rate limited (${waitSec}s remaining)`);
-      return {};
-    }
-
     // Serialize requests across viewers to prevent parallel API storms
     const result = new Promise<Record<string, string>>((resolve) => {
       this.videoTokenLock = this.videoTokenLock.then(async () => {
-        // Re-check rate limit (may have been set by previous viewer's request)
-        if (Date.now() < this.videoTokenRateLimitUntil) {
-          const waitSec = Math.ceil((this.videoTokenRateLimitUntil - Date.now()) / 1000);
-          console.warn(`  WebRTC tokens skipped for ${viewerId} (rate limit hit during queue, ${waitSec}s remaining)`);
-          resolve({});
-          return;
-        }
-
-        const tokens = await this._createVideoTokensForViewerInner(viewerId);
+        const tokens = await this._createVideoTokensViaAgents(viewerId);
         resolve(tokens);
       });
     });
@@ -1089,65 +1075,122 @@ export class SessionManager {
     return result;
   }
 
-  private async _createVideoTokensForViewerInner(viewerId: string): Promise<Record<string, string>> {
+  /**
+   * Create WebRTC tokens using dedicated video-only agents.
+   * Each debate agent gets a paired video agent (same companion, no WebSocket).
+   * When a video agent's connection is used, we recreate it for the next viewer.
+   */
+  private async _createVideoTokensViaAgents(viewerId: string): Promise<Record<string, string>> {
     const API_KEY = process.env.OMNIAGENT_API_KEY!;
     const tokens: Record<string, string> = {};
     if (!this.session) return tokens;
 
     for (const agentId of this.session.agentIds) {
       const config = this.agentConfigs.get(agentId);
-      const companionId = config?.companionId;
-      if (!companionId) {
-        console.error(`  WebRTC token failed for ${config?.name || agentId}: no companionId`);
-        continue;
-      }
+      if (!config?.companionId) continue;
+
       try {
+        // Ensure a video agent exists for this debate agent
+        let videoAgentId = this.videoAgents.get(agentId);
+        if (!videoAgentId) {
+          videoAgentId = await this._createVideoAgent(config);
+          if (!videoAgentId) continue;
+          this.videoAgents.set(agentId, videoAgentId);
+        }
+
+        // Create WebRTC connection on the video agent
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 12000);
         const res = await fetch(
-          'https://companion-api.napster.com/public/connections',
+          `https://companion-api.napster.com/public/agents/${videoAgentId}/connections`,
           {
             method: 'POST',
             headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              companionId,
-              externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}${(config?.name || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`.slice(0, 32),
-              providerConfig: {
-                voiceId: config?.voiceId || 'verse',
-                settings: { temperature: 0.7 },
-              },
+              channelType: 'webrtc',
+              externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}`,
             }),
             signal: controller.signal,
           }
         );
         clearTimeout(timeoutId);
 
-        if (res.status === 429) {
-          // Rate limited — set global cooldown and stop immediately
-          this.videoTokenRateLimitUntil = Date.now() + 90_000; // 90s cooldown
-          console.error(`  WebRTC 429 rate limit — backing off 90s (got ${Object.keys(tokens).length} tokens before limit)`);
-          break;
-        }
-
         if (!res.ok) {
           const errBody = await res.text().catch(() => '');
-          console.error(`  WebRTC token failed for ${config?.name || agentId}: HTTP ${res.status}: ${errBody.substring(0, 200)}`);
+          // If pool exhausted, recreate the video agent and retry once
+          if (errBody.includes('NoAvailableConnections')) {
+            console.log(`  Video agent pool full for ${config.name} — recreating...`);
+            videoAgentId = await this._createVideoAgent(config);
+            if (!videoAgentId) continue;
+            this.videoAgents.set(agentId, videoAgentId);
+            // Retry
+            const res2 = await fetch(
+              `https://companion-api.napster.com/public/agents/${videoAgentId}/connections`,
+              {
+                method: 'POST',
+                headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  channelType: 'webrtc',
+                  externalClientId: `arena_vid_${viewerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}`,
+                }),
+              }
+            );
+            if (res2.ok) {
+              const data = await res2.json() as { token: string };
+              tokens[agentId] = data.token;
+              console.log(`  WebRTC token OK for ${config.name} (recreated video agent)`);
+            } else {
+              console.error(`  WebRTC token retry failed for ${config.name}: HTTP ${res2.status}`);
+            }
+          } else {
+            console.error(`  WebRTC token failed for ${config.name}: HTTP ${res.status}: ${errBody.substring(0, 200)}`);
+          }
         } else {
           const data = await res.json() as { token: string };
           tokens[agentId] = data.token;
-          console.log(`  WebRTC token OK for ${config?.name} (companion ${companionId})`);
+          console.log(`  WebRTC token OK for ${config.name} (video agent ${videoAgentId.slice(0, 8)})`);
         }
       } catch (err) {
         console.error(`  WebRTC token failed for ${config?.name || agentId}: ${(err as Error).message}`);
       }
-      // 2s gap between requests to avoid rate limiting
+      // 1s gap between agents
       if (this.session.agentIds.indexOf(agentId) < this.session.agentIds.length - 1) {
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
 
     console.log(`  Video tokens for ${viewerId}: ${Object.keys(tokens).length}/${this.session.agentIds.length}`);
     return tokens;
+  }
+
+  /** Create a lightweight video-only agent for WebRTC (no KB, no functions, no instructions). */
+  private async _createVideoAgent(config: AgentConfig): Promise<string | null> {
+    const API_KEY = process.env.OMNIAGENT_API_KEY!;
+    try {
+      const res = await fetch('https://companion-api.napster.com/public/agents', {
+        method: 'POST',
+        headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companionId: config.companionId,
+          name: `${config.name} Video`,
+          voiceId: config.voiceId || 'verse',
+          providerSettings: { temperature: 0.7 },
+          disableIdleTimeout: true,
+          tags: { arena_role: 'video', arena_version: '2.0' },
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        console.error(`  Video agent creation failed for ${config.name}: HTTP ${res.status}: ${err.substring(0, 200)}`);
+        return null;
+      }
+      const data = await res.json() as { id: string };
+      console.log(`  Video agent created for ${config.name} (${data.id.slice(0, 8)})`);
+      return data.id;
+    } catch (err) {
+      console.error(`  Video agent creation failed for ${config.name}: ${(err as Error).message}`);
+      return null;
+    }
   }
 
 
@@ -1159,12 +1202,16 @@ export class SessionManager {
     const API_KEY = process.env.OMNIAGENT_API_KEY;
     if (!API_KEY) return;
 
-    const agentIds = [...this.agentConfigs.keys()];
-    if (agentIds.length === 0) return;
+    // Collect both debate agents and video agents for deletion
+    const allAgentIds = [
+      ...this.agentConfigs.keys(),
+      ...this.videoAgents.values(),
+    ];
+    if (allAgentIds.length === 0) return;
 
     const results = await Promise.allSettled(
-      agentIds.map(async (agentId) => {
-        const name = this.agentConfigs.get(agentId)?.name || agentId;
+      allAgentIds.map(async (agentId) => {
+        const name = this.agentConfigs.get(agentId)?.name || 'video-agent';
         const res = await fetch(`https://companion-api.napster.com/public/agents/${agentId}`, {
           method: 'DELETE',
           headers: { 'X-Api-Key': API_KEY },
@@ -1184,8 +1231,9 @@ export class SessionManager {
         console.warn(`  Agent delete failed: ${r.reason}`);
       }
     }
-    console.log(`  Deleted ${deleted}/${agentIds.length} agents from Napster API`);
+    console.log(`  Deleted ${deleted}/${allAgentIds.length} agents from Napster API`);
     this.agentConfigs.clear();
+    this.videoAgents.clear();
   }
 
   /** Clean up stale agents from previous sessions on startup */
