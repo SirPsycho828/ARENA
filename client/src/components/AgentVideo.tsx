@@ -22,7 +22,11 @@ export function AgentVideo({ agentId, agentName, color }: AgentVideoProps) {
   const handleMessage = useCallback((e: MessageEvent) => {
     if (e.source !== iframeRef.current?.contentWindow) return;
 
-    if (e.data?.type === 'frame-ready' && token && !initedRef.current) {
+    if (e.data?.type === 'frame-ready' && token) {
+      // Always respond to frame-ready — it's the reliable signal that the iframe
+      // script has loaded. The 500ms timer in the token-change effect may have
+      // already set initedRef but sent the message to about:blank (iframe not
+      // loaded yet), so we must re-send here unconditionally.
       initedRef.current = true;
       iframeRef.current?.contentWindow?.postMessage({
         type: 'init-avatar',
