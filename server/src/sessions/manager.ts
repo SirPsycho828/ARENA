@@ -381,7 +381,7 @@ export class SessionManager {
       console.error('  No agents connected — aborting debate');
       this.session.status = 'ended';
       db.prepare('UPDATE sessions SET status = ? WHERE id = ?').run('ended', this.session.id);
-      return;
+      throw new Error('No agents connected — all WebSocket connections failed');
     }
 
     if (!USE_MOCK) {
@@ -515,6 +515,11 @@ export class SessionManager {
         const topic = getNextTopic();
         await this.createSession(topic, 3);
         await this.startDebate();
+
+        // Verify debate actually started (belt-and-suspenders)
+        if (this.session?.status !== 'active') {
+          throw new Error(`Session not active after startDebate() — status: ${this.session?.status}`);
+        }
 
         this.restartRetryCount = 0;
         this.isRestarting = false;
