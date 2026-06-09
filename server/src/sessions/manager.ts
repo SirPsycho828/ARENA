@@ -204,6 +204,7 @@ export class SessionManager {
   private turnTextComplete = false;
   private turnTalkEnded = false;
   private turnAudioComplete = false; // set after turn_audio_complete emitted — stops forwarding chunks
+  private turnCompleteEmitted = false; // once-guard: maybeEmitTurnComplete runs exactly once per turn
   private lastAudioChunkAt = 0;
   // Consensus meter
   private consensusState: ConsensusState | null = null;
@@ -1390,6 +1391,7 @@ export class SessionManager {
     this.analyzeAgentStance(agentId, cleanText);
 
     this.turnTextComplete = true;
+    this.emitDebug('turn_flag', agentId, this.getAgentName(agentId), `textComplete=true, talkEnded=${this.turnTalkEnded}`);
     this.maybeEmitTurnComplete(agentId);
   }
 
@@ -1416,25 +1418,29 @@ export class SessionManager {
         const hasReceivedAudio = this.lastAudioChunkAt > 0;
         const msSinceAudio = hasReceivedAudio ? Date.now() - this.lastAudioChunkAt : 0;
 
-        if (hasReceivedAudio && msSinceAudio >= 1500) {
-          // Audio was flowing and has been silent for 1.5s — truly drained
+        if (hasReceivedAudio && msSinceAudio >= 3000) {
+          // Audio was flowing and has been silent for 3s — truly drained.
+          // 3s threshold prevents false positives from TTS inter-sentence
+          // pauses or Napster delivering audio in bursts.
           this.talkEndedTimer = null;
           console.log(`  [${name}] audio drained (${msSinceAudio}ms silence, ${elapsed}ms elapsed)`);
           this.turnTalkEnded = true;
+          this.emitDebug('turn_flag', agentId, name, `talkEnded=true (drained ${msSinceAudio}ms), textComplete=${this.turnTextComplete}`);
           this.maybeEmitTurnComplete(agentId);
         } else if (elapsed >= 15000) {
           // Hard safety: 15s since talk_state:ended — force drain regardless
           this.talkEndedTimer = null;
           console.log(`  [${name}] audio drain timeout (15s, hasAudio=${hasReceivedAudio})`);
           this.turnTalkEnded = true;
+          this.emitDebug('turn_flag', agentId, name, `talkEnded=true (15s timeout), textComplete=${this.turnTextComplete}`);
           this.maybeEmitTurnComplete(agentId);
         } else {
           this.talkEndedTimer = setTimeout(pollAudioDrain, 500);
         }
       };
 
-      // Initial 1.5s wait before first poll (give TTS time to send trailing chunks)
-      this.talkEndedTimer = setTimeout(pollAudioDrain, 1500);
+      // Initial 2s wait before first poll (give TTS time to send trailing chunks)
+      this.talkEndedTimer = setTimeout(pollAudioDrain, 2000);
     } else if (state === 'started' || state === 'preparing') {
       // Agent resumed speaking — cancel the drain poll and reset flag
       if (this.talkEndedTimer) {
@@ -1555,6 +1561,8 @@ export class SessionManager {
   private maybeEmitTurnComplete(agentId: string) {
     if (!this.turnTextComplete || !this.turnTalkEnded) return;
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+    if (this.turnCompleteEmitted) return; // Once-guard: don't emit twice per turn
+    this.turnCompleteEmitted = true;
 
     // Cancel the no-response timeout
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
@@ -1568,6 +1576,7 @@ export class SessionManager {
     const gen = this.turnGeneration;
     const name = this.getAgentName(agentId);
     console.log(`  [${name}] text+talk done — waiting for client playback (gen=${gen})`);
+    this.emitDebug('turn_complete', agentId, name, `gen=${gen}, waiting for playback_done`);
 
     (this.io as any).emit('turn_audio_complete', { agentId, generation: gen });
 
@@ -1689,6 +1698,7 @@ export class SessionManager {
       this.turnTextComplete = false;
       this.turnTalkEnded = false;
       this.turnAudioComplete = false;
+      this.turnCompleteEmitted = false;
       this.lastAudioChunkAt = 0;
       if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
       if (this.playbackTimer) { clearTimeout(this.playbackTimer); this.playbackTimer = null; }
