@@ -126,6 +126,9 @@ export class TurnManager extends EventEmitter {
   enterCallIn(callId: string, turns: number) {
     this.callInCallId = callId;
     this.callInTurnsRemaining = turns;
+    // Set state so that resume() will call selectNext() — without this,
+    // state stays 'RELAYING' from the intro turn and resume() does nothing.
+    this.state = 'SELECTING_NEXT';
     console.log(`  [TurnManager] Entered call-in mode: ${turns} turns for ${callId}`);
   }
 

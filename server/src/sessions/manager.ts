@@ -1377,6 +1377,7 @@ export class SessionManager {
 
   handleResponseDelta(agentId: string, content: string) {
     if (this.turnManager?.getCurrentSpeaker() !== agentId) return;
+    if (this.turnAudioComplete) return; // Ignore stray deltas after turn ended
     this.watchdog?.markRealResponse();
     const cleaned = this.stripEmDashes(content);
     (this.io as any).emit('transcript_delta', { agentId, agentName: this.getAgentName(agentId), content: cleaned });
@@ -1748,6 +1749,11 @@ export class SessionManager {
         const entry = pendingCallIn;
         const introPlaybackHandler = () => {
           this.turnManager!.removeListener('turn_end', introPlaybackHandler);
+          // Pause immediately (synchronously) to prevent the gapTimer in
+          // onSpeechEnd from racing with playCallInAudio — both fire at
+          // ~500ms.  Setting paused=true here ensures selectNext() in the
+          // gapTimer callback returns early even if it fires first.
+          this.turnManager!.pause();
           setTimeout(() => this.playCallInAudio(entry), 500);
         };
         this.turnManager!.on('turn_end', introPlaybackHandler);
