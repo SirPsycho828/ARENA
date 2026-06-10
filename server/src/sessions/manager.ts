@@ -1072,6 +1072,8 @@ export class SessionManager {
     };
   }
 
+  private pendingTopicTransition: { oldTopic: string; newTopic: string } | null = null;
+
   private async rotateTopic() {
     if (!this.session || this.session.status !== 'active') return;
 
@@ -1093,6 +1095,7 @@ export class SessionManager {
         newTopic = getNextTopic();
       }
 
+      const oldTopic = this.session.topic;
       this.session.topic = newTopic;
 
       // Reset votes for the new topic
@@ -1105,20 +1108,26 @@ export class SessionManager {
       // Reset consensus meter for new topic
       this.initConsensus(newTopic);
 
-      // Notify all agents
+      // Quietly tell non-speaking agents the topic changed (no trigger)
+      const currentSpeaker = this.turnManager?.getCurrentSpeaker();
       for (const agentId of this.session.agentIds) {
-        this.omniagent.sendMessage(
-          agentId, 'system',
-          `TOPIC CHANGE! The new debate topic is: "${newTopic}". Pivot your arguments immediately. Make a bold opening statement on the new topic.`,
-          false
-        );
+        if (agentId !== currentSpeaker) {
+          this.omniagent.sendMessage(
+            agentId, 'system',
+            `The debate topic has changed to: "${newTopic}". Wait for your turn to speak on this new topic.`,
+            false
+          );
+        }
       }
+
+      // Flag the transition — the NEXT speaker will do the wrap-up + intro
+      this.pendingTopicTransition = { oldTopic, newTopic };
 
       // Notify viewers
       (this.io as any).emit('topic_changed', { topic: newTopic, timestamp: Date.now() });
       this.io.emit('session_state', this.getSessionState());
 
-      console.log(`  [Topic Rotation] New topic: ${newTopic}`);
+      console.log(`  [Topic Rotation] ${oldTopic} → ${newTopic} (next speaker will transition)`);
     } catch (err) {
       console.error('  Topic rotation failed:', (err as Error).message);
     }
@@ -1863,6 +1872,21 @@ export class SessionManager {
           this.turnManager?.onSpeechEnd(agentId, '');
         }
       }, 15000);
+
+      // ── Topic transition: this speaker wraps up old topic + introduces new one ──
+      if (this.pendingTopicTransition) {
+        const { oldTopic, newTopic } = this.pendingTopicTransition;
+        this.pendingTopicTransition = null;
+
+        const transitionPrompt = `[TOPIC CHANGE] The topic is switching! You're the host for this transition.
+Do TWO things in ONE short response (under 60 words total):
+1. Give a quick, funny final verdict on "${oldTopic}" — one sentence max, make it memorable. A hot take, a zinger, a mic drop.
+2. Then hype up the new topic: "${newTopic}". Tease it, get people excited, throw out a spicy opening question about it.
+DO NOT debate the new topic yet. Just wrap up and introduce. Be entertaining, be yourself.`;
+
+        this.omniagent.sendMessage(agentId, 'user', `${chaosPrompt ? chaosPrompt + '\n' : ''}${transitionPrompt}`, true);
+        return; // Skip the normal per-turn prompt
+      }
 
       // Build the trigger message
       const topic = this.session?.topic || 'the current topic';
