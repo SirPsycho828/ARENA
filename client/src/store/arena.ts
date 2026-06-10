@@ -147,6 +147,7 @@ interface ArenaState {
   credits: number | null;
   creditsLoading: boolean;
   lastRejectionReason: string | null;
+  chaosPending: string | null; // label shown while waiting for server ack
 
   // Actions
   connect: () => void;
@@ -280,6 +281,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   hasVoted: false,
   injectionCooldown: 0,
   injectionQueue: [],
+  chaosPending: null,
   incomingReactions: [],
   callInState: 'idle' as const,
   callInCallId: null,
@@ -404,8 +406,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     socket.on('speaker_change', ({ agentId }) => {
       transcriptPacer.flush(set);
-      // Kill any remaining audio from the previous speaker immediately
-      pcmPlayer?.reset();
+      // DON'T reset pcmPlayer here — let remaining audio from the previous
+      // speaker finish playing naturally. The reset in the audio_chunk handler
+      // (above) will kill old audio when the NEW speaker's first chunk arrives,
+      // which is the correct moment to switch. Resetting here caused the last
+      // 0.5-2s of speech to be cut off mid-word.
       lastAudioSpeaker = null;
       set({ currentSpeaker: agentId, lipSyncSpeaker: null });
     });
@@ -421,7 +426,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       const poll = () => {
         const remaining = pcmPlayer?.getRemainingTime() || 0;
         const elapsed = Date.now() - startedAt;
-        if (remaining <= 0.05 || elapsed > 30000) {
+        // 0.15s threshold: Web Audio schedules chunks slightly ahead, so 0.05s
+        // was too tight and triggered playback_done while the last chunk was
+        // still audibly playing. 0.15s (~2400 samples at 16kHz) gives enough
+        // margin for the final scheduled buffer to finish.
+        if (remaining <= 0.15 || elapsed > 30000) {
           playbackPollTimer = null;
           // Stop lip-sync when audio actually finishes playing
           if (get().lipSyncSpeaker === agentId) {
@@ -432,8 +441,9 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
           playbackPollTimer = setTimeout(poll, 150);
         }
       };
-      // Brief initial wait then start polling
-      playbackPollTimer = setTimeout(poll, 150);
+      // 500ms initial wait — give the jitter buffer and Web Audio scheduler
+      // time to process the final chunks before we start polling.
+      playbackPollTimer = setTimeout(poll, 500);
     });
 
     socket.on('vote_update', (tallies) => {
@@ -443,20 +453,22 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     socket.on('injection_active', ({ text }) => {
       set((s) => ({
         activeRules: [...s.activeRules.slice(-2), text],
+        chaosPending: null,
       }));
     });
 
     socket.on('injection_queued', ({ text, position }) => {
       set((s) => ({
         injectionQueue: [...s.injectionQueue, `#${position}: ${text}`],
+        chaosPending: null,
       }));
     });
 
     socket.on('injection_rejected', ({ reason, remainingMs }) => {
       if (reason === 'cooldown') {
-        set({ injectionCooldown: remainingMs });
+        set({ injectionCooldown: remainingMs, chaosPending: null });
       } else {
-        set({ lastRejectionReason: reason });
+        set({ lastRejectionReason: reason, chaosPending: null });
         setTimeout(() => set({ lastRejectionReason: null }), 4000);
       }
     });
@@ -503,6 +515,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         session: s.session ? { ...s.session, topic } : null,
         hasVoted: false,
         hasVotedPole: false,
+        chaosPending: null,
         pendingTopic: topic,
       }));
     });
@@ -621,14 +634,17 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   },
 
   injectChaos: (text, type = 'rule', duration = 3, token) => {
+    set({ chaosPending: type === 'topic_change' ? 'Submitting topic...' : 'Submitting rule...' });
     get().socket?.emit('chaos_inject', { text, type, duration, token } as any);
   },
 
   quickChaos: (preset, token) => {
+    set({ chaosPending: 'Activating chaos...' });
     (get().socket as any)?.emit('quick_chaos', { preset, token });
   },
 
   changeTopic: (topic, token) => {
+    set({ chaosPending: 'Submitting topic...' });
     get().socket?.emit('topic_change', { topic, token } as any);
   },
 

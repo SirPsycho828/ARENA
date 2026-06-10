@@ -1629,27 +1629,34 @@ export class SessionManager {
     // Cancel the no-response timeout
     if (this.turnTimeoutTimer) { clearTimeout(this.turnTimeoutTimer); this.turnTimeoutTimer = null; }
 
-    // Stop forwarding any more audio chunks from this agent
-    this.turnAudioComplete = true;
-
-    // Signal clients that all audio has been sent — wait for playback to finish.
-    // Socket.io ordering guarantees all audio_chunk events arrive before this.
-    this.turnGeneration++;
-    const gen = this.turnGeneration;
     const name = this.getAgentName(agentId);
-    console.log(`  [${name}] text+talk done — waiting for client playback (gen=${gen})`);
-    this.emitDebug('turn_complete', agentId, name, `gen=${gen}, waiting for playback_done`);
 
-    (this.io as any).emit('turn_audio_complete', { agentId, generation: gen });
+    // 1s safety delay: keep forwarding audio chunks for 1 more second after
+    // both flags are set, in case late chunks are still in transit. Then cut
+    // off forwarding and signal clients. Without this delay, the drain poll's
+    // 3s silence threshold could trigger right as a final burst arrives.
+    setTimeout(() => {
+      if (this.turnManager?.getCurrentSpeaker() !== agentId) return; // turn already advanced
 
-    // Fallback: advance after 30s if no client responds (backgrounded tabs, no viewers)
-    if (this.playbackTimer) clearTimeout(this.playbackTimer);
-    this.playbackTimer = setTimeout(() => {
-      if (this.turnManager?.getCurrentSpeaker() === agentId) {
-        console.log(`  [${name}] playback fallback advance (30s, gen=${gen})`);
-        this.doAdvanceTurn(agentId);
-      }
-    }, 30000);
+      // NOW stop forwarding audio
+      this.turnAudioComplete = true;
+
+      this.turnGeneration++;
+      const gen = this.turnGeneration;
+      console.log(`  [${name}] text+talk done — waiting for client playback (gen=${gen})`);
+      this.emitDebug('turn_complete', agentId, name, `gen=${gen}, waiting for playback_done`);
+
+      (this.io as any).emit('turn_audio_complete', { agentId, generation: gen });
+
+      // Fallback: advance after 30s if no client responds (backgrounded tabs, no viewers)
+      if (this.playbackTimer) clearTimeout(this.playbackTimer);
+      this.playbackTimer = setTimeout(() => {
+        if (this.turnManager?.getCurrentSpeaker() === agentId) {
+          console.log(`  [${name}] playback fallback advance (30s, gen=${gen})`);
+          this.doAdvanceTurn(agentId);
+        }
+      }, 30000);
+    }, 1000);
   }
 
   handlePlaybackDone(agentId: string, generation: number) {
