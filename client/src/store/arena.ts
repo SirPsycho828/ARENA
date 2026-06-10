@@ -392,8 +392,10 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     pcmPlayer = new PcmAudioPlayer();
     pcmPlayer.setMuted(get().soundMuted);
     let lastAudioSpeaker: string | null = null;
+    let lastChunkReceivedAt = 0;
     (socket as any).on('audio_chunk', ({ agentId, audio }: { agentId: string; audio: string }) => {
       if (!get().audioEnabled) return;
+      lastChunkReceivedAt = Date.now();
       if (agentId !== lastAudioSpeaker) {
         pcmPlayer?.reset();
         lastAudioSpeaker = agentId;
@@ -415,9 +417,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       set({ currentSpeaker: agentId, lipSyncSpeaker: null });
     });
 
-    // Server signals all audio chunks sent. Poll until client buffer actually
-    // drains, then tell server we're done. Previous snapshot approach sent
-    // playback_done too early when late chunks extended the buffer after the snapshot.
+    // Server signals text+TTS generation is done. Poll until BOTH:
+    // 1) No new audio chunks received for 2s (chunks may still be in transit)
+    // 2) Client audio buffer has drained (remaining <= 0.15s)
+    // Only then tell server we're done. Previous approach only checked buffer
+    // drain and fired playback_done while chunks were still arriving.
     let playbackPollTimer: ReturnType<typeof setTimeout> | null = null;
     (socket as any).on('turn_audio_complete', ({ agentId, generation }: { agentId: string; generation: number }) => {
       if (playbackPollTimer) { clearTimeout(playbackPollTimer); playbackPollTimer = null; }
@@ -426,11 +430,14 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       const poll = () => {
         const remaining = pcmPlayer?.getRemainingTime() || 0;
         const elapsed = Date.now() - startedAt;
-        // 0.15s threshold: Web Audio schedules chunks slightly ahead, so 0.05s
-        // was too tight and triggered playback_done while the last chunk was
-        // still audibly playing. 0.15s (~2400 samples at 16kHz) gives enough
-        // margin for the final scheduled buffer to finish.
-        if (remaining <= 0.15 || elapsed > 30000) {
+        const msSinceChunk = lastChunkReceivedAt > 0 ? Date.now() - lastChunkReceivedAt : Infinity;
+        // Require BOTH conditions:
+        // - Buffer drained (remaining <= 0.15s)
+        // - No chunks received for 2s (all in-transit chunks have arrived)
+        // This prevents declaring done while TTS bursts are still streaming.
+        const bufferDrained = remaining <= 0.15;
+        const chunksSettled = msSinceChunk >= 2000;
+        if ((bufferDrained && chunksSettled) || elapsed > 30000) {
           playbackPollTimer = null;
           // Stop lip-sync when audio actually finishes playing
           if (get().lipSyncSpeaker === agentId) {
