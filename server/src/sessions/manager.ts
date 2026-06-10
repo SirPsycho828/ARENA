@@ -241,6 +241,7 @@ export class SessionManager {
   private isRestarting = false;
   private watchdog: { pause(): void; resume(): void; markRealResponse(): void } | null = null;
   private callInQueue: CallInQueue | null = null;
+  private activeCallInContext: { displayName: string; transcript: string } | null = null;
   // Video-only agents: one per debate agent, dedicated to WebRTC (no WebSocket)
   // Map: debateAgentId -> videoAgentId
   private videoAgents: Map<string, string> = new Map();
@@ -723,13 +724,11 @@ export class SessionManager {
 
     const transcript = entry.transcript || `(called in about: ${entry.topic})`;
 
-    for (const agentId of this.session.agentIds) {
-      this.omniagent.sendMessage(
-        agentId, 'system',
-        `A viewer named ${entry.displayName} just called in and said: "${transcript}". React to what they said. You can mention their name once but don't keep repeating it every turn. Be entertaining.`,
-        false
-      );
-    }
+    // Store call-in context so it can be injected into each agent's per-turn
+    // prompt. DO NOT broadcast system messages to all agents — the continuous
+    // silence feed causes auto-responses even with trigger_response:false,
+    // which fires premature speech_end / talk_state:ended and cuts turns short.
+    this.activeCallInContext = { displayName: entry.displayName, transcript };
 
     this.turnManager.enterCallIn(entry.callId, 5);
     (this.io as any).emit('callin_discussion', { callId: entry.callId, turnsRemaining: 5 });
@@ -745,15 +744,12 @@ export class SessionManager {
 
     this.callInQueue.completeActive();
     this.chaosQueue.unlock();
+    this.activeCallInContext = null; // Next turn's prompt will be a normal debate prompt
     (this.io as any).emit('callin_ended', { callId });
 
-    for (const agentId of this.session.agentIds) {
-      this.omniagent.sendMessage(
-        agentId, 'system',
-        'The call-in discussion is over. Resume the normal debate.',
-        false
-      );
-    }
+    // Don't broadcast "resume normal debate" system messages — they trigger
+    // auto-responses from the silence-primed audio channel. The next turn's
+    // prompt naturally returns to the debate topic without call-in context.
   }
 
   // ─── State Accessors ───────────────────────────────────────────────────
@@ -1825,6 +1821,14 @@ export class SessionManager {
       const topic = this.session?.topic || 'the current topic';
       const chaosInstruction = chaosPrompt ? `${chaosPrompt}\n` : '';
 
+      // Inject call-in context into the per-turn prompt (same pattern as chaos rules).
+      // This avoids broadcasting system messages which trigger auto-responses.
+      let callInInstruction = '';
+      if (this.activeCallInContext && this.turnManager?.isInCallIn()) {
+        const { displayName, transcript } = this.activeCallInContext;
+        callInInstruction = `[CALL-IN] A viewer named ${displayName} just called in and said: "${transcript}". React to what they said. You can mention their name once but don't keep repeating it every turn. Be entertaining.\n`;
+      }
+
       const recentMsgs = this.recentTranscripts
         .filter(m => m.agentId !== agentId)
         .slice(-3);
@@ -1849,9 +1853,9 @@ export class SessionManager {
           `Topic: "${topic}"\nRecent:\n${context}\n\nWhat's your take?${antiRepeat}`,
         ];
         const framing = framings[this.recentTranscripts.length % framings.length];
-        this.omniagent.sendMessage(agentId, 'user', `${chaosInstruction}${framing}`, true);
+        this.omniagent.sendMessage(agentId, 'user', `${callInInstruction}${chaosInstruction}${framing}`, true);
       } else {
-        this.omniagent.sendMessage(agentId, 'user', `${chaosInstruction}Topic: "${topic}". You're up first. Make it count.`, true);
+        this.omniagent.sendMessage(agentId, 'user', `${callInInstruction}${chaosInstruction}Topic: "${topic}". You're up first. Make it count.`, true);
       }
     });
 
