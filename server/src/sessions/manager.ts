@@ -1489,10 +1489,11 @@ export class SessionManager {
         const hasReceivedAudio = this.lastAudioChunkAt > 0;
         const msSinceAudio = hasReceivedAudio ? Date.now() - this.lastAudioChunkAt : 0;
 
-        if (hasReceivedAudio && msSinceAudio >= 3000) {
-          // Audio was flowing and has been silent for 3s — truly drained.
-          // 3s threshold prevents false positives from TTS inter-sentence
-          // pauses or Napster delivering audio in bursts.
+        if (hasReceivedAudio && msSinceAudio >= 5000) {
+          // Audio was flowing and has been silent for 5s — truly drained.
+          // 5s threshold needed because TTS generates audio in sentence-level
+          // bursts with multi-second gaps. 3s was too short and triggered
+          // mid-response, cutting off the second half of speech.
           this.talkEndedTimer = null;
           console.log(`  [${name}] audio drained (${msSinceAudio}ms silence, ${elapsed}ms elapsed)`);
           this.turnTalkEnded = true;
@@ -1640,32 +1641,29 @@ export class SessionManager {
 
     const name = this.getAgentName(agentId);
 
-    // 1s safety delay: keep forwarding audio chunks for 1 more second after
-    // both flags are set, in case late chunks are still in transit. Then cut
-    // off forwarding and signal clients. Without this delay, the drain poll's
-    // 3s silence threshold could trigger right as a final burst arrives.
-    setTimeout(() => {
-      if (this.turnManager?.getCurrentSpeaker() !== agentId) return; // turn already advanced
+    // IMPORTANT: Do NOT set turnAudioComplete here! Keep forwarding audio
+    // chunks to clients. TTS generates audio in bursts with multi-second gaps
+    // between sentences. The drain poll's silence threshold can trigger during
+    // one of these gaps, but more audio is still coming. Only doAdvanceTurn()
+    // (triggered by client's playback_done) should stop audio forwarding.
+    // This way the client buffer receives ALL chunks and playback_done fires
+    // only when the buffer is truly drained.
 
-      // NOW stop forwarding audio
-      this.turnAudioComplete = true;
+    this.turnGeneration++;
+    const gen = this.turnGeneration;
+    console.log(`  [${name}] text+talk done — waiting for client playback (gen=${gen})`);
+    this.emitDebug('turn_complete', agentId, name, `gen=${gen}, waiting for playback_done`);
 
-      this.turnGeneration++;
-      const gen = this.turnGeneration;
-      console.log(`  [${name}] text+talk done — waiting for client playback (gen=${gen})`);
-      this.emitDebug('turn_complete', agentId, name, `gen=${gen}, waiting for playback_done`);
+    (this.io as any).emit('turn_audio_complete', { agentId, generation: gen });
 
-      (this.io as any).emit('turn_audio_complete', { agentId, generation: gen });
-
-      // Fallback: advance after 30s if no client responds (backgrounded tabs, no viewers)
-      if (this.playbackTimer) clearTimeout(this.playbackTimer);
-      this.playbackTimer = setTimeout(() => {
-        if (this.turnManager?.getCurrentSpeaker() === agentId) {
-          console.log(`  [${name}] playback fallback advance (30s, gen=${gen})`);
-          this.doAdvanceTurn(agentId);
-        }
-      }, 30000);
-    }, 1000);
+    // Fallback: advance after 30s if no client responds (backgrounded tabs, no viewers)
+    if (this.playbackTimer) clearTimeout(this.playbackTimer);
+    this.playbackTimer = setTimeout(() => {
+      if (this.turnManager?.getCurrentSpeaker() === agentId) {
+        console.log(`  [${name}] playback fallback advance (30s, gen=${gen})`);
+        this.doAdvanceTurn(agentId);
+      }
+    }, 30000);
   }
 
   handlePlaybackDone(agentId: string, generation: number) {
